@@ -8,7 +8,10 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "db:init": "node --env-file=.env.local scripts/init-db.mjs"
+    "db:init": "node --env-file=.env.local scripts/init-db.mjs",
+    "fixtures:save": "tsx scripts/save-fixture.mts",
+    "fixtures:refresh": "tsx scripts/save-fixture.mts",
+    "check:parser": "tsx scripts/check-parser.mts"
   },
   "keywords": [],
   "author": "",

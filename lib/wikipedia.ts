@@ -306,30 +306,52 @@ export async function currentRevid(lang: Lang, title: string): Promise<number | 
   return page?.missing ? null : (page?.revisions?.[0]?.revid ?? null);
 }
 
-export async function fetchArticle(lang: Lang, title: string): Promise<ArticleSnapshot> {
-  const parsed = await api<{
-    parse?: { title: string; revid: number; text: string; links?: { ns: number; title: string; exists?: boolean }[] };
-  }>(wiki(lang), { action: "parse", page: title, prop: "text|links|revid", redirects: "1" });
+/** The raw `action=parse` payload. Exported so the fixture recorder can capture
+ *  exactly what the API returned, rather than a post-processed view of it. */
+export interface ParsedPage {
+  title: string;
+  revid: number;
+  text: string;
+  links?: { ns: number; title: string; exists?: boolean }[];
+}
 
-  const p = parsed.parse;
-  if (!p) throw new Error(`Could not parse ${lang}:${title}.`);
+export async function fetchParsedPage(lang: Lang, title: string): Promise<ParsedPage> {
+  const parsed = await api<{ parse?: ParsedPage }>(wiki(lang), {
+    action: "parse",
+    page: title,
+    prop: "text|links|revid",
+    redirects: "1",
+  });
+  if (!parsed.parse) throw new Error(`Could not parse ${lang}:${title}.`);
+  return parsed.parse;
+}
 
-  const linkTitles = (p.links ?? [])
+/** Article-namespace links, capped, in the order the API returned them. */
+export function linkTitlesOf(page: ParsedPage): string[] {
+  return (page.links ?? [])
     .filter((l) => l.ns === 0 && l.exists !== false)
     .map((l) => l.title)
     .slice(0, MAX_LINKS);
+}
 
-  const qidMap = await titlesToQids(lang, linkTitles);
-
+export function snapshotOf(lang: Lang, page: ParsedPage, linkQids: string[]): ArticleSnapshot {
   return {
     lang,
-    title: p.title,
-    revid: p.revid,
-    url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(p.title.replace(/ /g, "_"))}`,
-    sections: splitSections(p.text),
-    linkQids: [...new Set(qidMap.values())],
+    title: page.title,
+    revid: page.revid,
+    url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, "_"))}`,
+    sections: splitSections(page.text),
+    linkQids,
   };
 }
+
+export async function fetchArticle(lang: Lang, title: string): Promise<ArticleSnapshot> {
+  const page = await fetchParsedPage(lang, title);
+  const qidMap = await titlesToQids(lang, linkTitlesOf(page));
+  return snapshotOf(lang, page, [...new Set(qidMap.values())]);
+}
+
+export { titlesToQids };
 
 export async function fetchLabels(qids: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
