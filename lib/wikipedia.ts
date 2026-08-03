@@ -245,7 +245,16 @@ export function splitSections(html: string): Section[] {
   flush();
 
   if (keyFacts.length > 40) {
-    sections.unshift({ heading: KEY_FACTS_HEADING, level: 1, text: keyFacts.slice(0, MAX_SECTION_CHARS) });
+    // After the lead, not before it. The lead is the article's own summary and
+    // should be the first thing read in each column; the key-facts block is
+    // apparatus, and long enough that putting it first pushed every lead below
+    // the fold.
+    const afterLead = sections.findIndex((s) => s.heading === LEAD_HEADING) + 1;
+    sections.splice(afterLead, 0, {
+      heading: KEY_FACTS_HEADING,
+      level: 1,
+      text: keyFacts.slice(0, MAX_SECTION_CHARS),
+    });
   }
 
   return sections;

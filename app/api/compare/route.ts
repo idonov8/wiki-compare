@@ -21,6 +21,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Add a ?title= parameter." }, { status: 400 });
   }
 
+  // Render a recorded fixture instead of calling anything. Development only —
+  // it exists so the rendering layer can be worked on without a database, an
+  // API key, or spending tokens, and it is dead code in production.
+  if (process.env.NODE_ENV !== "production" && title.startsWith("demo:")) {
+    try {
+      const { demoComparison } = await import("@/fixtures/demo");
+      return NextResponse.json({ ...demoComparison(title.slice(5)), fromCache: false });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return NextResponse.json({ error: `No such fixture. ${message}` }, { status: 404 });
+    }
+  }
+
   try {
     const { qid, titles } = await resolveSitelinks(title, isLang(sourceLang) ? sourceLang : "en");
     const available = LANGS.filter((l) => titles[l]);
