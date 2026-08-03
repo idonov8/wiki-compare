@@ -1,0 +1,211 @@
+"use client";
+
+import { useCallback, useMemo, useState } from "react";
+import Highlighted from "./Highlighted";
+import { LANGS, LANG_META, type Claim, type ComparePayload, type Lang } from "@/lib/types";
+
+const KIND_LABEL: Record<Claim["type"], string> = {
+  contradiction: "Contradiction",
+  unique: "Only in one version",
+  framing: "Different framing",
+};
+
+interface CardState {
+  claim: Claim;
+  x: number;
+  y: number;
+}
+
+export default function Compare() {
+  const [query, setQuery] = useState("Palestinian Legislative Council");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<ComparePayload | null>(null);
+  const [shown, setShown] = useState<Lang[]>([...LANGS]);
+  const [card, setCard] = useState<CardState | null>(null);
+
+  const load = useCallback(async () => {
+    const title = query.trim();
+    if (!title) return;
+    setLoading(true);
+    setError(null);
+    setCard(null);
+    try {
+      const res = await fetch(`/api/compare?title=${encodeURIComponent(title)}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Comparison failed.");
+      setData(json as ComparePayload);
+      setShown(LANGS.filter((l) => json.articles?.[l]));
+    } catch (e) {
+      setData(null);
+      setError(e instanceof Error ? e.message : "Comparison failed.");
+    } finally {
+      setLoading(false);
+    }
+  }, [query]);
+
+  const available = useMemo(() => LANGS.filter((l) => data?.articles?.[l]), [data]);
+  const visible = shown.filter((l) => available.includes(l));
+
+  const toggle = (lang: Lang) =>
+    setShown((current) =>
+      current.includes(lang)
+        ? current.length > 1
+          ? current.filter((l) => l !== lang)
+          : current
+        : [...current, lang].sort((a, b) => LANGS.indexOf(a) - LANGS.indexOf(b)),
+    );
+
+  const onEnter = (claim: Claim, event: React.MouseEvent | React.FocusEvent) => {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    setCard({
+      claim,
+      x: Math.min(rect.left, window.innerWidth - 360),
+      y: rect.bottom + 8 > window.innerHeight - 180 ? rect.top - 8 : rect.bottom + 8,
+    });
+  };
+
+  return (
+    <>
+      <header className="masthead">
+        <div className="wordmark">
+          wiki<span>-</span>compare
+        </div>
+        <div className="search">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && load()}
+            placeholder="Article title in English, Hebrew or Arabic"
+            aria-label="Article title"
+          />
+          <button onClick={load} disabled={loading}>
+            {loading ? "Comparing…" : "Compare"}
+          </button>
+        </div>
+      </header>
+
+      {data && (
+        <div className="controls">
+          <div className="toggles">
+            {available.map((lang) => (
+              <button
+                key={lang}
+                className="toggle"
+                aria-pressed={visible.includes(lang)}
+                onClick={() => toggle(lang)}
+              >
+                {lang.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <div className="legend">
+            <span><i className="swatch contradiction" /> contradiction</span>
+            <span><i className="swatch unique" /> only in one version</span>
+            <span><i className="swatch framing" /> different framing</span>
+          </div>
+          <div className="meta">
+            {data.qid} · {data.claims.length} marked ·{" "}
+            {data.fromCache
+              ? "cached, 0 tokens"
+              : `${data.usage.inputTokens.toLocaleString()} in / ${data.usage.outputTokens.toLocaleString()} out`}
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="state error">
+          <h2>That didn&apos;t work</h2>
+          <p>{error}</p>
+        </div>
+      )}
+
+      {!data && !error && (
+        <div className="state">
+          <h2>Three encyclopedias, one subject</h2>
+          <p>
+            Enter an article title. The English, Hebrew and Arabic versions load side by side, and
+            every place they contradict each other, cover something the others skip, or frame the
+            same fact differently is underlined. Hover an underline to see what the difference is.
+          </p>
+          <p>
+            Try <code>Palestinian Legislative Council</code>, <code>Six-Day War</code> or{" "}
+            <code>Al-Aqsa Mosque</code>.
+          </p>
+        </div>
+      )}
+
+      {data && (
+        <>
+          <div
+            className="columns"
+            style={{ gridTemplateColumns: `repeat(${visible.length}, minmax(0, 1fr))` }}
+          >
+            {visible.map((lang) => {
+              const article = data.articles[lang];
+              const meta = LANG_META[lang];
+              return (
+                <section key={lang} className="column" dir={meta.dir} lang={lang}>
+                  <div className="column-head">
+                    <span className="native">{meta.native}</span>
+                    <span className="arrow" aria-hidden="true">
+                      {meta.dir === "rtl" ? "←" : "→"}
+                    </span>
+                    <a href={article.url} target="_blank" rel="noreferrer">
+                      rev {article.revid}
+                    </a>
+                  </div>
+                  {article.sections.map((section, i) => (
+                    <div key={i}>
+                      {section.heading !== "(lead)" && (
+                        <h3 className="section-heading">{section.heading}</h3>
+                      )}
+                      <Highlighted
+                        text={section.text}
+                        lang={lang}
+                        claims={data.claims}
+                        activeId={card?.claim.id ?? null}
+                        onEnter={onEnter}
+                        onLeave={() => setCard(null)}
+                      />
+                    </div>
+                  ))}
+                </section>
+              );
+            })}
+          </div>
+
+          {data.coverage.length > 0 && (
+            <div className="coverage">
+              <h2>Covered in some versions, not others</h2>
+              <p>
+                Linked concepts one version mentions and another never does. Computed by set
+                arithmetic over Wikidata identifiers, so no model reads a word of this.
+              </p>
+              <div className="gaps">
+                {data.coverage.map((gap) => (
+                  <span key={gap.qid} className="gap">
+                    {gap.label} <b>{gap.presentIn.join("+")} only</b>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {card && (
+        <div className="card" style={{ left: card.x, top: card.y }} role="tooltip">
+          <span className="kind" data-type={card.claim.type}>
+            {KIND_LABEL[card.claim.type]}
+          </span>
+          <span className="summary">{card.claim.summary}</span>
+          <span className="explanation">{card.claim.explanation}</span>
+          <div className="also">
+            marked in {Object.keys(card.claim.spans).map((l) => l.toUpperCase()).join(", ")}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

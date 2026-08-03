@@ -1,0 +1,205 @@
+import Anthropic from "@anthropic-ai/sdk";
+import type { ArticleSnapshot, Claim, Lang, Section } from "./types";
+import { LANG_META } from "./types";
+import { screenGroups, type SectionGroup } from "./deterministic";
+
+export const PROMPT_VERSION = "v1";
+
+const ALIGN_MODEL = process.env.ALIGN_MODEL || "claude-haiku-4-5-20251001";
+const DIFF_MODEL = process.env.DIFF_MODEL || "claude-sonnet-4-6";
+const MAX_CHARS_PER_SECTION = 2500;
+const GROUPS_PER_CALL = 3;
+
+export interface Usage {
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+}
+
+const client = () => new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+function textOf(message: Anthropic.Message): string {
+  return message.content
+    .filter((block): block is Anthropic.TextBlock => block.type === "text")
+    .map((block) => block.text)
+    .join("");
+}
+
+function parseJson<T>(raw: string): T {
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const body = (fenced ? fenced[1] : raw).trim();
+  const start = body.search(/[[{]/);
+  return JSON.parse(start > 0 ? body.slice(start) : body) as T;
+}
+
+function addUsage(total: Usage, message: Anthropic.Message): void {
+  total.inputTokens += message.usage.input_tokens;
+  total.outputTokens += message.usage.output_tokens;
+  total.cachedInputTokens += message.usage.cache_read_input_tokens ?? 0;
+}
+
+/**
+ * Step one, cheap: match section headings across languages. Only the heading
+ * strings go to the model, never the bodies, so this stays a few hundred tokens
+ * regardless of how long the articles are.
+ */
+async function alignHeadings(articles: ArticleSnapshot[], usage: Usage): Promise<SectionGroup[]> {
+  const leads: SectionGroup = { key: "lead", headings: {}, sections: {}, reasons: [] };
+  const rest: Record<Lang, Section[]> = {} as Record<Lang, Section[]>;
+
+  for (const article of articles) {
+    const [lead, ...others] = article.sections;
+    if (lead) {
+      leads.headings[article.lang] = lead.heading;
+      leads.sections[article.lang] = lead;
+    }
+    rest[article.lang] = others;
+  }
+
+  const inventory = articles
+    .map((a) => `${a.lang}:\n${rest[a.lang].map((s, i) => `  ${i}. ${s.heading}`).join("\n") || "  (none)"}`)
+    .join("\n\n");
+
+  const message = await client().messages.create({
+    model: ALIGN_MODEL,
+    max_tokens: 1500,
+    system:
+      "You match section headings of the same Wikipedia article written in different languages. " +
+      "Headings are in the article's own language and rarely translate one-to-one. " +
+      "Group headings that cover the same subject matter. A group may contain only one language. " +
+      "Reply with JSON only, no prose, no code fences.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Section headings by language:\n\n${inventory}\n\n` +
+          `Return {"groups":[{"key":"short-english-slug","en":0,"he":2,"ar":1}, ...]} ` +
+          `where each value is that language's section index. Omit a language key if it has no matching section.`,
+      },
+    ],
+  });
+  addUsage(usage, message);
+
+  let parsed: { groups?: Record<string, string | number>[] };
+  try {
+    parsed = parseJson(textOf(message));
+  } catch {
+    parsed = { groups: [] };
+  }
+
+  const groups: SectionGroup[] = [leads];
+  for (const raw of parsed.groups ?? []) {
+    const key = String(raw.key ?? `group-${groups.length}`);
+    const group: SectionGroup = { key, headings: {}, sections: {}, reasons: [] };
+    for (const article of articles) {
+      const index = raw[article.lang];
+      const section = typeof index === "number" ? rest[article.lang][index] : undefined;
+      if (section) {
+        group.headings[article.lang] = section.heading;
+        group.sections[article.lang] = section;
+      }
+    }
+    if (Object.keys(group.sections).length) groups.push(group);
+  }
+  return groups;
+}
+
+const DIFF_SYSTEM = `You compare Wikipedia articles on the same subject across languages and report where they disagree.
+
+Report three kinds of difference:
+- "contradiction": the versions state incompatible facts (different numbers, dates, names, outcomes).
+- "unique": a substantive claim, event or actor that one version covers and another omits entirely.
+- "framing": the versions describe the same fact but with materially different emphasis, attribution, terminology or implied stance. Terminology choices for contested places and events belong here.
+
+Rules:
+- Report only differences that would change a reader's understanding. Ignore stylistic variation, differences in detail level that carry no new claim, and anything already obvious from section length.
+- For every difference, quote the relevant text VERBATIM from each version that carries it, character for character, copied exactly from the input including its own script and punctuation. Quote the shortest span that makes the point, at most about 25 words. Do not translate, paraphrase, normalise or re-type these spans: they are matched against the source by exact string search and a single altered character makes the difference undisplayable.
+- Omit a language from "spans" when that version says nothing on the point.
+- "summary" is at most 8 words. "explanation" is one or two sentences saying what each version claims and why the difference matters. Describe the versions neutrally; do not adjudicate which is correct unless one plainly contradicts the others on a checkable figure, in which case say so plainly.
+
+Reply with JSON only, no prose, no code fences:
+{"claims":[{"type":"contradiction","summary":"...","explanation":"...","spans":{"en":"...","he":"...","ar":"..."}}]}`;
+
+async function diffGroups(groups: SectionGroup[], langs: Lang[], usage: Usage): Promise<Claim[]> {
+  const batches: SectionGroup[][] = [];
+  for (let i = 0; i < groups.length; i += GROUPS_PER_CALL) {
+    batches.push(groups.slice(i, i + GROUPS_PER_CALL));
+  }
+
+  const results = await Promise.all(
+    batches.map(async (batch) => {
+      const body = batch
+        .map((group) => {
+          const parts = langs
+            .filter((l) => group.sections[l])
+            .map(
+              (l) =>
+                `<${l} heading="${group.headings[l] ?? ""}">\n` +
+                `${group.sections[l]!.text.slice(0, MAX_CHARS_PER_SECTION)}\n</${l}>`,
+            )
+            .join("\n\n");
+          const note = group.reasons.length ? `\nAutomated pre-scan noted: ${group.reasons.join("; ")}.` : "";
+          return `<section key="${group.key}">${note}\n\n${parts}\n</section>`;
+        })
+        .join("\n\n");
+
+      const message = await client().messages.create({
+        model: DIFF_MODEL,
+        max_tokens: 4000,
+        system: [{ type: "text", text: DIFF_SYSTEM, cache_control: { type: "ephemeral" } }],
+        messages: [
+          {
+            role: "user",
+            content:
+              `Languages present: ${langs.map((l) => `${l} (${LANG_META[l].label})`).join(", ")}.\n\n${body}`,
+          },
+        ],
+      });
+      addUsage(usage, message);
+
+      try {
+        return parseJson<{ claims?: Omit<Claim, "id">[] }>(textOf(message)).claims ?? [];
+      } catch {
+        return [];
+      }
+    }),
+  );
+
+  return results.flat().map((claim, i) => ({
+    ...claim,
+    id: `c${i}`,
+    type: ["contradiction", "unique", "framing"].includes(claim.type) ? claim.type : "framing",
+    spans: claim.spans ?? {},
+  }));
+}
+
+/** Drop claims whose spans can't be found in the source, since the UI has
+ *  nothing to highlight for them. */
+function verifySpans(claims: Claim[], articles: ArticleSnapshot[]): Claim[] {
+  const haystacks = new Map<Lang, string>(
+    articles.map((a) => [a.lang, a.sections.map((s) => s.text).join("\n")]),
+  );
+
+  return claims
+    .map((claim) => {
+      const spans: Claim["spans"] = {};
+      for (const [lang, snippet] of Object.entries(claim.spans) as [Lang, string][]) {
+        if (snippet && haystacks.get(lang)?.includes(snippet)) spans[lang] = snippet;
+      }
+      return { ...claim, spans };
+    })
+    .filter((claim) => Object.keys(claim.spans).length > 0);
+}
+
+export async function runComparison(
+  articles: ArticleSnapshot[],
+): Promise<{ claims: Claim[]; usage: Usage }> {
+  const usage: Usage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
+  const langs = articles.map((a) => a.lang);
+
+  const groups = await alignHeadings(articles, usage);
+  const selected = screenGroups(groups, langs);
+  const claims = await diffGroups(selected, langs, usage);
+
+  return { claims: verifySpans(claims, articles), usage };
+}
