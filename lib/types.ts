@@ -1,0 +1,58 @@
+export const LANGS = ["en", "he", "ar"] as const;
+export type Lang = (typeof LANGS)[number];
+
+export const LANG_META: Record<Lang, { label: string; native: string; dir: "ltr" | "rtl" }> = {
+  en: { label: "English", native: "English", dir: "ltr" },
+  he: { label: "Hebrew", native: "עברית", dir: "rtl" },
+  ar: { label: "Arabic", native: "العربية", dir: "rtl" },
+};
+
+export type ClaimType = "contradiction" | "unique" | "framing";
+
+/** One cross-language difference. `spans` holds verbatim snippets so the client
+ *  can locate them by string search — model-reported character offsets are not
+ *  reliable, especially across bidirectional text. */
+export interface Claim {
+  id: string;
+  type: ClaimType;
+  summary: string;
+  explanation: string;
+  spans: Partial<Record<Lang, string>>;
+}
+
+export interface Section {
+  heading: string;
+  level: number;
+  text: string;
+}
+
+export interface ArticleSnapshot {
+  lang: Lang;
+  title: string;
+  revid: number;
+  url: string;
+  sections: Section[];
+  /** Wikidata QIDs of linked concepts, used for the zero-token coverage diff. */
+  linkQids: string[];
+}
+
+export interface CoverageGap {
+  qid: string;
+  label: string;
+  presentIn: Lang[];
+  missingFrom: Lang[];
+}
+
+export interface ComparisonResult {
+  qid: string;
+  articles: Record<string, ArticleSnapshot>;
+  claims: Claim[];
+  coverage: CoverageGap[];
+  promptVersion: string;
+  computedAt: string;
+  usage: { inputTokens: number; outputTokens: number; cachedInputTokens: number };
+}
+
+export interface ComparePayload extends ComparisonResult {
+  fromCache: boolean;
+}
