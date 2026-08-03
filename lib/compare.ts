@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ArticleSnapshot, Claim, Lang, Section } from "./types";
-import { LANG_META } from "./types";
+import { KEY_FACTS_HEADING, LANG_META, LEAD_HEADING } from "./types";
 import { screenGroups, type SectionGroup } from "./deterministic";
 
 export const PROMPT_VERSION = "v1";
@@ -45,13 +45,24 @@ function addUsage(total: Usage, message: Anthropic.Message): void {
  */
 async function alignHeadings(articles: ArticleSnapshot[], usage: Usage): Promise<SectionGroup[]> {
   const leads: SectionGroup = { key: "lead", headings: {}, sections: {}, reasons: [] };
+  const keyFacts: SectionGroup = { key: "key-facts", headings: {}, sections: {}, reasons: [] };
   const rest: Record<Lang, Section[]> = {} as Record<Lang, Section[]>;
 
+  // The lead and the key-facts block are matched by their synthetic headings
+  // rather than by position. Both are generated rather than lifted from the
+  // article, so they align across languages without asking the model, and
+  // neither belongs in the heading inventory it does have to read.
   for (const article of articles) {
-    const [lead, ...others] = article.sections;
-    if (lead) {
-      leads.headings[article.lang] = lead.heading;
-      leads.sections[article.lang] = lead;
+    const others: Section[] = [];
+    for (const section of article.sections) {
+      const target =
+        section.heading === LEAD_HEADING ? leads : section.heading === KEY_FACTS_HEADING ? keyFacts : null;
+      if (target) {
+        target.headings[article.lang] = section.heading;
+        target.sections[article.lang] = section;
+      } else {
+        others.push(section);
+      }
     }
     rest[article.lang] = others;
   }
@@ -87,7 +98,7 @@ async function alignHeadings(articles: ArticleSnapshot[], usage: Usage): Promise
     parsed = { groups: [] };
   }
 
-  const groups: SectionGroup[] = [leads];
+  const groups: SectionGroup[] = [leads, keyFacts].filter((g) => Object.keys(g.sections).length > 0);
   for (const raw of parsed.groups ?? []) {
     const key = String(raw.key ?? `group-${groups.length}`);
     const group: SectionGroup = { key, headings: {}, sections: {}, reasons: [] };

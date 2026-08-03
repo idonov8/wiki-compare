@@ -326,12 +326,53 @@ export async function fetchParsedPage(lang: Lang, title: string): Promise<Parsed
   return parsed.parse;
 }
 
-/** Article-namespace links, capped, in the order the API returned them. */
+/**
+ * Article-namespace links, in the order they appear in the article.
+ *
+ * Read off the cleaned tree rather than from `action=parse&prop=links`. The
+ * API's list is every link on the rendered page, including ones inside navboxes,
+ * authority-control templates and citation footnotes — chrome this parser
+ * deliberately removes from the text. Using it made the coverage diff disagree
+ * with the columns it sits beneath: it reported "Virtual International Authority
+ * File", "WorldCat" and "Ynet" as concepts a version uniquely covered, when they
+ * were artefacts of which citation and metadata templates that language edition
+ * happens to use.
+ *
+ * Reading the tree also gives a usable ordering. Position is a rough proxy for
+ * prominence — a concept linked from the lead outranks one linked from the last
+ * section — which is what breaks ties in `coverageGaps` once the limit bites.
+ */
 export function linkTitlesOf(page: ParsedPage): string[] {
-  return (page.links ?? [])
-    .filter((l) => l.ns === 0 && l.exists !== false)
-    .map((l) => l.title)
-    .slice(0, MAX_LINKS);
+  const root = parse(page.text);
+  removeChrome(root);
+  const container = root.querySelector(".mw-parser-output") ?? root;
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const anchor of container.querySelectorAll("a")) {
+    if (out.length >= MAX_LINKS) break;
+
+    // Red links carry class="new" and point at an edit form.
+    if ((anchor.getAttribute("class") ?? "").split(/\s+/).includes("new")) continue;
+
+    const match = /^(?:\.\/|\/wiki\/)([^#?]+)/.exec(anchor.getAttribute("href") ?? "");
+    if (!match) continue;
+
+    let title: string;
+    try {
+      title = decodeURIComponent(match[1]).replace(/_/g, " ");
+    } catch {
+      continue; // malformed percent-encoding
+    }
+
+    // A colon means a non-article namespace: File:, Category:, Help:, Special:.
+    if (!title || title.includes(":") || seen.has(title)) continue;
+    seen.add(title);
+    out.push(title);
+  }
+
+  return out;
 }
 
 export function snapshotOf(lang: Lang, page: ParsedPage, linkQids: string[]): ArticleSnapshot {
