@@ -2,6 +2,17 @@ import { type HTMLElement, type Node, parse } from "node-html-parser";
 import type { ArticleSnapshot, Lang, Section } from "./types";
 import { KEY_FACTS_HEADING, LANGS, LEAD_HEADING } from "./types";
 
+/**
+ * Bumped whenever parsing changes what a snapshot contains.
+ *
+ * The articles cache is keyed on revision id, which is immutable — but only the
+ * *input* is immutable, not our reading of it. Without this, a parser fix would
+ * be invisible to every article already cached: the revision has not changed, so
+ * the stale snapshot keeps being served, and the fix appears not to work. Also
+ * folded into the comparison key, since a comparison is downstream of a parse.
+ */
+export const PARSER_VERSION = "v2";
+
 const UA = "wiki-compare/0.1 (https://github.com/)";
 const MAX_SECTION_CHARS = 4000;
 const MAX_LINKS = 400;

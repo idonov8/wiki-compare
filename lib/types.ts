@@ -54,8 +54,12 @@ export interface ComparisonResult {
   claims: Claim[];
   coverage: CoverageGap[];
   promptVersion: string;
+  parserVersion?: string;
   computedAt: string;
   usage: { inputTokens: number; outputTokens: number; cachedInputTokens: number };
+  /** How many verbatim spans the model offered and how many were located. A low
+   *  match rate means the prompt needs tightening, not the matcher loosening. */
+  spans?: { offered: number; matched: number; droppedClaims: number };
 }
 
 export interface ComparePayload extends ComparisonResult {
