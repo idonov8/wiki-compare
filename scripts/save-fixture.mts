@@ -37,17 +37,17 @@ async function record(query: string): Promise<void> {
   console.log(`\n${query}  ->  ${qid}  [${langs.join(", ")}]`);
 
   const pages: Fixture["pages"] = {};
-  const linkQids: Fixture["linkQids"] = {};
+  const qidByTitle: Fixture["qidByTitle"] = {};
 
   for (const lang of langs) {
     const page = await fetchParsedPage(lang, titles[lang]!);
     const qidMap = await titlesToQids(lang, linkTitlesOf(page));
     pages[lang] = page;
-    linkQids[lang] = [...new Set(qidMap.values())];
-    console.log(`  ${lang}: rev=${page.revid} html=${page.text.length}ch qids=${linkQids[lang]!.length}`);
+    qidByTitle[lang] = Object.fromEntries(qidMap);
+    console.log(`  ${lang}: rev=${page.revid} html=${page.text.length}ch qids=${qidMap.size}`);
   }
 
-  const allQids = [...new Set(Object.values(linkQids).flat())];
+  const allQids = [...new Set(Object.values(qidByTitle).flatMap((m) => Object.values(m)))];
   const labels = await fetchLabels(allQids);
   console.log(`  labels: ${labels.size}/${allQids.length}`);
 
@@ -58,7 +58,7 @@ async function record(query: string): Promise<void> {
     capturedAt: new Date().toISOString(),
     titles,
     pages,
-    linkQids,
+    qidByTitle,
     labels: Object.fromEntries(labels),
   };
 

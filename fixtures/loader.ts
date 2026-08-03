@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { snapshotOf, type ParsedPage } from "../lib/wikipedia";
+import { linkTitlesOf, snapshotOf, type ParsedPage } from "../lib/wikipedia";
 import type { ArticleSnapshot, Lang } from "../lib/types";
 
 /**
@@ -17,8 +17,13 @@ export interface Fixture {
   capturedAt: string;
   titles: Partial<Record<Lang, string>>;
   pages: Partial<Record<Lang, ParsedPage>>;
-  /** Resolved once at capture time so replay needs no network. */
-  linkQids: Partial<Record<Lang, string[]>>;
+  /**
+   * Wikidata ids keyed by article title, resolved once at capture time so
+   * replay needs no network. Keyed by title rather than stored as a flat id
+   * list so that a change to which links the parser considers part of the
+   * article re-derives correctly from the recorded HTML instead of going stale.
+   */
+  qidByTitle: Partial<Record<Lang, Record<string, string>>>;
   labels: Record<string, string>;
 }
 
@@ -40,7 +45,15 @@ export function loadFixture(slug: string): Fixture {
 export function fixtureSnapshots(fixture: Fixture): ArticleSnapshot[] {
   const out: ArticleSnapshot[] = [];
   for (const [lang, page] of Object.entries(fixture.pages) as [Lang, ParsedPage][]) {
-    out.push(snapshotOf(lang, page, fixture.linkQids[lang] ?? []));
+    const qids = fixture.qidByTitle[lang] ?? {};
+    const linkQids = [
+      ...new Set(
+        linkTitlesOf(page)
+          .map((title) => qids[title])
+          .filter((qid): qid is string => Boolean(qid)),
+      ),
+    ];
+    out.push(snapshotOf(lang, page, linkQids));
   }
   return out;
 }
