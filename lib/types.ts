@@ -7,6 +7,11 @@ export const LANG_META: Record<Lang, { label: string; native: string; dir: "ltr"
   ar: { label: "Arabic", native: "العربية", dir: "rtl" },
 };
 
+/** Synthetic headings. The lead has none of its own, and the key-facts block is
+ *  assembled from the infobox rather than lifted from a heading in the article. */
+export const LEAD_HEADING = "(lead)";
+export const KEY_FACTS_HEADING = "(key facts)";
+
 export type ClaimType = "contradiction" | "unique" | "framing";
 
 /** One cross-language difference. `spans` holds verbatim snippets so the client
