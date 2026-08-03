@@ -17,18 +17,24 @@ function sql() {
  * again only when an article actually changed or the prompt did.
  */
 
-export async function getArticle(lang: Lang, revid: number): Promise<ArticleSnapshot | null> {
+export async function getArticle(
+  lang: Lang,
+  revid: number,
+  parserVersion: string,
+): Promise<ArticleSnapshot | null> {
   const rows = await sql()`
-    SELECT snapshot FROM articles WHERE lang = ${lang} AND revid = ${revid} LIMIT 1
+    SELECT snapshot FROM articles
+    WHERE lang = ${lang} AND revid = ${revid} AND parser_version = ${parserVersion}
+    LIMIT 1
   `;
   return rows.length ? (rows[0].snapshot as ArticleSnapshot) : null;
 }
 
-export async function putArticle(snapshot: ArticleSnapshot): Promise<void> {
+export async function putArticle(snapshot: ArticleSnapshot, parserVersion: string): Promise<void> {
   await sql()`
-    INSERT INTO articles (lang, revid, title, snapshot)
-    VALUES (${snapshot.lang}, ${snapshot.revid}, ${snapshot.title}, ${JSON.stringify(snapshot)})
-    ON CONFLICT (lang, revid) DO NOTHING
+    INSERT INTO articles (lang, revid, parser_version, title, snapshot)
+    VALUES (${snapshot.lang}, ${snapshot.revid}, ${parserVersion}, ${snapshot.title}, ${JSON.stringify(snapshot)})
+    ON CONFLICT (lang, revid, parser_version) DO NOTHING
   `;
 }
 
@@ -36,12 +42,13 @@ export function comparisonKey(
   qid: string,
   revids: Record<string, number>,
   promptVersion: string,
+  parserVersion: string,
 ): string {
   const parts = Object.keys(revids)
     .sort()
     .map((l) => `${l}${revids[l]}`)
     .join(".");
-  return `${qid}:${parts}:${promptVersion}`;
+  return `${qid}:${parts}:${promptVersion}:${parserVersion}`;
 }
 
 export async function getComparison(key: string): Promise<ComparisonResult | null> {
@@ -51,10 +58,25 @@ export async function getComparison(key: string): Promise<ComparisonResult | nul
   return rows.length ? (rows[0].result as ComparisonResult) : null;
 }
 
-export async function putComparison(key: string, result: ComparisonResult): Promise<void> {
+export async function putComparison(
+  key: string,
+  result: ComparisonResult,
+  overwrite = false,
+): Promise<void> {
+  const payload = JSON.stringify(result);
+  // A ?fresh=1 run recomputed on purpose, so it should replace what is stored
+  // rather than compute a new answer and silently discard it.
+  if (overwrite) {
+    await sql()`
+      INSERT INTO comparisons (cache_key, qid, result)
+      VALUES (${key}, ${result.qid}, ${payload})
+      ON CONFLICT (cache_key) DO UPDATE SET result = EXCLUDED.result, computed_at = now()
+    `;
+    return;
+  }
   await sql()`
     INSERT INTO comparisons (cache_key, qid, result)
-    VALUES (${key}, ${result.qid}, ${JSON.stringify(result)})
+    VALUES (${key}, ${result.qid}, ${payload})
     ON CONFLICT (cache_key) DO NOTHING
   `;
 }
@@ -62,7 +84,9 @@ export async function putComparison(key: string, result: ComparisonResult): Prom
 /** Small lookup cache for Wikidata QID -> readable label. Not revision-scoped. */
 export async function getLabels(qids: string[]): Promise<Map<string, string>> {
   if (!qids.length) return new Map();
-  const rows = await sql()`SELECT qid, label FROM labels WHERE qid = ANY(${qids})`;
+  // The ::text[] cast is required: without it Postgres cannot infer the
+  // parameter type for ANY() and rejects the statement.
+  const rows = await sql()`SELECT qid, label FROM labels WHERE qid = ANY(${qids}::text[])`;
   return new Map(rows.map((r) => [r.qid as string, r.label as string]));
 }
 

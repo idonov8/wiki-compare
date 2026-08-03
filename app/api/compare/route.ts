@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { LANGS, type ArticleSnapshot, type ComparisonResult, type Lang } from "@/lib/types";
-import { currentRevid, fetchArticle, fetchLabels, resolveSitelinks } from "@/lib/wikipedia";
+import { PARSER_VERSION, currentRevid, fetchArticle, fetchLabels, resolveSitelinks } from "@/lib/wikipedia";
 import { comparisonKey, getArticle, getComparison, getLabels, putArticle, putComparison, putLabels } from "@/lib/db";
 import { coverageGaps } from "@/lib/deterministic";
 import { PROMPT_VERSION, runComparison } from "@/lib/compare";
@@ -45,19 +45,25 @@ export async function GET(request: Request) {
     );
 
     const langs = available.filter((l) => revids[l]);
-    const key = comparisonKey(qid, revids, PROMPT_VERSION);
+    const key = comparisonKey(qid, revids, PROMPT_VERSION, PARSER_VERSION);
 
-    const cached = await getComparison(key);
+    // ?fresh=1 recomputes and overwrites rather than reading the comparison
+    // cache. An explicit, narrow bypass for iterating on the prompt — it leaves
+    // the caching logic and the article cache intact, so debugging never means
+    // deleting rows or commenting out the check and forgetting to restore it.
+    const bypassCache = params.get("fresh") === "1";
+
+    const cached = bypassCache ? null : await getComparison(key);
     if (cached) {
       return NextResponse.json({ ...cached, fromCache: true });
     }
 
     const articles: ArticleSnapshot[] = await Promise.all(
       langs.map(async (lang) => {
-        const hit = await getArticle(lang, revids[lang]);
+        const hit = await getArticle(lang, revids[lang], PARSER_VERSION);
         if (hit) return hit;
         const fresh = await fetchArticle(lang, titles[lang]!);
-        await putArticle(fresh);
+        await putArticle(fresh, PARSER_VERSION);
         return fresh;
       }),
     );
@@ -73,7 +79,7 @@ export async function GET(request: Request) {
     }
     const coverage = coverageGaps(articles, known);
 
-    const { claims, usage } = await runComparison(articles);
+    const { claims, usage, spans } = await runComparison(articles);
 
     const result: ComparisonResult = {
       qid,
@@ -81,11 +87,13 @@ export async function GET(request: Request) {
       claims,
       coverage,
       promptVersion: PROMPT_VERSION,
+      parserVersion: PARSER_VERSION,
       computedAt: new Date().toISOString(),
       usage,
+      spans: { offered: spans.offered, matched: spans.matched, droppedClaims: spans.droppedClaims },
     };
 
-    await putComparison(key, result);
+    await putComparison(key, result, bypassCache);
     return NextResponse.json({ ...result, fromCache: false });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Comparison failed.";

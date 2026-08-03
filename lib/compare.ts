@@ -156,7 +156,13 @@ async function diffGroups(groups: SectionGroup[], langs: Lang[], usage: Usage): 
 
       const message = await client().messages.create({
         model: DIFF_MODEL,
-        max_tokens: 4000,
+        max_tokens: 8000,
+        // The breakpoint is correct but currently inert: the minimum cacheable
+        // prefix is 1024 tokens on this model and DIFF_SYSTEM is roughly 400, so
+        // nothing is written and `cachedInputTokens` stays at zero. Kept because
+        // it starts paying the moment the prompt grows past the threshold, and
+        // costs nothing meanwhile — but the comparison cache, not this, is what
+        // makes a repeated article free.
         system: [{ type: "text", text: DIFF_SYSTEM, cache_control: { type: "ephemeral" } }],
         messages: [
           {
@@ -168,9 +174,24 @@ async function diffGroups(groups: SectionGroup[], langs: Lang[], usage: Usage): 
       });
       addUsage(usage, message);
 
+      // A truncated response is unparseable JSON, and the catch below would
+      // discard the whole batch — every claim from three sections — without a
+      // trace. Say so, so it reads as a budget problem rather than as the model
+      // having found nothing.
+      if (message.stop_reason === "max_tokens") {
+        console.warn(
+          `[compare] batch [${batch.map((g) => g.key).join(", ")}] hit max_tokens; ` +
+            `its claims are lost. Raise max_tokens or lower GROUPS_PER_CALL.`,
+        );
+      }
+
       try {
         return parseJson<{ claims?: Omit<Claim, "id">[] }>(textOf(message)).claims ?? [];
-      } catch {
+      } catch (error) {
+        console.warn(
+          `[compare] batch [${batch.map((g) => g.key).join(", ")}] returned unparseable JSON ` +
+            `(${(error as Error).message}); dropping ${textOf(message).length} chars of output.`,
+        );
         return [];
       }
     }),
@@ -184,33 +205,87 @@ async function diffGroups(groups: SectionGroup[], langs: Lang[], usage: Usage): 
   }));
 }
 
-/** Drop claims whose spans can't be found in the source, since the UI has
- *  nothing to highlight for them. */
-function verifySpans(claims: Claim[], articles: ArticleSnapshot[]): Claim[] {
-  const haystacks = new Map<Lang, string>(
-    articles.map((a) => [a.lang, a.sections.map((s) => s.text).join("\n")]),
+export interface SpanReport {
+  /** Spans the model returned, across all claims. */
+  offered: number;
+  /** Spans found character-for-character in the source. */
+  matched: number;
+  /** Claims dropped entirely because not one of their spans could be located. */
+  droppedClaims: number;
+  /** A few misses, for diagnosing whether the prompt or the matcher is at fault. */
+  samples: { lang: Lang; snippet: string }[];
+}
+
+/**
+ * Drop claims whose spans can't be found in the source, since the UI has
+ * nothing to highlight for them.
+ *
+ * The comparison is exact and deliberately stays that way. A span that needs
+ * normalising or trimming to match is a span the model paraphrased, and
+ * highlighting paraphrased text at the closest lexical position is worse than
+ * not highlighting it — it silently attributes a claim to a sentence that does
+ * not make it. If the drop rate is high the prompt is what needs tightening;
+ * `report` exists so that is measurable rather than guessed at.
+ *
+ * Each section is searched separately rather than against the concatenated
+ * article, because that is what the renderer does. Verifying against the join
+ * would admit spans that straddle a section boundary, which then match nothing
+ * at render time and silently disappear.
+ */
+function verifySpans(
+  claims: Claim[],
+  articles: ArticleSnapshot[],
+): { claims: Claim[]; report: SpanReport } {
+  const haystacks = new Map<Lang, string[]>(
+    articles.map((a) => [a.lang, a.sections.map((s) => s.text)]),
   );
 
-  return claims
+  const report: SpanReport = { offered: 0, matched: 0, droppedClaims: 0, samples: [] };
+
+  const verified = claims
     .map((claim) => {
       const spans: Claim["spans"] = {};
       for (const [lang, snippet] of Object.entries(claim.spans) as [Lang, string][]) {
-        if (snippet && haystacks.get(lang)?.includes(snippet)) spans[lang] = snippet;
+        if (!snippet) continue;
+        report.offered++;
+        if (haystacks.get(lang)?.some((text) => text.includes(snippet))) {
+          report.matched++;
+          spans[lang] = snippet;
+        } else if (report.samples.length < 8) {
+          report.samples.push({ lang, snippet: snippet.slice(0, 120) });
+        }
       }
       return { ...claim, spans };
     })
-    .filter((claim) => Object.keys(claim.spans).length > 0);
+    .filter((claim) => {
+      const kept = Object.keys(claim.spans).length > 0;
+      if (!kept) report.droppedClaims++;
+      return kept;
+    });
+
+  return { claims: verified, report };
 }
 
 export async function runComparison(
   articles: ArticleSnapshot[],
-): Promise<{ claims: Claim[]; usage: Usage }> {
+): Promise<{ claims: Claim[]; usage: Usage; spans: SpanReport }> {
   const usage: Usage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
   const langs = articles.map((a) => a.lang);
 
   const groups = await alignHeadings(articles, usage);
   const selected = screenGroups(groups, langs);
-  const claims = await diffGroups(selected, langs, usage);
+  const raw = await diffGroups(selected, langs, usage);
+  const { claims, report } = verifySpans(raw, articles);
 
-  return { claims: verifySpans(claims, articles), usage };
+  const pct = report.offered ? Math.round((report.matched / report.offered) * 100) : 100;
+  console.log(
+    `[compare] groups=${selected.length}/${groups.length} (${selected.map((g) => g.key).join(", ")}) ` +
+      `claims=${raw.length}->${claims.length} spans=${report.matched}/${report.offered} (${pct}% matched) ` +
+      `tokens=${usage.inputTokens}in/${usage.outputTokens}out/${usage.cachedInputTokens}cached`,
+  );
+  for (const miss of report.samples) {
+    console.log(`[compare]   unmatched ${miss.lang}: ${JSON.stringify(miss.snippet)}`);
+  }
+
+  return { claims, usage, spans: report };
 }
