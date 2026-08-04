@@ -217,12 +217,46 @@ button {
   margin-bottom: 8px;
 }
 
-.key-facts .body-text {
-  font-size: 14px;
-  color: var(--ink-soft);
-  border-inline-start: 2px solid var(--rule);
-  padding-inline-start: 12px;
+/* The article's lead photo, boxed like the top of a Wikipedia infobox. */
+.article-image {
   display: block;
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  margin: 0 0 16px;
+  padding: 4px;
+  background: var(--wiki-page);
+  border: 1px solid var(--wiki-border);
+  border-radius: 2px;
+}
+
+/* Key facts: the infobox, moved under the title and folded away by default so
+   the lead reads first. */
+details.key-facts {
+  margin: 0 0 20px;
+  border: 1px solid var(--wiki-border);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--wiki-border) 8%, var(--wiki-page));
+}
+
+details.key-facts > summary {
+  cursor: pointer;
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  user-select: none;
+}
+
+details.key-facts[open] > summary { border-bottom: 1px solid var(--wiki-border); }
+
+details.key-facts > .body-text {
+  display: block;
+  padding: 10px 12px;
+  font-size: 13.5px;
+  color: var(--ink-soft);
 }
 
 .body-text {

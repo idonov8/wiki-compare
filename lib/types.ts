@@ -31,12 +31,21 @@ export interface Section {
   text: string;
 }
 
+export interface ArticleImage {
+  src: string;
+  alt?: string;
+  width?: number;
+  height?: number;
+}
+
 export interface ArticleSnapshot {
   lang: Lang;
   title: string;
   revid: number;
   url: string;
   sections: Section[];
+  /** The article's lead photo, pulled from the infobox, shown under the title. */
+  image?: ArticleImage;
   /** Wikidata QIDs of linked concepts, used for the zero-token coverage diff. */
   linkQids: string[];
 }
