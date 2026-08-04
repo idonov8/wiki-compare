@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Highlighted from "./Highlighted";
+import Loading from "./Loading";
 import {
   KEY_FACTS_HEADING,
   LANGS,
@@ -37,12 +38,16 @@ export default function Compare() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ComparePayload | null>(null);
+  /** The title actually submitted, so the loading state does not retitle itself
+   *  as someone edits the box while a comparison is in flight. */
+  const [pending, setPending] = useState("");
   const [shown, setShown] = useState<Lang[]>([...LANGS]);
   const [card, setCard] = useState<CardState | null>(null);
 
   const load = useCallback(async () => {
     const title = query.trim();
     if (!title) return;
+    setPending(title);
     setLoading(true);
     setError(null);
     setCard(null);
@@ -125,7 +130,7 @@ export default function Compare() {
         </div>
       </header>
 
-      {data && (
+      {data && !loading && (
         <div className="controls">
           <div className="toggles">
             {available.map((lang) => (
@@ -153,14 +158,16 @@ export default function Compare() {
         </div>
       )}
 
-      {error && (
+      {loading && <Loading title={pending} />}
+
+      {error && !loading && (
         <div className="state error">
           <h2>That didn&apos;t work</h2>
           <p>{error}</p>
         </div>
       )}
 
-      {!data && !error && (
+      {!data && !error && !loading && (
         <div className="state">
           <h2>Three encyclopedias, one subject</h2>
           <p>
@@ -175,7 +182,7 @@ export default function Compare() {
         </div>
       )}
 
-      {data && (
+      {data && !loading && (
         <>
           <div
             className="columns"
