@@ -1,6 +1,7 @@
 "use client";
 
 import type { Claim, Lang } from "@/lib/types";
+import { ghostRanges } from "@/lib/ghost";
 
 interface Range {
   start: number;
@@ -30,21 +31,49 @@ function locate(text: string, lang: Lang, claims: Claim[]): Range[] {
   return kept;
 }
 
+const GHOST_TYPES: Claim["type"][] = ["contradiction", "unique", "framing"];
+
 export default function Highlighted({
   text,
   lang,
   claims,
-  activeId,
+  ghost = false,
+  activeId = null,
   onEnter,
   onLeave,
 }: {
   text: string;
   lang: Lang;
   claims: Claim[];
-  activeId: string | null;
-  onEnter: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
-  onLeave: () => void;
+  ghost?: boolean;
+  activeId?: string | null;
+  onEnter?: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
+  onLeave?: () => void;
 }) {
+  if (ghost) {
+    const nodes: React.ReactNode[] = [];
+    let at = 0;
+    for (const { start, end, seed } of ghostRanges(text)) {
+      nodes.push(text.slice(at, start));
+      nodes.push(
+        <mark
+          key={start}
+          className="ghost"
+          data-type={GHOST_TYPES[seed % 3]}
+          style={{
+            animationDuration: `${4 + ((seed >> 3) % 45) / 10}s`,
+            animationDelay: `-${((seed >> 7) % 90) / 10}s`,
+          }}
+        >
+          {text.slice(start, end)}
+        </mark>,
+      );
+      at = end;
+    }
+    nodes.push(text.slice(at));
+    return <span className="body-text">{nodes}</span>;
+  }
+
   const ranges = locate(text, lang, claims);
   if (!ranges.length) return <span className="body-text">{text}</span>;
 
@@ -63,8 +92,8 @@ export default function Highlighted({
         aria-label={`${range.claim.type}: ${range.claim.summary}`}
         data-type={range.claim.type}
         data-active={activeId === range.claim.id}
-        onMouseEnter={(e) => onEnter(range.claim, e)}
-        onFocus={(e) => onEnter(range.claim, e)}
+        onMouseEnter={(e) => onEnter?.(range.claim, e)}
+        onFocus={(e) => onEnter?.(range.claim, e)}
         onMouseLeave={onLeave}
         onBlur={onLeave}
       >
