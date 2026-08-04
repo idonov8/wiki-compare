@@ -178,6 +178,26 @@ button {
   font-weight: 400;
 }
 
+/* The lead has no heading of its own and the key-facts block is assembled from
+   the infobox, so its heading is ours rather than the article's. Set in the
+   interface font and lightened to read as apparatus, not as article text. */
+.section-heading.synthetic {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 8px;
+}
+
+.key-facts .body-text {
+  font-size: 14px;
+  color: var(--ink-soft);
+  border-inline-start: 2px solid var(--rule);
+  padding-inline-start: 12px;
+  display: block;
+}
+
 .body-text { white-space: pre-wrap; }
 
 /* ---- highlights ----

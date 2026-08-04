@@ -7,6 +7,11 @@ export const LANG_META: Record<Lang, { label: string; native: string; dir: "ltr"
   ar: { label: "Arabic", native: "العربية", dir: "rtl" },
 };
 
+/** Synthetic headings. The lead has none of its own, and the key-facts block is
+ *  assembled from the infobox rather than lifted from a heading in the article. */
+export const LEAD_HEADING = "(lead)";
+export const KEY_FACTS_HEADING = "(key facts)";
+
 export type ClaimType = "contradiction" | "unique" | "framing";
 
 /** One cross-language difference. `spans` holds verbatim snippets so the client
@@ -49,8 +54,12 @@ export interface ComparisonResult {
   claims: Claim[];
   coverage: CoverageGap[];
   promptVersion: string;
+  parserVersion?: string;
   computedAt: string;
   usage: { inputTokens: number; outputTokens: number; cachedInputTokens: number };
+  /** How many verbatim spans the model offered and how many were located. A low
+   *  match rate means the prompt needs tightening, not the matcher loosening. */
+  spans?: { offered: number; matched: number; droppedClaims: number };
 }
 
 export interface ComparePayload extends ComparisonResult {

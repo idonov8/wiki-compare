@@ -6,6 +6,19 @@ import type { ArticleSnapshot, CoverageGap, Lang, Section } from "./types";
  * section groups the model has to read.
  */
 
+/**
+ * Calendar links, not concepts. Bare years and ranges ("1996", "1936–1939") and
+ * day-of-year articles ("December 23", "7 October"). Every article links a few
+ * of these in passing and which ones differ between editions says nothing about
+ * coverage. Labels are fetched in English, so English month names suffice.
+ */
+const MONTHS =
+  "January|February|March|April|May|June|July|August|September|October|November|December";
+const CALENDAR_LABEL = new RegExp(
+  `^\\s*(?:\\d{1,4}\\s*(?:[–—-]\\s*\\d{1,4}\\s*)?|(?:${MONTHS})\\s+\\d{1,2}|\\d{1,2}\\s+(?:${MONTHS}))\\s*$`,
+  "i",
+);
+
 export function coverageGaps(
   articles: ArticleSnapshot[],
   labels: Map<string, string>,
@@ -14,18 +27,24 @@ export function coverageGaps(
   const langs = articles.map((a) => a.lang);
   const presence = new Map<string, Set<Lang>>();
 
+  // How early a concept is linked is a decent proxy for how central it is:
+  // linkQids preserves the order the links appear in the article, so a concept
+  // linked from the lead outranks one linked from the last section.
+  const firstSeen = new Map<string, number>();
+
   for (const article of articles) {
-    for (const qid of article.linkQids) {
+    article.linkQids.forEach((qid, index) => {
       if (!presence.has(qid)) presence.set(qid, new Set());
       presence.get(qid)!.add(article.lang);
-    }
+      firstSeen.set(qid, Math.min(firstSeen.get(qid) ?? Infinity, index));
+    });
   }
 
   const gaps: CoverageGap[] = [];
   for (const [qid, present] of presence) {
     if (present.size === langs.length) continue;
     const label = labels.get(qid);
-    if (!label) continue;
+    if (!label || CALENDAR_LABEL.test(label)) continue;
     gaps.push({
       qid,
       label,
@@ -34,10 +53,19 @@ export function coverageGaps(
     });
   }
 
-  // Concepts that only one version mentions are the interesting ones, so sort
-  // by how lopsided the gap is, then alphabetically for a stable order.
+  // Concepts only one version mentions are the interesting ones, so sort by how
+  // lopsided the gap is first. Ties used to break alphabetically, which mattered
+  // more than it looks: on a three-language article nearly every gap ties at
+  // "missing from two", so the limit was slicing an alphabetical prefix and the
+  // panel showed everything from "1923…" to "agriculture…" and nothing later.
+  // Break ties on prominence instead, and keep the label as a stable last resort.
   return gaps
-    .sort((a, b) => b.missingFrom.length - a.missingFrom.length || a.label.localeCompare(b.label))
+    .sort(
+      (a, b) =>
+        b.missingFrom.length - a.missingFrom.length ||
+        (firstSeen.get(a.qid) ?? Infinity) - (firstSeen.get(b.qid) ?? Infinity) ||
+        a.label.localeCompare(b.label),
+    )
     .slice(0, limit);
 }
 
@@ -84,6 +112,20 @@ export function screenGroups(groups: SectionGroup[], langs: Lang[], limit = 8): 
       score += 100;
     }
 
+    if (group.key === "key-facts") {
+      reasons.push("infobox figures");
+      score += 90;
+    }
+
+    // A baseline for anything comparable at all. Without it, a section present
+    // in every language with matching figures and similar length scored exactly
+    // zero and was filtered out before the limit was even reached — which is
+    // precisely the shape of a framing difference. Contradictions announce
+    // themselves numerically and omissions announce themselves by absence, but
+    // "West Bank" against "יהודה ושומרון" has neither signal by construction.
+    // These still sort last; they just stop being excluded when there is room.
+    if (present.length > 1) score += 5;
+
     if (present.length < langs.length) {
       reasons.push(`absent from ${langs.filter((l) => !group.sections[l]).join(", ")}`);
       score += 30;
@@ -111,7 +153,7 @@ export function screenGroups(groups: SectionGroup[], langs: Lang[], limit = 8): 
   });
 
   return scored
-    .filter((g) => g.score > 0)
+    .filter((g) => g.score > 0 && langs.some((l) => g.sections[l]))
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map(({ score: _score, ...group }) => group);

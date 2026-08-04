@@ -6,16 +6,23 @@ differently. Hover a mark to see what the difference is.
 
 ## Status
 
-**The code compiles and builds. It has never run against live Wikipedia.** It was written in an
-environment without network access to `wikipedia.org` or `wikidata.org`. Expect the first run to
-need a debugging pass, most likely in:
+The fetching, parsing, deterministic and rendering layers have been run against live Wikipedia and
+are covered by checks. **The model pass has still never executed** — no comparison has been
+generated, and no row has ever been written to the database.
 
-- `stripChrome` / `splitSections` in `lib/wikipedia.ts` — the HTML shape of `action=parse` output
-  changes between skins and language editions.
-- `verifySpans` in `lib/compare.ts` — the model must return snippets character-for-character.
-  Watch how many claims get dropped; if it's most of them, the prompt needs tightening rather than
-  the matcher loosening.
-- Right-to-left rendering where a highlighted span sits at a direction boundary.
+Verified:
+
+- Parsing, against live `action=parse` output in all three languages (`npm run check:parser`).
+- The zero-token coverage and screening pass (`npm run check:deterministic`).
+- Rendering, including that highlights do not break at a direction boundary (`npm run check:ui`).
+
+Not yet verified — needs `ANTHROPIC_API_KEY` and `DATABASE_URL`:
+
+- `alignHeadings` and `diffGroups` in `lib/compare.ts`. No model call has been made.
+- `verifySpans`. The model must return snippets character-for-character; the drop rate is logged
+  on every run and is the number to watch. If most claims are dropped the prompt needs tightening,
+  not the matcher loosening.
+- Every database path: the schema, the caches, and the `?fresh=1` bypass.
 
 ## Setup
 
@@ -68,10 +75,28 @@ article text on `revid` alone means an edit to the Hebrew page doesn't invalidat
 fetch. Keying the comparison on all three revids plus `PROMPT_VERSION` means a stable article
 costs zero tokens on every request after the first.
 
+Article snapshots are additionally keyed on `PARSER_VERSION`. Only the *input* is immutable, not
+our reading of it: keyed on revision id alone, a parser fix stays invisible to every article
+already cached, because the revision hasn't changed. `?fresh=1` recomputes and overwrites one
+comparison, so iterating on the prompt never means deleting rows.
+
 Before any model call, `lib/deterministic.ts` does the work that doesn't need one: linked-concept
 coverage is pure set arithmetic over Wikidata ids, and numeric divergence — with Arabic-Indic
 digits normalised, so ١٣٢ and 132 compare equal — flags which sections are worth reading. Only
 those sections reach the model.
+
+Coverage is computed over links read off the cleaned article tree, not the API's link list. The
+API lists every link on the rendered page, including navboxes, authority-control templates and
+citation footnotes — so using it made the coverage panel disagree with the columns above it and
+report "WorldCat" as a concept one version uniquely covers.
+
+### Why infoboxes survive
+
+`stripChrome` removes what wraps the prose, but the infobox is extracted first, into a `(key facts)`
+section. It's chrome by layout and content by substance: on the Palestinian Legislative Council
+article the 2006 seat split — Hamas 74, Fatah 45 — appears in the English and Arabic infoboxes and
+in neither article's running text. Discarding it made the clearest contradiction on the page
+invisible in two of the three languages.
 
 ### Why spans, not offsets
 
@@ -99,7 +124,28 @@ lib/db.ts                  Neon cache layer
 db/schema.sql              three tables: articles, comparisons, labels
 components/Compare.tsx     columns, toggles, hover card
 components/Highlighted.tsx span location and marking
+fixtures/                  recorded API responses + loader
+scripts/                   fixture recorder and the check suites
 ```
+
+## Testing
+
+```bash
+npm run check              # parser + deterministic, no network, no model, no database
+npm run check:ui           # rendering, needs `npm run dev` in another shell
+npm run fixtures:save "Article title"   # record a new fixture
+npm run fixtures:refresh                # re-record the existing ones
+```
+
+Fixtures store raw `action=parse` HTML rather than parsed sections — the parser is the part most
+worth testing, so a fixture holding its output would assert nothing. Four are recorded: the
+Palestinian Legislative Council case with known answers, Coffee as a low-stakes control, and
+Hadag Nahash (en+he) and Tamer Hosny (ar+en) for the two-language path.
+
+In development, `?title=demo:<fixture-slug>` renders a recorded fixture through the real
+components without a model call or a database — useful for working on the rendering layer. Its
+claims are located in the real text so the spans are exact, but they are hand-written, not model
+output. The route is inert in production.
 
 ## Caveats worth knowing
 

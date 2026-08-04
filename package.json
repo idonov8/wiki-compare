@@ -8,7 +8,13 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "db:init": "node --env-file=.env.local scripts/init-db.mjs"
+    "db:init": "node --env-file-if-exists=.env.local scripts/init-db.mjs",
+    "fixtures:save": "tsx scripts/save-fixture.mts",
+    "fixtures:refresh": "tsx scripts/save-fixture.mts",
+    "check:parser": "tsx scripts/check-parser.mts",
+    "check:deterministic": "tsx scripts/check-deterministic.mts",
+    "check": "npm run check:parser && npm run check:deterministic",
+    "check:ui": "tsx scripts/check-ui.mts"
   },
   "keywords": [],
   "author": "",
@@ -17,6 +23,7 @@
     "@anthropic-ai/sdk": "^0.115.0",
     "@neondatabase/serverless": "^1.1.0",
     "next": "^16.3.0",
+    "node-html-parser": "^9.0.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
@@ -25,7 +32,9 @@
     "@types/node": "^26.1.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "playwright": "^1.62.1",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.5",
     "typescript": "^7.0.2"
   },
   "private": true
