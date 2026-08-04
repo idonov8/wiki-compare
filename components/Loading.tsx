@@ -169,11 +169,11 @@ export default function Loading({ title }: { title: string }) {
             <i />
           </span>
         </p>
-        <p className="waited">
-          {Math.floor(elapsed / 1000)}s
-          {elapsed > PATIENCE_MS &&
-            " · no cached comparison for these revisions, so all three are being read from scratch"}
-        </p>
+        {elapsed > PATIENCE_MS && (
+          <p className="waited">
+            No cached comparison for these revisions, so all three are being read from scratch.
+          </p>
+        )}
       </div>
     </div>
   );
