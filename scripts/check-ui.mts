@@ -83,11 +83,30 @@ for (const lang of ["en", "he", "ar"]) {
   if (n) console.log(`        ${lang}: ${n} marks, max intra-line gap ${Math.max(...marks.filter((m) => m.lang === lang).map((m) => m.gap)).toFixed(1)}px`);
 }
 
+// ---- lead image + collapsible key facts -------------------------------------
+
+const images = await page.$$eval(".article-image", (els) =>
+  els.map((el) => (el as HTMLImageElement).getAttribute("src") ?? ""),
+);
+check(images.length > 0, "a lead photo renders under the title",
+  `${images.length} images`);
+check(images.every((src) => /^https:\/\//.test(src)), "photo srcs are absolute https URLs",
+  images.join("; "));
+
+const keyFacts = await page.$$eval("details.key-facts", (els) => ({
+  count: els.length,
+  anyOpen: els.some((el) => (el as HTMLDetailsElement).open),
+}));
+check(keyFacts.count > 0, "key facts render as a collapsible block");
+check(!keyFacts.anyOpen, "key facts default to collapsed");
+
 // ---- hover card -------------------------------------------------------------
 
+// `:visible` skips marks inside the collapsed Key facts block, which can't be
+// hovered until it is opened.
 for (const [label, selector] of [
-  ["leftmost column", 'section.column[lang="en"] mark.claim'],
-  ["rightmost column", 'section.column[lang="ar"] mark.claim'],
+  ["leftmost column", 'section.column[lang="en"] mark.claim:visible'],
+  ["rightmost column", 'section.column[lang="ar"] mark.claim:visible'],
 ] as const) {
   const mark = await page.$(selector);
   if (!mark) continue;
@@ -130,7 +149,9 @@ for (const [label, selector] of [
 
 await page.keyboard.press("Escape");
 const focusable = await page.evaluate(() => {
-  const m = document.querySelector("mark.claim") as HTMLElement | null;
+  const m = [...document.querySelectorAll<HTMLElement>("mark.claim")].find(
+    (el) => el.getClientRects().length > 0,
+  );
   m?.focus();
   return document.activeElement === m;
 });

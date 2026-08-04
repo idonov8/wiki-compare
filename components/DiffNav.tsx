@@ -29,7 +29,12 @@ export default function DiffNav({ signature }: { signature: string }) {
   const marksRef = useRef<HTMLElement[]>([]);
 
   const measure = useCallback(() => {
-    const marks = [...document.querySelectorAll<HTMLElement>("mark.claim")];
+    // Marks inside a collapsed <details> (the folded Key facts block) have no
+    // client rects; leaving them in would pin ticks at the top of the rail and
+    // send the arrows to something off screen. Re-measured when a block opens.
+    const marks = [...document.querySelectorAll<HTMLElement>("mark.claim")].filter(
+      (el) => el.getClientRects().length > 0,
+    );
     marks.sort((a, b) => {
       const ra = a.getBoundingClientRect();
       const rb = b.getBoundingClientRect();
@@ -82,8 +87,12 @@ export default function DiffNav({ signature }: { signature: string }) {
       measure();
       track();
     };
+    // `toggle` doesn't bubble, so capture it to catch the Key facts block
+    // opening or closing and re-plot its marks.
+    const onToggle = () => onResize();
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onResize);
+    document.addEventListener("toggle", onToggle, true);
     document.fonts?.ready.then(() => {
       measure();
       track();
@@ -92,6 +101,7 @@ export default function DiffNav({ signature }: { signature: string }) {
       clearTimeout(t);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onResize);
+      document.removeEventListener("toggle", onToggle, true);
     };
   }, [signature, measure, track]);
 

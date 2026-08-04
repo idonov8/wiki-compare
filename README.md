@@ -120,7 +120,15 @@ cuts) so the columns read as siblings rather than three unrelated documents.
 
 A fixed rail down the right edge (`components/DiffNav.tsx`) plots every mark against the length of
 the page and tracks the slice currently on screen, so the differences are visible at a glance while
-scrolling; the arrow control steps through them in reading order.
+scrolling; the arrow control steps through them in reading order. It reads only marks that have
+client rects, so a difference folded inside the collapsed Key facts block is skipped until the
+block is opened, and a `toggle` listener re-plots the rail when it is.
+
+Each column leads with the article's lead photo (`extractLeadImage` in `lib/wikipedia.ts`, pulled
+from the infobox before the chrome is stripped, preferring a `.jpg` photograph over the logos and
+coats of arms an infobox also carries) and then the Key facts block, which is the infobox flattened
+to `Label: value` lines. Key facts is a `<details>` folded shut by default, so the lead paragraph
+is the first prose in each column.
 
 ## Layout
 
