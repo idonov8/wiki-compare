@@ -58,6 +58,9 @@ export default function Highlighted({
         key={`${range.claim.id}-${i}`}
         className="claim"
         tabIndex={0}
+        role="button"
+        aria-describedby={activeId === range.claim.id ? "claim-card" : undefined}
+        aria-label={`${range.claim.type}: ${range.claim.summary}`}
         data-type={range.claim.type}
         data-active={activeId === range.claim.id}
         onMouseEnter={(e) => onEnter(range.claim, e)}

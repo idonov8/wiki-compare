@@ -1,8 +1,16 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Highlighted from "./Highlighted";
-import { LANGS, LANG_META, type Claim, type ComparePayload, type Lang } from "@/lib/types";
+import {
+  KEY_FACTS_HEADING,
+  LANGS,
+  LANG_META,
+  LEAD_HEADING,
+  type Claim,
+  type ComparePayload,
+  type Lang,
+} from "@/lib/types";
 
 const KIND_LABEL: Record<Claim["type"], string> = {
   contradiction: "Contradiction",
@@ -12,9 +20,17 @@ const KIND_LABEL: Record<Claim["type"], string> = {
 
 interface CardState {
   claim: Claim;
-  x: number;
-  y: number;
+  left: number;
+  /** Exactly one of these is set: `bottom` anchors the card above the mark. */
+  top?: number;
+  bottom?: number;
 }
+
+/** Keep in sync with `.card { max-width }` in globals.css. */
+const CARD_WIDTH = 340;
+const CARD_MARGIN = 8;
+/** Enough room to place the card below a mark without it running off-screen. */
+const CARD_CLEARANCE = 190;
 
 export default function Compare() {
   const [query, setQuery] = useState("Palestinian Legislative Council");
@@ -47,6 +63,17 @@ export default function Compare() {
   const available = useMemo(() => LANGS.filter((l) => data?.articles?.[l]), [data]);
   const visible = shown.filter((l) => available.includes(l));
 
+  // A tooltip reached by keyboard needs a way out that isn't Tab. Blur alone
+  // leaves someone who opened the card with focus no way to dismiss it in place.
+  useEffect(() => {
+    if (!card) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCard(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [card]);
+
   const toggle = (lang: Lang) =>
     setShown((current) =>
       current.includes(lang)
@@ -58,11 +85,24 @@ export default function Compare() {
 
   const onEnter = (claim: Claim, event: React.MouseEvent | React.FocusEvent) => {
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    setCard({
-      claim,
-      x: Math.min(rect.left, window.innerWidth - 360),
-      y: rect.bottom + 8 > window.innerHeight - 180 ? rect.top - 8 : rect.bottom + 8,
-    });
+
+    // Clamp both edges. Clamping only the right edge pushed the card off-screen
+    // for a mark near the left of the viewport, which the rightmost column makes
+    // likelier once it is the only one shown.
+    const left = Math.max(
+      CARD_MARGIN,
+      Math.min(rect.left, window.innerWidth - CARD_WIDTH - CARD_MARGIN),
+    );
+
+    // Anchoring by `bottom` when flipping is what makes the flip real: setting
+    // `top` to just above the mark still lays the card out downwards, so it
+    // covered the very text it was explaining. This needs no height measurement.
+    const flip = rect.bottom + CARD_CLEARANCE > window.innerHeight;
+    setCard(
+      flip
+        ? { claim, left, bottom: window.innerHeight - rect.top + CARD_MARGIN }
+        : { claim, left, top: rect.bottom + CARD_MARGIN },
+    );
   };
 
   return (
@@ -156,9 +196,13 @@ export default function Compare() {
                     </a>
                   </div>
                   {article.sections.map((section, i) => (
-                    <div key={i}>
-                      {section.heading !== "(lead)" && (
-                        <h3 className="section-heading">{section.heading}</h3>
+                    <div key={i} className={section.heading === KEY_FACTS_HEADING ? "key-facts" : undefined}>
+                      {section.heading === KEY_FACTS_HEADING ? (
+                        <h3 className="section-heading synthetic">Key facts</h3>
+                      ) : (
+                        section.heading !== LEAD_HEADING && (
+                          <h3 className="section-heading">{section.heading}</h3>
+                        )
                       )}
                       <Highlighted
                         text={section.text}
@@ -195,7 +239,12 @@ export default function Compare() {
       )}
 
       {card && (
-        <div className="card" style={{ left: card.x, top: card.y }} role="tooltip">
+        <div
+          className="card"
+          id="claim-card"
+          style={{ left: card.left, top: card.top, bottom: card.bottom }}
+          role="tooltip"
+        >
           <span className="kind" data-type={card.claim.type}>
             {KIND_LABEL[card.claim.type]}
           </span>
