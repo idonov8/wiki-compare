@@ -9,6 +9,10 @@ import { LANGS, LANG_META, type Lang } from "@/lib/types";
  * concepts and only then reads all three with the model. That last step alone
  * runs tens of seconds, so this draws the thing being assembled — a globe of
  * scripts, with each language feeding into it.
+ *
+ * It sits at the bottom centre of the viewport, over the articles rather than
+ * instead of them: the columns are already on screen and readable while this
+ * runs, so the panel stays small, out of the text's way, and click-through.
  */
 
 /** Chip placement and the strand running from it into the globe, hand-placed
@@ -76,7 +80,7 @@ export default function Loading({ title }: { title: string }) {
   const stage = STAGES.filter(([at]) => elapsed >= at).length - 1;
 
   return (
-    <div className="loading">
+    <div className="loading" aria-live="off">
       <svg className="globe" viewBox="0 0 320 300" aria-hidden="true">
         {/* strands: each language flowing into the sphere */}
         {LANGS.map((lang, i) => (
@@ -171,7 +175,8 @@ export default function Loading({ title }: { title: string }) {
         </p>
         {elapsed > PATIENCE_MS && (
           <p className="waited">
-            No cached comparison for these revisions, so all three are being read from scratch.
+            No cached comparison for these revisions, so all three are being read from scratch. The
+            articles below are the real text — scroll and read while this finishes.
           </p>
         )}
       </div>
