@@ -6,7 +6,7 @@
  * movement itself is left to CSS: each mark fades in and out on its own
  * staggered cycle, so no timer re-renders a wall of text every second.
  */
-export function ghostRanges(text: string, limit = 7): { start: number; end: number; seed: number }[] {
+export function ghostRanges(text: string, limit = 4): { start: number; end: number; seed: number }[] {
   const words = [...text.matchAll(/\S+/g)];
   const out: { start: number; end: number; seed: number }[] = [];
   let seed = text.length * 7919 + words.length;
@@ -17,7 +17,9 @@ export function ghostRanges(text: string, limit = 7): { start: number; end: numb
     const first = words[i];
     const last = words[Math.min(i + span - 1, words.length - 1)];
     out.push({ start: first.index, end: last.index + last[0].length, seed });
-    i += span + 5 + (seed % 11);
+    // Wide gaps on purpose: a handful of marks per section reads as attention
+    // moving over the page, where one every other line reads as noise.
+    i += span + 14 + (seed % 23);
   }
   return out;
 }

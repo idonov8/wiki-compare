@@ -332,7 +332,7 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
 
 @keyframes ghost-drift {
   0%, 100% { background-color: transparent; }
-  45%, 62% { background-color: var(--ghost); }
+  45%, 58% { background-color: var(--ghost); }
 }
 
 /* ---- picking the article ---- */
@@ -551,8 +551,8 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
 }
 
 .globe {
-  width: 190px;
-  max-width: 46vw;
+  width: 152px;
+  max-width: 40vw;
   height: auto;
   overflow: visible;
 }
