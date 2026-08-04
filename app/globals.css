@@ -317,6 +317,181 @@ mark.claim[data-active="true"][data-type="framing"] { background: color-mix(in s
 
 .error { border-inline-start: 3px solid var(--contradiction); padding-inline-start: 16px; }
 
+/* ---- loading ----
+   A globe of scripts assembling itself while the articles are fetched and read.
+   Everything here is CSS animation rather than SMIL so that the reduced-motion
+   rule at the bottom of this file switches all of it off in one place. */
+
+.loading {
+  padding: 40px 24px 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.globe {
+  width: 100%;
+  max-width: 360px;
+  height: auto;
+  overflow: visible;
+}
+
+.globe .ring {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.6;
+}
+
+.globe .parallel,
+.globe .meridian {
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 0.9;
+  opacity: 0.5;
+}
+
+/* The sphere turns by squashing each meridian through zero width — cheaper than
+   projecting a real rotation, and at this size indistinguishable from one. */
+.globe .meridian {
+  animation: meridian-turn 12s linear infinite;
+}
+
+@keyframes meridian-turn {
+  0%   { rx: 62px; }
+  25%  { rx: 0px; }
+  50%  { rx: 62px; }
+  75%  { rx: 0px; }
+  100% { rx: 62px; }
+}
+
+/* Each script drifts across the face of the sphere and off the far edge.
+   fill-box is load-bearing: an SVG element's transform-origin is the viewport
+   origin by default, so the scale in the sweep pulled every glyph up and to the
+   left towards (0,0) and dropped three scripts on top of each other. */
+.globe .glyph {
+  fill: var(--ink);
+  font-family: var(--body);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: glyph-sweep 9s linear infinite;
+}
+
+@keyframes glyph-sweep {
+  0%   { opacity: 0; transform: translateX(-30px) scale(0.8); }
+  22%  { opacity: 0.9; transform: translateX(-14px) scale(1); }
+  78%  { opacity: 0.9; transform: translateX(14px) scale(1); }
+  100% { opacity: 0; transform: translateX(30px) scale(0.8); }
+}
+
+/* The sphere is drawn with a gap at the upper right; this is the piece that
+   belongs in it, settling home and lifting off again. */
+.globe .tile {
+  fill: color-mix(in srgb, var(--framing) 18%, transparent);
+  stroke: var(--ink);
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  animation: tile-settle 4.5s ease-in-out infinite;
+}
+
+@keyframes tile-settle {
+  0%, 10%   { opacity: 0; transform: translate(10px, -14px); }
+  40%, 86%  { opacity: 1; transform: translate(0, 0); }
+  100%      { opacity: 0; transform: translate(10px, -14px); }
+}
+
+.globe .strand {
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 1.4;
+  stroke-dasharray: 2 7;
+  animation: strand-flow 1.8s linear infinite;
+}
+
+@keyframes strand-flow {
+  from { stroke-dashoffset: 27; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* Where a strand meets the sphere, on the beat the strand arrives. */
+.globe .landing {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.2;
+  animation: landing-open 1.8s ease-out infinite;
+}
+
+@keyframes landing-open {
+  0%   { r: 1px; opacity: 0; }
+  25%  { opacity: 0.85; }
+  100% { r: 11px; opacity: 0; }
+}
+
+.globe .chip rect {
+  fill: var(--paper-raised);
+  stroke: var(--ink);
+  stroke-width: 1.2;
+}
+
+.globe .chip text {
+  fill: var(--ink);
+  font-family: var(--body);
+}
+
+.globe .chip {
+  animation: chip-breathe 1.8s ease-in-out infinite;
+}
+
+/* A gentle pulse, floored well above "greyed out" — a dim chip here should read
+   as a language waiting its turn, never as one that has been switched off. */
+@keyframes chip-breathe {
+  0%, 100% { opacity: 0.62; }
+  40%      { opacity: 1; }
+}
+
+.loading-text {
+  text-align: center;
+  max-width: 48ch;
+}
+
+.loading-text h2 {
+  font-family: var(--display);
+  font-size: 25px;
+  font-weight: 400;
+  margin: 0 0 6px;
+}
+
+.loading-text .stage {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin: 0;
+}
+
+.loading-text .waited {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+  opacity: 0.7;
+  margin: 10px 0 0;
+}
+
+.ellipsis i {
+  display: inline-block;
+  width: 4px;
+  animation: ellipsis-fade 1.5s steps(1, end) infinite;
+  font-style: normal;
+}
+
+.ellipsis i::before { content: "."; }
+.ellipsis i:nth-child(2) { animation-delay: 0.5s; }
+.ellipsis i:nth-child(3) { animation-delay: 1s; }
+
+@keyframes ellipsis-fade {
+  0%, 33%  { opacity: 0; }
+  34%, 100% { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
