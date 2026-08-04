@@ -1,5 +1,5 @@
 import { type HTMLElement, type Node, parse } from "node-html-parser";
-import type { ArticleSnapshot, Lang, Section } from "./types";
+import type { ArticleImage, ArticleSnapshot, Lang, Section } from "./types";
 import { KEY_FACTS_HEADING, LANGS, LEAD_HEADING } from "./types";
 
 /**
@@ -11,7 +11,7 @@ import { KEY_FACTS_HEADING, LANGS, LEAD_HEADING } from "./types";
  * the stale snapshot keeps being served, and the fix appears not to work. Also
  * folded into the comparison key, since a comparison is downstream of a parse.
  */
-export const PARSER_VERSION = "v2";
+export const PARSER_VERSION = "v3";
 
 const UA = "wiki-compare/0.1 (https://github.com/)";
 const MAX_SECTION_CHARS = 4000;
@@ -211,6 +211,70 @@ function extractKeyFacts(root: HTMLElement): string {
   // De-duplicate: infobox headers frequently repeat the row label beneath them.
   return [...new Set(lines)].join("\n");
 }
+
+/** Resolve the protocol-relative `//upload.wikimedia.org/…` srcs Wikipedia
+ *  emits, and the occasional site-relative one, to an absolute https URL. */
+function resolveSrc(src: string, lang: Lang): string | null {
+  if (!src) return null;
+  if (src.startsWith("//")) return `https:${src}`;
+  if (src.startsWith("http")) return src;
+  if (src.startsWith("/")) return `https://${lang}.wikipedia.org${src}`;
+  return null;
+}
+
+/** The highest-density URL a thumbnail offers, so it stays crisp when shown
+ *  larger than its 1x size. Falls back to `src`. */
+function bestSrc(img: HTMLElement): string {
+  const srcset = img.getAttribute("srcset");
+  if (srcset) {
+    const best = srcset
+      .split(",")
+      .map((entry) => {
+        const [url, density] = entry.trim().split(/\s+/);
+        return { url, density: parseFloat(density) || 1 };
+      })
+      .sort((a, b) => b.density - a.density)[0];
+    if (best?.url) return best.url;
+  }
+  return img.getAttribute("src") ?? "";
+}
+
+/**
+ * The article's lead photo, taken from the infobox (then any inline figure as a
+ * fallback). Read from the parsed tree before `stripChrome` discards figures.
+ *
+ * Icons — flags, pog markers, maintenance-template glyphs — are filtered by
+ * rendered width, and photographs (`.jpg`) are preferred over the logos and
+ * coats of arms an infobox also carries, so the picture shown is the one a
+ * reader would call the article's photo.
+ */
+export function extractLeadImage(html: string, lang: Lang): ArticleImage | undefined {
+  const root = parse(html);
+  const candidates = [
+    ...root.querySelectorAll("table.infobox img"),
+    ...root.querySelectorAll(".infobox-image img"),
+    ...root.querySelectorAll("figure img"),
+    ...root.querySelectorAll(".thumb img"),
+  ]
+    .map((img) => ({ img, width: Number(img.getAttribute("width")) || 0 }))
+    .filter(({ width }) => width >= 100);
+
+  candidates.sort((a, b) => rankPhoto(a.img) - rankPhoto(b.img));
+
+  for (const { img, width } of candidates) {
+    const src = resolveSrc(bestSrc(img), lang);
+    if (!src) continue;
+    return {
+      src,
+      alt: img.getAttribute("alt") || undefined,
+      width: width || undefined,
+      height: Number(img.getAttribute("height")) || undefined,
+    };
+  }
+  return undefined;
+}
+
+const rankPhoto = (img: HTMLElement) => (/\.jpe?g/i.test(img.getAttribute("src") ?? "") ? 0 : 1);
 
 /** Headings whose sections are navigation apparatus rather than article content.
  *  Filtering only the English names left the Hebrew and Arabic columns carrying
@@ -464,6 +528,7 @@ export function snapshotOf(lang: Lang, page: ParsedPage, linkQids: string[]): Ar
     revid: page.revid,
     url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, "_"))}`,
     sections: splitSections(page.text),
+    image: extractLeadImage(page.text, lang),
     linkQids,
   };
 }

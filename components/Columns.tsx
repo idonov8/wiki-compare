@@ -45,6 +45,19 @@ export default function Columns({
         const article = articles[lang];
         if (!article) return null;
         const meta = LANG_META[lang];
+        const keyFacts = article.sections.find((s) => s.heading === KEY_FACTS_HEADING);
+        const body = article.sections.filter((s) => s.heading !== KEY_FACTS_HEADING);
+        const highlight = (text: string) => (
+          <Highlighted
+            text={text}
+            lang={lang}
+            claims={claims}
+            ghost={ghost}
+            activeId={activeId}
+            onEnter={onEnter}
+            onLeave={onLeave}
+          />
+        );
         return (
           <section key={lang} className="column" dir={meta.dir} lang={lang}>
             <div className="column-head">
@@ -56,28 +69,28 @@ export default function Columns({
                 rev {article.revid}
               </a>
             </div>
-            <h2 className="article-title">{article.title}</h2>
-            {article.sections.map((section, i) => (
-              <div
-                key={i}
-                className={section.heading === KEY_FACTS_HEADING ? "key-facts" : undefined}
-              >
-                {section.heading === KEY_FACTS_HEADING ? (
-                  <h3 className="section-heading synthetic">Key facts</h3>
-                ) : (
-                  section.heading !== LEAD_HEADING && (
-                    <h3 className="section-heading">{section.heading}</h3>
-                  )
+            <h1 className="article-title">{article.title}</h1>
+            {article.image && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                className="article-image"
+                src={article.image.src}
+                alt={article.image.alt ?? article.title}
+                loading="lazy"
+              />
+            )}
+            {keyFacts && (
+              <details className="key-facts">
+                <summary>Key facts</summary>
+                {highlight(keyFacts.text)}
+              </details>
+            )}
+            {body.map((section, i) => (
+              <div key={`${section.heading}-${i}`}>
+                {section.heading !== LEAD_HEADING && (
+                  <h3 className="section-heading">{section.heading}</h3>
                 )}
-                <Highlighted
-                  text={section.text}
-                  lang={lang}
-                  claims={claims}
-                  ghost={ghost}
-                  activeId={activeId}
-                  onEnter={onEnter}
-                  onLeave={onLeave}
-                />
+                {highlight(section.text)}
               </div>
             ))}
           </section>
