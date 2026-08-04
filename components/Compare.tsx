@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Highlighted from "./Highlighted";
+import DiffNav from "./DiffNav";
 import Loading from "./Loading";
 import {
   KEY_FACTS_HEADING,
@@ -173,7 +174,7 @@ export default function Compare() {
           <p>
             Enter an article title. The English, Hebrew and Arabic versions load side by side, and
             every place they contradict each other, cover something the others skip, or frame the
-            same fact differently is underlined. Hover an underline to see what the difference is.
+            same fact differently is highlighted. Hover a highlight to see what the difference is.
           </p>
           <p>
             Try <code>Palestinian Legislative Council</code>, <code>Six-Day War</code> or{" "}
@@ -202,6 +203,7 @@ export default function Compare() {
                       rev {article.revid}
                     </a>
                   </div>
+                  <h1 className="article-title">{article.title}</h1>
                   {article.sections.map((section, i) => (
                     <div key={i} className={section.heading === KEY_FACTS_HEADING ? "key-facts" : undefined}>
                       {section.heading === KEY_FACTS_HEADING ? (
@@ -225,6 +227,8 @@ export default function Compare() {
               );
             })}
           </div>
+
+          {data.claims.length > 0 && <DiffNav signature={`${data.qid}:${visible.join("")}`} />}
 
           {data.coverage.length > 0 && (
             <div className="coverage">

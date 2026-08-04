@@ -107,11 +107,20 @@ dropped rather than displayed in the wrong place.
 
 ## Design notes
 
-Highlights are underlines, not filled backgrounds: a background block across mixed LTR/RTL runs
-breaks up badly at direction boundaries. Each column carries its own `dir`, so Hebrew and Arabic
-run right-to-left independently of the page, and the arrow in each column header shows which way
-that column reads. One serif texture — Noto Serif, Noto Serif Hebrew, Noto Naskh Arabic — across
-all three scripts, so the columns read as siblings rather than three unrelated documents.
+Highlights are filled bands in the difference's colour, with a darker rule under each so the type
+reads without relying on the fill alone. A background block across mixed LTR/RTL runs is what
+breaks up badly at direction boundaries — so the mark carries no inline padding and uses
+`box-decoration-break: clone`, which keeps the fill continuous across the fragments a span splits
+into where direction flips (`npm run check:ui` asserts there is no gap). Each column carries its
+own `dir`, so Hebrew and Arabic run right-to-left independently of the page, and the arrow in each
+column header shows which way that column reads. Each column is set on a white page in Wikipedia's
+own idiom — a sans body, a serif heading with a rule under it, blue links, the article's title on
+top — with one matching family per script (Noto Sans / Noto Serif and their Hebrew and Arabic
+cuts) so the columns read as siblings rather than three unrelated documents.
+
+A fixed rail down the right edge (`components/DiffNav.tsx`) plots every mark against the length of
+the page and tracks the slice currently on screen, so the differences are visible at a glance while
+scrolling; the arrow control steps through them in reading order.
 
 ## Layout
 
@@ -124,6 +133,7 @@ lib/db.ts                  Neon cache layer
 db/schema.sql              three tables: articles, comparisons, labels
 components/Compare.tsx     columns, toggles, hover card
 components/Highlighted.tsx span location and marking
+components/DiffNav.tsx      right-edge rail + jump-to-difference controls
 fixtures/                  recorded API responses + loader
 scripts/                   fixture recorder and the check suites
 ```
