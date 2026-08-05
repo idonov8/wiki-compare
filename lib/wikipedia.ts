@@ -1,5 +1,5 @@
 import { type HTMLElement, type Node, parse } from "node-html-parser";
-import type { ArticleImage, ArticleSnapshot, Lang, Section } from "./types";
+import type { ArticleImage, ArticleSnapshot, Lang, LinkSpan, Section } from "./types";
 import { KEY_FACTS_HEADING, LANGS, LEAD_HEADING } from "./types";
 
 /**
@@ -11,7 +11,7 @@ import { KEY_FACTS_HEADING, LANGS, LEAD_HEADING } from "./types";
  * the stale snapshot keeps being served, and the fix appears not to work. Also
  * folded into the comparison key, since a comparison is downstream of a parse.
  */
-export const PARSER_VERSION = "v3";
+export const PARSER_VERSION = "v4";
 
 const UA = "wiki-compare/0.1 (https://github.com/)";
 const MAX_SECTION_CHARS = 4000;
@@ -275,6 +275,53 @@ export function toText(html: string): string {
     .trim();
 }
 
+/** The article title an anchor points at, or null if it isn't a plain
+ *  article-namespace link (red links, `File:`/`Category:`/… and external links
+ *  are dropped). Shared shape with `linkTitlesOf`. */
+function articleTitleFromHref(href: string, cls: string): string | null {
+  if (cls.split(/\s+/).includes("new")) return null;
+  const match = /^(?:\.\/|\/wiki\/)([^#?]+)/.exec(href);
+  if (!match) return null;
+  let title: string;
+  try {
+    title = decodeURIComponent(match[1]).replace(/_/g, " ");
+  } catch {
+    return null;
+  }
+  return !title || title.includes(":") ? null : title;
+}
+
+/**
+ * Locate each Wikipedia-internal link as a character range into `text` (the
+ * plain text `toText` produced for the same html), so the client can turn them
+ * into links to our own comparison of that article without re-parsing.
+ *
+ * ponytail: a forward-moving cursor binds each anchor to the first occurrence
+ * of its label at or after the previous one — document order, so it is right in
+ * practice. Ceiling: a link whose visible text repeats an earlier identical
+ * phrase on the way could bind to the wrong occurrence; upgrade by tracking
+ * offsets through `toText`'s normalisation instead of re-finding the label.
+ */
+function extractLinks(html: string, text: string): LinkSpan[] {
+  const root = parse(html);
+  const spans: LinkSpan[] = [];
+  let cursor = 0;
+  for (const anchor of root.querySelectorAll("a")) {
+    const title = articleTitleFromHref(
+      anchor.getAttribute("href") ?? "",
+      anchor.getAttribute("class") ?? "",
+    );
+    if (!title) continue;
+    const label = toText(anchor.innerHTML).replace(/\s+/g, " ").trim();
+    if (!label) continue;
+    const start = text.indexOf(label, cursor);
+    if (start === -1) continue; // dropped by MAX_SECTION_CHARS or reworded by normalisation
+    spans.push({ start, end: start + label.length, title });
+    cursor = start + label.length;
+  }
+  return spans;
+}
+
 export function splitSections(html: string): Section[] {
   const root = parse(html);
 
@@ -291,8 +338,11 @@ export function splitSections(html: string): Section[] {
   let buffer: string[] = [];
 
   const flush = () => {
-    const text = toText(buffer.join("")).slice(0, MAX_SECTION_CHARS);
-    if (text.length > 40 && !isBoilerplate(heading)) sections.push({ heading, level, text });
+    const html = buffer.join("");
+    const text = toText(html).slice(0, MAX_SECTION_CHARS);
+    if (text.length > 40 && !isBoilerplate(heading)) {
+      sections.push({ heading, level, text, links: extractLinks(html, text) });
+    }
     buffer = [];
   };
 
