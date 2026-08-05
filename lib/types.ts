@@ -25,10 +25,19 @@ export interface Claim {
   spans: Partial<Record<Lang, string>>;
 }
 
+/** A Wikipedia-internal link, as a character range into a section's `text`.
+ *  `title` is the linked article's title in that section's own language. */
+export interface LinkSpan {
+  start: number;
+  end: number;
+  title: string;
+}
+
 export interface Section {
   heading: string;
   level: number;
   text: string;
+  links?: LinkSpan[];
 }
 
 export interface ArticleImage {
