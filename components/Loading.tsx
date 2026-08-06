@@ -175,8 +175,8 @@ export default function Loading({ title }: { title: string }) {
         </p>
         {elapsed > PATIENCE_MS && (
           <p className="waited">
-            No cached comparison for these revisions, so all three are being read from scratch. The
-            articles below are the real text — scroll and read while this finishes.
+            All three articles are being processed.
+            Can you find the differences first?
           </p>
         )}
       </div>
