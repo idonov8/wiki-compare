@@ -13,7 +13,21 @@ import { KEY_FACTS_HEADING, LANGS, LEAD_HEADING } from "./types";
  */
 export const PARSER_VERSION = "v4";
 
-const UA = "wiki-compare/0.1 (https://github.com/)";
+/**
+ * Wikimedia's rate limits are tiered by how well a client identifies itself: a
+ * request carrying nothing but an IP gets 10/min, one with a policy-compliant
+ * User-Agent gets 200/min. A cold comparison costs upwards of fifty requests, so
+ * the low tier fails outright — and because that tier is keyed on IP, it is
+ * shared with every other unidentified client on the same egress, which is why
+ * the resulting 429s look intermittent rather than constant.
+ *
+ * So the contact information below is load-bearing, not decoration. The format
+ * is fixed by policy: <client>/<version> (<contact url or email>), and the
+ * contact has to be something that actually reaches a maintainer.
+ * https://foundation.wikimedia.org/wiki/Policy:User-Agent_policy
+ */
+const CONTACT = process.env.WIKI_CONTACT || "https://wiki-compare.vercel.app; contact@wikicompare.app";
+const UA = `wiki-compare/0.1 (${CONTACT})`;
 const MAX_SECTION_CHARS = 4000;
 const MAX_LINKS = 400;
 
@@ -25,13 +39,75 @@ async function api<T>(endpoint: string, params: Record<string, string>): Promise
   return (await res.json()) as T;
 }
 
-const wiki = (lang: Lang) => `https://${lang}.wikipedia.org/w/api.php`;
+const wiki = (lang: string) => `https://${lang}.wikipedia.org/w/api.php`;
 const WIKIDATA = "https://www.wikidata.org/w/api.php";
+
+/** The language whose Wikipedia a query is most likely written for. Script is
+ *  the only signal available before anything is fetched, and for these three
+ *  editions it is enough: Hebrew and Arabic have their own blocks. */
+export function guessLang(query: string): Lang {
+  if (/[\u0590-\u05ff]/.test(query)) return "he";
+  if (/[\u0600-\u06ff]/.test(query)) return "ar";
+  return "en";
+}
+
+/** A pasted article URL, as language + title. Any Wikipedia edition is accepted,
+ *  not just the three compared: the QID lookup only needs one wiki that has the
+ *  page, and someone reading the French article should be able to paste it. */
+export function parseWikipediaUrl(input: string): { lang: string; title: string } | null {
+  let url: URL;
+  try {
+    url = new URL(input.trim());
+  } catch {
+    return null;
+  }
+  const host = /^([a-z-]+)\.(?:m\.)?wikipedia\.org$/.exec(url.hostname);
+  if (!host) return null;
+  const path = /^\/wiki\/(.+)$/.exec(url.pathname);
+  const raw = path?.[1] ?? url.searchParams.get("title");
+  if (!raw) return null;
+  try {
+    return { lang: host[1], title: decodeURIComponent(raw).replace(/_/g, " ") };
+  } catch {
+    return null;
+  }
+}
+
+export interface SearchHit {
+  lang: string;
+  title: string;
+  description?: string;
+  url: string;
+}
+
+/** Title search against one edition, with each hit's short description — the
+ *  line that tells apart the film, the album and the city of the same name. */
+export async function searchArticles(lang: string, query: string, limit = 8): Promise<SearchHit[]> {
+  const res = await api<{
+    query?: { pages?: { index?: number; title: string; description?: string }[] };
+  }>(wiki(lang), {
+    action: "query",
+    generator: "search",
+    gsrsearch: query,
+    gsrlimit: String(limit),
+    gsrnamespace: "0",
+    prop: "description",
+  });
+
+  return (res.query?.pages ?? [])
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+    .map((page) => ({
+      lang,
+      title: page.title,
+      description: page.description,
+      url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, "_"))}`,
+    }));
+}
 
 /** Find the Wikidata item for a title, then the equivalent title in each language. */
 export async function resolveSitelinks(
   title: string,
-  lang: Lang,
+  lang: string,
 ): Promise<{ qid: string; titles: Partial<Record<Lang, string>> }> {
   const page = await api<{ query?: { pages?: { pageprops?: { wikibase_item?: string }; missing?: boolean }[] } }>(
     wiki(lang),

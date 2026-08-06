@@ -165,7 +165,8 @@ check(!!(await page.$(".cached-badge")), "a cached comparison served past an edi
 
 await page.goto(BASE, { waitUntil: "domcontentloaded" });
 await page.fill('input[aria-label="Article title"]', `demo:${FIXTURE}`);
-await page.click("button:has-text('Compare')");
+// `demo:` skips the search-and-confirm flow and compares the fixture directly.
+await page.click("button:has-text('Search')");
 await page.waitForSelector("mark.claim", { timeout: 30000 });
 
 // ---- highlights -------------------------------------------------------------
