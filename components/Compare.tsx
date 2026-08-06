@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Highlighted from "./Highlighted";
+import Highlighted, { comparePath } from "./Highlighted";
+import DiffNav from "./DiffNav";
 import Loading from "./Loading";
 import {
   KEY_FACTS_HEADING,
@@ -11,7 +12,11 @@ import {
   type Claim,
   type ComparePayload,
   type Lang,
+  type LinkSpan,
 } from "@/lib/types";
+
+const asLang = (value: string | null): Lang =>
+  value && (LANGS as readonly string[]).includes(value) ? (value as Lang) : "en";
 
 const KIND_LABEL: Record<Claim["type"], string> = {
   contradiction: "Contradiction",
@@ -44,15 +49,17 @@ export default function Compare() {
   const [shown, setShown] = useState<Lang[]>([...LANGS]);
   const [card, setCard] = useState<CardState | null>(null);
 
-  const load = useCallback(async () => {
-    const title = query.trim();
+  const load = useCallback(async (raw: string, sourceLang: Lang = "en") => {
+    const title = raw.trim();
     if (!title) return;
     setPending(title);
     setLoading(true);
     setError(null);
     setCard(null);
     try {
-      const res = await fetch(`/api/compare?title=${encodeURIComponent(title)}`);
+      const res = await fetch(
+        `/api/compare?title=${encodeURIComponent(title)}&lang=${sourceLang}`,
+      );
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Comparison failed.");
       setData(json as ComparePayload);
@@ -63,7 +70,38 @@ export default function Compare() {
     } finally {
       setLoading(false);
     }
-  }, [query]);
+  }, []);
+
+  // The open article lives in the URL, so a comparison is linkable and the back
+  // button works. Clicking a wiki link or submitting the box pushes a new entry.
+  const navigate = useCallback(
+    (raw: string, sourceLang: Lang = "en") => {
+      const title = raw.trim();
+      if (!title) return;
+      setQuery(title);
+      window.history.pushState(null, "", comparePath(title, sourceLang));
+      window.scrollTo({ top: 0 });
+      load(title, sourceLang);
+    },
+    [load],
+  );
+
+  useEffect(() => {
+    const apply = () => {
+      const params = new URLSearchParams(window.location.search);
+      const title = params.get("title");
+      if (title) {
+        setQuery(title);
+        load(title, asLang(params.get("lang")));
+      } else {
+        setData(null);
+        setError(null);
+      }
+    };
+    apply();
+    window.addEventListener("popstate", apply);
+    return () => window.removeEventListener("popstate", apply);
+  }, [load]);
 
   const available = useMemo(() => LANGS.filter((l) => data?.articles?.[l]), [data]);
   const visible = shown.filter((l) => available.includes(l));
@@ -120,11 +158,11 @@ export default function Compare() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && load()}
+            onKeyDown={(e) => e.key === "Enter" && navigate(query)}
             placeholder="Article title in English, Hebrew or Arabic"
             aria-label="Article title"
           />
-          <button onClick={load} disabled={loading}>
+          <button onClick={() => navigate(query)} disabled={loading}>
             {loading ? "Comparing…" : "Compare"}
           </button>
         </div>
@@ -173,7 +211,7 @@ export default function Compare() {
           <p>
             Enter an article title. The English, Hebrew and Arabic versions load side by side, and
             every place they contradict each other, cover something the others skip, or frame the
-            same fact differently is underlined. Hover an underline to see what the difference is.
+            same fact differently is highlighted. Hover a highlight to see what the difference is.
           </p>
           <p>
             Try <code>Palestinian Legislative Council</code>, <code>Six-Day War</code> or{" "}
@@ -191,6 +229,20 @@ export default function Compare() {
             {visible.map((lang) => {
               const article = data.articles[lang];
               const meta = LANG_META[lang];
+              const keyFacts = article.sections.find((s) => s.heading === KEY_FACTS_HEADING);
+              const body = article.sections.filter((s) => s.heading !== KEY_FACTS_HEADING);
+              const highlight = (text: string, links?: LinkSpan[]) => (
+                <Highlighted
+                  text={text}
+                  lang={lang}
+                  claims={data.claims}
+                  links={links}
+                  activeId={card?.claim.id ?? null}
+                  onEnter={onEnter}
+                  onLeave={() => setCard(null)}
+                  onLink={navigate}
+                />
+              );
               return (
                 <section key={lang} className="column" dir={meta.dir} lang={lang}>
                   <div className="column-head">
@@ -202,29 +254,66 @@ export default function Compare() {
                       rev {article.revid}
                     </a>
                   </div>
-                  {article.sections.map((section, i) => (
-                    <div key={i} className={section.heading === KEY_FACTS_HEADING ? "key-facts" : undefined}>
-                      {section.heading === KEY_FACTS_HEADING ? (
-                        <h3 className="section-heading synthetic">Key facts</h3>
-                      ) : (
-                        section.heading !== LEAD_HEADING && (
-                          <h3 className="section-heading">{section.heading}</h3>
-                        )
+                  <h1 className="article-title">{article.title}</h1>
+                  {article.image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      className="article-image"
+                      src={article.image.src}
+                      alt={article.image.alt ?? article.title}
+                      loading="lazy"
+                    />
+                  )}
+                  {keyFacts && (
+                    <details className="key-facts">
+                      <summary>Key facts</summary>
+                      <dl className="kf-body">
+                        {keyFacts.text.split("\n").map((line, i) => {
+                          // A claim can span the label and value of one row, so a
+                          // row carrying one stays a single highlightable unit
+                          // rather than being split into bold label + value.
+                          const hasClaim = data.claims.some(
+                            (c) => c.spans[lang] && line.includes(c.spans[lang]!),
+                          );
+                          if (hasClaim) {
+                            return (
+                              <div key={i} className="kf-row kf-row-full">
+                                {highlight(line)}
+                              </div>
+                            );
+                          }
+                          const sep = line.indexOf(": ");
+                          if (sep === -1) {
+                            return (
+                              <div key={i} className="kf-group">
+                                {line}
+                              </div>
+                            );
+                          }
+                          return (
+                            <div key={i} className="kf-row">
+                              <dt className="kf-label">{line.slice(0, sep)}</dt>
+                              <dd className="kf-value">{line.slice(sep + 2)}</dd>
+                            </div>
+                          );
+                        })}
+                      </dl>
+                    </details>
+                  )}
+                  {body.map((section, i) => (
+                    <div key={`${section.heading}-${i}`}>
+                      {section.heading !== LEAD_HEADING && (
+                        <h3 className="section-heading">{section.heading}</h3>
                       )}
-                      <Highlighted
-                        text={section.text}
-                        lang={lang}
-                        claims={data.claims}
-                        activeId={card?.claim.id ?? null}
-                        onEnter={onEnter}
-                        onLeave={() => setCard(null)}
-                      />
+                      {highlight(section.text, section.links)}
                     </div>
                   ))}
                 </section>
               );
             })}
           </div>
+
+          {data.claims.length > 0 && <DiffNav signature={`${data.qid}:${visible.join("")}`} />}
 
           {data.coverage.length > 0 && (
             <div className="coverage">

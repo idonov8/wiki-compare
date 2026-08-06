@@ -14,6 +14,16 @@
   --display: "Instrument Serif", Georgia, serif;
   --body: "Noto Serif", "Noto Serif Hebrew", "Noto Naskh Arabic", Georgia, serif;
   --mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* Wikipedia reading surface: a sans body, a serif headline with a rule under
+     it, blue links and an off-white page, so each column reads like the article
+     it was lifted from. */
+  --wiki-body: "Noto Sans", "Noto Sans Hebrew", "Noto Sans Arabic", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --wiki-heading: "Linux Libertine", Georgia, "Times New Roman", serif;
+  --wiki-text: #202122;
+  --wiki-link: #3366cc;
+  --wiki-border: #a2a9b1;
+  --wiki-page: #ffffff;
 }
 
 * { box-sizing: border-box; }
@@ -120,10 +130,10 @@ button {
 .legend { display: flex; gap: 16px; color: var(--ink-soft); flex-wrap: wrap; }
 .legend span { display: flex; align-items: center; gap: 6px; }
 
-.swatch { width: 18px; height: 3px; display: inline-block; }
-.swatch.contradiction { background: var(--contradiction); }
-.swatch.unique { background: var(--unique); }
-.swatch.framing { background: var(--framing); }
+.swatch { width: 15px; height: 15px; border-radius: 2px; display: inline-block; }
+.swatch.contradiction { background: color-mix(in srgb, var(--contradiction) 26%, white); box-shadow: inset 0 -2px 0 var(--contradiction); }
+.swatch.unique { background: color-mix(in srgb, var(--unique) 26%, white); box-shadow: inset 0 -2px 0 var(--unique); }
+.swatch.framing { background: color-mix(in srgb, var(--framing) 26%, white); box-shadow: inset 0 -2px 0 var(--framing); }
 
 .meta { color: var(--ink-soft); margin-inline-start: auto; }
 
@@ -135,13 +145,29 @@ button {
   align-items: stretch;
 }
 
+.columns { background: var(--wiki-page); }
+
 .column {
   min-width: 0;
   padding: 22px 26px 80px;
-  border-inline-start: 1px solid var(--rule);
+  /* Physical, not inline: columns always sit en|he|ar left-to-right regardless
+     of each column's own direction, so the seam belongs between every pair. */
+  border-left: 1px solid var(--rule);
 }
 
-.column:first-child { border-inline-start: none; }
+/* The article title, styled like the page heading on Wikipedia itself. */
+.article-title {
+  font-family: var(--wiki-heading);
+  font-weight: 400;
+  font-size: 26px;
+  line-height: 1.25;
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--wiki-border);
+  color: var(--wiki-text);
+}
+
+.column:first-child { border-left: none; }
 
 /* The signature: the seam between columns marks where reading direction flips.
    The glyph sits at the top of the boundary and points the way that column runs. */
@@ -168,14 +194,17 @@ button {
   color: var(--ink);
 }
 
-.column-head a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid var(--rule); }
-.column-head a:hover { color: var(--ink); }
+.column-head a { color: var(--wiki-link); text-decoration: none; }
+.column-head a:hover { text-decoration: underline; }
 
 .section-heading {
-  font-family: var(--display);
+  font-family: var(--wiki-heading);
   font-size: 21px;
-  margin: 26px 0 6px;
+  margin: 26px 0 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--wiki-border);
   font-weight: 400;
+  color: var(--wiki-text);
 }
 
 /* The lead has no heading of its own and the key-facts block is assembled from
@@ -190,38 +219,140 @@ button {
   margin-bottom: 8px;
 }
 
-.key-facts .body-text {
-  font-size: 14px;
-  color: var(--ink-soft);
-  border-inline-start: 2px solid var(--rule);
-  padding-inline-start: 12px;
+/* The article's lead photo, boxed like the top of a Wikipedia infobox. */
+.article-image {
   display: block;
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  margin: 0 0 16px;
+  padding: 4px;
+  background: var(--wiki-page);
+  border: 1px solid var(--wiki-border);
+  border-radius: 2px;
 }
 
-.body-text { white-space: pre-wrap; }
+/* Key facts: the infobox, moved under the title and folded away by default so
+   the lead reads first. */
+details.key-facts {
+  margin: 0 0 20px;
+  border: 1px solid var(--wiki-border);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--wiki-border) 8%, var(--wiki-page));
+}
+
+details.key-facts > summary {
+  cursor: pointer;
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  user-select: none;
+}
+
+details.key-facts[open] > summary { border-bottom: 1px solid var(--wiki-border); }
+
+.kf-body {
+  margin: 0;
+  padding: 6px 12px 10px;
+  font-size: 13.5px;
+  color: var(--wiki-text);
+}
+
+/* A two-column row like a Wikipedia infobox: bold label, value beside it. */
+.kf-row {
+  display: grid;
+  grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
+  gap: 2px 12px;
+  padding: 5px 0;
+  border-top: 1px solid color-mix(in srgb, var(--wiki-border) 55%, transparent);
+}
+.kf-body > .kf-row:first-child { border-top: 0; }
+
+.kf-label {
+  margin: 0;
+  font-weight: 700;
+}
+.kf-value {
+  margin: 0;
+}
+
+/* An infobox sub-header ("Leadership", "Structure") spanning the full width. */
+.kf-group {
+  padding: 8px 0 2px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+/* A row carrying a highlighted difference isn't split into label + value. */
+.kf-row-full {
+  display: block;
+  padding: 5px 0;
+  border-top: 1px solid color-mix(in srgb, var(--wiki-border) 55%, transparent);
+}
+
+/* Wikipedia-internal links, retargeted at our own comparison of that article. */
+.wikilink {
+  color: var(--wiki-link);
+  text-decoration: none;
+}
+.wikilink:hover {
+  text-decoration: underline;
+}
+
+.body-text {
+  white-space: pre-wrap;
+  font-family: var(--wiki-body);
+  font-size: 14.5px;
+  line-height: 1.62;
+  color: var(--wiki-text);
+}
 
 /* ---- highlights ----
-   Underlines rather than filled backgrounds: a background block across mixed
-   bidirectional runs breaks up badly at direction boundaries, and the underline
-   leaves the text's own texture intact. */
+   A filled band in the difference's colour, carried across line breaks with
+   box-decoration-break so a wrapped span reads as one mark. No inline padding:
+   it is what would open a gap between the fragments a span splits into at an
+   LTR/RTL boundary, so the fill stays continuous across direction changes.
+   A darker rule under the band keeps the type legible without relying on the
+   fill colour alone. */
 mark.claim {
+  color: var(--wiki-text);
   background: transparent;
-  color: inherit;
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
-  text-decoration-skip-ink: none;
+  border-radius: 2px;
+  padding: 0.09em 0;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
   cursor: help;
-  transition: background-color 120ms ease;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
 }
 
-mark.claim[data-type="contradiction"] { text-decoration-color: var(--contradiction); }
-mark.claim[data-type="unique"] { text-decoration-color: var(--unique); }
-mark.claim[data-type="framing"] { text-decoration-color: var(--framing); }
+mark.claim[data-type="contradiction"] {
+  background: color-mix(in srgb, var(--contradiction) 26%, white);
+  box-shadow: inset 0 -2px 0 var(--contradiction);
+}
+mark.claim[data-type="unique"] {
+  background: color-mix(in srgb, var(--unique) 26%, white);
+  box-shadow: inset 0 -2px 0 var(--unique);
+}
+mark.claim[data-type="framing"] {
+  background: color-mix(in srgb, var(--framing) 26%, white);
+  box-shadow: inset 0 -2px 0 var(--framing);
+}
 
-mark.claim[data-active="true"][data-type="contradiction"] { background: color-mix(in srgb, var(--contradiction) 16%, transparent); }
-mark.claim[data-active="true"][data-type="unique"] { background: color-mix(in srgb, var(--unique) 16%, transparent); }
-mark.claim[data-active="true"][data-type="framing"] { background: color-mix(in srgb, var(--framing) 16%, transparent); }
+mark.claim[data-active="true"][data-type="contradiction"] { background: color-mix(in srgb, var(--contradiction) 52%, white); }
+mark.claim[data-active="true"][data-type="unique"] { background: color-mix(in srgb, var(--unique) 52%, white); }
+mark.claim[data-active="true"][data-type="framing"] { background: color-mix(in srgb, var(--framing) 52%, white); }
+
+/* The jump-to-difference target announces itself with a brief ring. */
+mark.claim.diff-flash { animation: diff-flash 1.3s ease-out; }
+
+@keyframes diff-flash {
+  0%   { box-shadow: inset 0 -2px 0 currentColor, 0 0 0 3px color-mix(in srgb, var(--ink) 55%, transparent); }
+  100% { box-shadow: inset 0 -2px 0 currentColor, 0 0 0 3px transparent; }
+}
 
 /* ---- hover card ---- */
 
@@ -492,11 +623,108 @@ mark.claim[data-active="true"][data-type="framing"] { background: color-mix(in s
   34%, 100% { opacity: 1; }
 }
 
+/* ---- difference navigator ----
+   A fixed rail pinned to the right edge that maps every mark onto the length of
+   the page: a reader sees at a glance where the differences are and how the one
+   they're reading sits among them, and the arrows step through them in order. */
+.diffnav {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  width: 26px;
+  display: flex;
+  align-items: stretch;
+  pointer-events: none;
+}
+
+.diffnav-rail {
+  position: relative;
+  flex: 1;
+  margin: 8px 4px 64px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/* The slice of the page currently on screen, so the rail doubles as a map of
+   where the reader is. */
+.diffnav-view {
+  position: absolute;
+  left: 0;
+  right: 0;
+  min-height: 12px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+}
+
+.diffnav-tick {
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  height: 3px;
+  margin-top: -1.5px;
+  border-radius: 2px;
+  transition: transform 100ms ease;
+}
+
+.diffnav-tick[data-type="contradiction"] { background: var(--contradiction); }
+.diffnav-tick[data-type="unique"] { background: var(--unique); }
+.diffnav-tick[data-type="framing"] { background: var(--framing); }
+.diffnav-tick[data-current="true"] { transform: scaleX(1.9); height: 4px; }
+
+.diffnav-controls {
+  position: fixed;
+  right: 34px;
+  bottom: 22px;
+  z-index: 41;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--paper-raised);
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  box-shadow: 3px 3px 0 rgba(22, 24, 28, 0.14);
+  font-family: var(--mono);
+  font-size: 12px;
+  pointer-events: auto;
+}
+
+.diffnav-controls button {
+  width: 26px;
+  height: 26px;
+  line-height: 1;
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.diffnav-controls button:hover { background: color-mix(in srgb, var(--ink) 10%, transparent); }
+
+.diffnav-count {
+  padding: 0 8px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.diffnav-count b { color: var(--ink); font-weight: 600; }
+
+@media (max-width: 860px) {
+  .diffnav { width: 18px; }
+  .diffnav-controls { right: 24px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
 
 @media (max-width: 860px) {
   .columns { display: block; }
-  .column { border-inline-start: none; border-top: 1px solid var(--rule); }
+  .column { border-left: none; border-top: 1px solid var(--rule); }
 }

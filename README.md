@@ -107,11 +107,40 @@ dropped rather than displayed in the wrong place.
 
 ## Design notes
 
-Highlights are underlines, not filled backgrounds: a background block across mixed LTR/RTL runs
-breaks up badly at direction boundaries. Each column carries its own `dir`, so Hebrew and Arabic
-run right-to-left independently of the page, and the arrow in each column header shows which way
-that column reads. One serif texture — Noto Serif, Noto Serif Hebrew, Noto Naskh Arabic — across
-all three scripts, so the columns read as siblings rather than three unrelated documents.
+Highlights are filled bands in the difference's colour, with a darker rule under each so the type
+reads without relying on the fill alone. A background block across mixed LTR/RTL runs is what
+breaks up badly at direction boundaries — so the mark carries no inline padding and uses
+`box-decoration-break: clone`, which keeps the fill continuous across the fragments a span splits
+into where direction flips (`npm run check:ui` asserts there is no gap). Each column carries its
+own `dir`, so Hebrew and Arabic run right-to-left independently of the page, and the arrow in each
+column header shows which way that column reads. Each column is set on a white page in Wikipedia's
+own idiom — a sans body, a serif heading with a rule under it, blue links, the article's title on
+top — with one matching family per script (Noto Sans / Noto Serif and their Hebrew and Arabic
+cuts) so the columns read as siblings rather than three unrelated documents.
+
+A fixed rail down the right edge (`components/DiffNav.tsx`) plots every mark against the length of
+the page and tracks the slice currently on screen, so the differences are visible at a glance while
+scrolling; the arrow control steps through them in reading order. It reads only marks that have
+client rects, so a difference folded inside the collapsed Key facts block is skipped until the
+block is opened, and a `toggle` listener re-plots the rail when it is.
+
+Each column leads with the article's lead photo (`extractLeadImage` in `lib/wikipedia.ts`, pulled
+from the infobox before the chrome is stripped, preferring a `.jpg` photograph over the logos and
+coats of arms an infobox also carries) and then the Key facts block, which is the infobox flattened
+to `Label: value` lines. Key facts is a `<details>` folded shut by default, so the lead paragraph
+is the first prose in each column, and each line is rendered as an infobox row — bold label beside
+value — except a row that carries a difference, which stays one highlightable unit (a claim can
+span the label and the value, as the 2006 seat split does).
+
+The open article lives in the URL (`/?title=<title>&lang=<source>`), so a comparison is linkable
+and the browser's back button walks the history; `Compare` reads it on load and on `popstate` and
+pushes a new entry when the box is submitted or a link is followed. Wikipedia-internal links
+survive parsing as character ranges into each section's text (`extractLinks`, located by finding
+each anchor's visible label in the already-normalised text) and are re-pointed at our own
+comparison of the linked article, in that column's language — so following one from the Arabic
+column compares the Arabic concept across all three. `components/Highlighted.tsx` splits each
+section at every claim and link boundary and merges neighbouring runs, so a highlight and a link
+can overlap without either being lost.
 
 ## Layout
 
@@ -124,6 +153,7 @@ lib/db.ts                  Neon cache layer
 db/schema.sql              three tables: articles, comparisons, labels
 components/Compare.tsx     columns, toggles, hover card
 components/Highlighted.tsx span location and marking
+components/DiffNav.tsx      right-edge rail + jump-to-difference controls
 fixtures/                  recorded API responses + loader
 scripts/                   fixture recorder and the check suites
 ```
