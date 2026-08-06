@@ -101,6 +101,45 @@ const keyFacts = await page.$$eval("details.key-facts", (els) => ({
 check(keyFacts.count > 0, "key facts render as a collapsible block");
 check(!keyFacts.anyOpen, "key facts default to collapsed");
 
+// Key facts formatted like an infobox: bold labels, and a row that carries a
+// difference stays one highlightable unit rather than being split.
+const kf = await page.evaluate(() => ({
+  labels: document.querySelectorAll(".kf-label").length,
+  claimRow: document.querySelectorAll(".kf-row-full mark.claim").length,
+}));
+check(kf.labels > 0, "key facts use bold label rows", `${kf.labels} labels`);
+check(kf.claimRow > 0, "an infobox difference stays highlighted", `${kf.claimRow} rows`);
+
+// ---- internal links + linkable URL ------------------------------------------
+
+check(/[?&]title=/.test(page.url()), "the open article is in the URL", page.url());
+
+const links = await page.$$eval("a.wikilink", (els) =>
+  els.map((el) => el.getAttribute("href") ?? ""),
+);
+check(links.length > 0, "Wikipedia-internal links render as links", `${links.length} links`);
+check(
+  links.every((href) => /^\/\?title=[^&]+&lang=(en|he|ar)$/.test(href)),
+  "internal links point at our own comparison, not Wikipedia",
+  links.slice(0, 3).join("; "),
+);
+
+// A plain click navigates in place and rewrites the URL.
+{
+  const before = page.url();
+  const first = await page.$("a.wikilink");
+  const href = await first!.getAttribute("href");
+  await first!.click();
+  await page.waitForFunction((u) => location.href !== u, before, { timeout: 5000 }).catch(() => {});
+  check(
+    page.url().includes(new URL(href!, BASE).search),
+    "clicking an internal link opens that article's URL",
+    `${before} -> ${page.url()}`,
+  );
+  await page.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("mark.claim", { timeout: 30000 });
+}
+
 // ---- hover card -------------------------------------------------------------
 
 // `:visible` skips marks inside the collapsed Key facts block, which can't be

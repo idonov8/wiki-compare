@@ -8,6 +8,7 @@ import {
   type ArticleSnapshot,
   type Claim,
   type Lang,
+  type LinkSpan,
 } from "@/lib/types";
 
 /**
@@ -27,6 +28,7 @@ export default function Columns({
   activeId = null,
   onEnter,
   onLeave,
+  onLink,
 }: {
   articles: Record<string, ArticleSnapshot>;
   visible: Lang[];
@@ -35,6 +37,7 @@ export default function Columns({
   activeId?: string | null;
   onEnter?: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
   onLeave?: () => void;
+  onLink?: (title: string, lang: Lang) => void;
 }) {
   return (
     <div
@@ -47,15 +50,17 @@ export default function Columns({
         const meta = LANG_META[lang];
         const keyFacts = article.sections.find((s) => s.heading === KEY_FACTS_HEADING);
         const body = article.sections.filter((s) => s.heading !== KEY_FACTS_HEADING);
-        const highlight = (text: string) => (
+        const highlight = (text: string, links?: LinkSpan[]) => (
           <Highlighted
             text={text}
             lang={lang}
             claims={claims}
+            links={links}
             ghost={ghost}
             activeId={activeId}
             onEnter={onEnter}
             onLeave={onLeave}
+            onLink={onLink}
           />
         );
         return (
@@ -82,7 +87,37 @@ export default function Columns({
             {keyFacts && (
               <details className="key-facts">
                 <summary>Key facts</summary>
-                {highlight(keyFacts.text)}
+                <dl className="kf-body">
+                  {keyFacts.text.split("\n").map((line, i) => {
+                    // A claim can span the label and value of one row, so a row
+                    // carrying one stays a single highlightable unit rather than
+                    // being split into bold label + value.
+                    const hasClaim = claims.some(
+                      (c) => c.spans[lang] && line.includes(c.spans[lang]!),
+                    );
+                    if (hasClaim) {
+                      return (
+                        <div key={i} className="kf-row kf-row-full">
+                          {highlight(line)}
+                        </div>
+                      );
+                    }
+                    const sep = line.indexOf(": ");
+                    if (sep === -1) {
+                      return (
+                        <div key={i} className="kf-group">
+                          {line}
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={i} className="kf-row">
+                        <dt className="kf-label">{line.slice(0, sep)}</dt>
+                        <dd className="kf-value">{line.slice(sep + 2)}</dd>
+                      </div>
+                    );
+                  })}
+                </dl>
               </details>
             )}
             {body.map((section, i) => (
@@ -90,7 +125,7 @@ export default function Columns({
                 {section.heading !== LEAD_HEADING && (
                   <h3 className="section-heading">{section.heading}</h3>
                 )}
-                {highlight(section.text)}
+                {highlight(section.text, section.links)}
               </div>
             ))}
           </section>

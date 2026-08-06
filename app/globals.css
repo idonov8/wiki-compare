@@ -150,7 +150,9 @@ button {
 .column {
   min-width: 0;
   padding: 22px 26px 80px;
-  border-inline-start: 1px solid var(--rule);
+  /* Physical, not inline: columns always sit en|he|ar left-to-right regardless
+     of each column's own direction, so the seam belongs between every pair. */
+  border-left: 1px solid var(--rule);
 }
 
 /* The article title, styled like the page heading on Wikipedia itself. */
@@ -165,7 +167,7 @@ button {
   color: var(--wiki-text);
 }
 
-.column:first-child { border-inline-start: none; }
+.column:first-child { border-left: none; }
 
 /* The signature: the seam between columns marks where reading direction flips.
    The glyph sits at the top of the boundary and points the way that column runs. */
@@ -252,11 +254,53 @@ details.key-facts > summary {
 
 details.key-facts[open] > summary { border-bottom: 1px solid var(--wiki-border); }
 
-details.key-facts > .body-text {
-  display: block;
-  padding: 10px 12px;
+.kf-body {
+  margin: 0;
+  padding: 6px 12px 10px;
   font-size: 13.5px;
+  color: var(--wiki-text);
+}
+
+/* A two-column row like a Wikipedia infobox: bold label, value beside it. */
+.kf-row {
+  display: grid;
+  grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
+  gap: 2px 12px;
+  padding: 5px 0;
+  border-top: 1px solid color-mix(in srgb, var(--wiki-border) 55%, transparent);
+}
+.kf-body > .kf-row:first-child { border-top: 0; }
+
+.kf-label {
+  margin: 0;
+  font-weight: 700;
+}
+.kf-value {
+  margin: 0;
+}
+
+/* An infobox sub-header ("Leadership", "Structure") spanning the full width. */
+.kf-group {
+  padding: 8px 0 2px;
+  font-weight: 700;
+  text-align: center;
   color: var(--ink-soft);
+}
+
+/* A row carrying a highlighted difference isn't split into label + value. */
+.kf-row-full {
+  display: block;
+  padding: 5px 0;
+  border-top: 1px solid color-mix(in srgb, var(--wiki-border) 55%, transparent);
+}
+
+/* Wikipedia-internal links, retargeted at our own comparison of that article. */
+.wikilink {
+  color: var(--wiki-link);
+  text-decoration: none;
+}
+.wikilink:hover {
+  text-decoration: underline;
 }
 
 .body-text {
@@ -815,5 +859,5 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
 
 @media (max-width: 860px) {
   .columns { display: block; }
-  .column { border-inline-start: none; border-top: 1px solid var(--rule); }
+  .column { border-left: none; border-top: 1px solid var(--rule); }
 }
