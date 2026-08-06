@@ -26,6 +26,8 @@ export default function Columns({
   claims,
   ghost = false,
   activeId = null,
+  processedThrough,
+  part = "whole",
   onEnter,
   onLeave,
   onLink,
@@ -35,13 +37,33 @@ export default function Columns({
   claims: Claim[];
   ghost?: boolean;
   activeId?: string | null;
+  /**
+   * Per language, the body-section index this comparison read up to, exclusive.
+   * Absent means the whole article was read and there is nothing to split.
+   *
+   * It is per language rather than one number because the aligned sections sit
+   * at different positions in each edition — the English article can reach the
+   * same subject two sections earlier than the Arabic one — so a single cut
+   * would fall in the wrong place in two columns out of three.
+   */
+  processedThrough?: Partial<Record<Lang, number>>;
+  /**
+   * `whole` is the ordinary render. A funded comparison never needs anything
+   * else. A preview renders twice — `head`, then the gate, then `tail` — so the
+   * boundary can be a rule straight across all three columns rather than three
+   * ragged fades at three different heights. `tail` drops the column heading,
+   * title, image and key facts, because those belong to the top of the article
+   * and printing them twice would read as the page having started over.
+   */
+  part?: "whole" | "head" | "tail";
   onEnter?: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
   onLeave?: () => void;
   onLink?: (title: string, lang: Lang) => void;
 }) {
   return (
     <div
-      className="columns"
+      className={part === "tail" ? "columns columns-faded" : "columns"}
+      aria-hidden={part === "tail" ? true : undefined}
       style={{ gridTemplateColumns: `repeat(${visible.length}, minmax(0, 1fr))` }}
     >
       {visible.map((lang) => {
@@ -49,7 +71,11 @@ export default function Columns({
         if (!article) return null;
         const meta = LANG_META[lang];
         const keyFacts = article.sections.find((s) => s.heading === KEY_FACTS_HEADING);
-        const body = article.sections.filter((s) => s.heading !== KEY_FACTS_HEADING);
+        const allBody = article.sections.filter((s) => s.heading !== KEY_FACTS_HEADING);
+        const cut = processedThrough?.[lang] ?? allBody.length;
+        const body =
+          part === "head" ? allBody.slice(0, cut) : part === "tail" ? allBody.slice(cut) : allBody;
+        const chrome = part !== "tail";
         const highlight = (text: string, links?: LinkSpan[]) => (
           <Highlighted
             text={text}
@@ -65,17 +91,19 @@ export default function Columns({
         );
         return (
           <section key={lang} className="column" dir={meta.dir} lang={lang}>
-            <div className="column-head">
-              <span className="native">{meta.native}</span>
-              <span className="arrow" aria-hidden="true">
-                {meta.dir === "rtl" ? "←" : "→"}
-              </span>
-              <a href={article.url} target="_blank" rel="noreferrer">
-                rev {article.revid}
-              </a>
-            </div>
-            <h1 className="article-title">{article.title}</h1>
-            {article.image && (
+            {chrome && (
+              <div className="column-head">
+                <span className="native">{meta.native}</span>
+                <span className="arrow" aria-hidden="true">
+                  {meta.dir === "rtl" ? "←" : "→"}
+                </span>
+                <a href={article.url} target="_blank" rel="noreferrer">
+                  rev {article.revid}
+                </a>
+              </div>
+            )}
+            {chrome && <h1 className="article-title">{article.title}</h1>}
+            {chrome && article.image && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 className="article-image"
@@ -84,7 +112,7 @@ export default function Columns({
                 loading="lazy"
               />
             )}
-            {keyFacts && (
+            {chrome && keyFacts && (
               <details className="key-facts">
                 <summary>Key facts</summary>
                 <dl className="kf-body">

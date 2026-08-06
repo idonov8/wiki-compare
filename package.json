@@ -9,6 +9,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "db:init": "node --env-file-if-exists=.env.local scripts/init-db.mjs",
+    "auth:migrate": "npx @better-auth/cli migrate",
     "fixtures:save": "tsx --env-file-if-exists=.env.local scripts/save-fixture.mts",
     "fixtures:refresh": "tsx --env-file-if-exists=.env.local scripts/save-fixture.mts",
     "check:parser": "tsx scripts/check-parser.mts",
@@ -23,16 +24,20 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
     "@neondatabase/serverless": "^1.1.0",
+    "better-auth": "^1.6.26",
     "next": "^16.3.0",
     "node-html-parser": "^9.0.1",
+    "posthog-js": "^1.413.3",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "ws": "^8.21.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.1.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "@types/ws": "^8.18.1",
     "playwright": "^1.62.1",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.5",

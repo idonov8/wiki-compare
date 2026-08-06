@@ -98,6 +98,18 @@ export interface SectionGroup {
   headings: Partial<Record<Lang, string>>;
   sections: Partial<Record<Lang, Section>>;
   reasons: string[];
+  /**
+   * Where the group sits in the article, in reading order.
+   *
+   * The lead is -2 and the key-facts block is -1 so that both always lead,
+   * whatever the body turns out to look like. For an ordinary group it is the
+   * smallest section index among the languages present: an aligned group can sit
+   * third in English and seventh in Arabic, and the earliest appearance is the
+   * one that decides where a preview boundary lands, because a boundary drawn
+   * behind the latest appearance would leave English readers staring at sections
+   * the comparison never read.
+   */
+  order: number;
 }
 
 /** Decide which aligned groups are worth a model call. */
@@ -157,4 +169,32 @@ export function screenGroups(groups: SectionGroup[], langs: Lang[], limit = 8): 
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map(({ score: _score, ...group }) => group);
+}
+
+/** How many ordinary sections a free preview reads, on top of the lead and the
+ *  key facts. Two is enough to show real findings and cheap enough to give away
+ *  on every uncached article. */
+export const PREVIEW_SECTIONS = 2;
+
+/**
+ * The opening of the article: the lead, the key facts, and the first
+ * PREVIEW_SECTIONS ordinary groups in document order.
+ *
+ * Deliberately not `screenGroups` with a smaller limit, which is what this was
+ * at first. `screenGroups` takes the highest-scoring groups anywhere in the
+ * article, so a preview built from it read the lead, something from the middle
+ * and the last section before the references — findings scattered down a page
+ * whose intervening text nobody had looked at. The interface fades the article
+ * out past the point the comparison stopped, and a fade only means anything if
+ * everything above it was actually read: it has to be a prefix. Divergence
+ * scoring is still exactly right for the full run, which is free to jump around
+ * because it ends up covering the whole article anyway.
+ */
+export function previewGroups(groups: SectionGroup[]): SectionGroup[] {
+  const ordered = [...groups].sort((a, b) => a.order - b.order);
+  const opening = ordered.filter((g) => g.key === "lead" || g.key === "key-facts");
+  const body = ordered
+    .filter((g) => g.key !== "lead" && g.key !== "key-facts")
+    .slice(0, PREVIEW_SECTIONS);
+  return [...opening, ...body];
 }

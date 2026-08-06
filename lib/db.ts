@@ -6,6 +6,7 @@ import {
   type ComparisonResult,
   type Lang,
   type RecentArticle,
+  type ScopeKind,
 } from "./types";
 
 function sql() {
@@ -48,17 +49,30 @@ export async function putArticle(snapshot: ArticleSnapshot, parserVersion: strin
   `;
 }
 
+/**
+ * The scope belongs in the key.
+ *
+ * A preview and a full run describe the same revisions of the same subject and
+ * are not the same answer — one read the first few sections and the other read
+ * the whole article. Sharing a key would mean whichever ran first wins forever:
+ * a preview would satisfy the cache on every later request and the funded full
+ * run would have nowhere to be stored, so somebody would pay for a comparison
+ * nobody could ever be served. They are separate rows, and `getCachedComparison`
+ * is what decides which of them a reader gets.
+ */
 export function comparisonKey(
   qid: string,
   revids: Record<string, number>,
   promptVersion: string,
   parserVersion: string,
+  scope: ScopeKind = "full",
 ): string {
   const parts = Object.keys(revids)
     .sort()
     .map((l) => `${l}${revids[l]}`)
     .join(".");
-  return `${qid}:${parts}:${promptVersion}:${parserVersion}`;
+  const suffix = scope === "full" ? "" : `:${scope}`;
+  return `${qid}:${parts}:${promptVersion}:${parserVersion}${suffix}`;
 }
 
 export interface CachedComparison {
@@ -87,10 +101,24 @@ export interface CachedComparison {
  * was written for. The versions are read out of the stored result rather than
  * parsed back off the key, which keeps the key's shape an implementation detail
  * of `comparisonKey`.
+ *
+ * Scope adds a second preference, and it sits above exactness rather than below
+ * it: a full comparison wins over a preview even when the preview is the exact
+ * one and the full run is riding the window. A preview read four sections and
+ * stopped; a full run read the article. Serving the preview because its revision
+ * ids match more precisely would fade out most of the page in order to be
+ * pedantic about revisions that, by the window's own argument, have usually only
+ * moved by a citation. Nothing is hidden by the choice — an answer older than
+ * live still carries the `cached` badge, whatever its scope.
+ *
+ * So the ranking is: the exact full run, then the newest full run, then the
+ * exact preview, then the newest preview. Rows written before previews existed
+ * have no `scope` at all and COALESCE reads them as full, which is what they are.
  */
 export async function getCachedComparison(
   qid: string,
-  key: string,
+  fullKey: string,
+  previewKey: string,
   promptVersion: string,
   parserVersion: string,
   windowDays: number = CACHE_WINDOW_DAYS,
@@ -100,14 +128,18 @@ export async function getCachedComparison(
     FROM comparisons
     WHERE qid = ${qid}
       AND (
-        cache_key = ${key}
+        cache_key IN (${fullKey}, ${previewKey})
         OR (
           computed_at > now() - make_interval(days => ${windowDays}::int)
           AND result->>'promptVersion' = ${promptVersion}
           AND result->>'parserVersion' IS NOT DISTINCT FROM ${parserVersion}
         )
       )
-    ORDER BY (cache_key = ${key}) DESC, computed_at DESC
+    ORDER BY
+      (cache_key = ${fullKey}) DESC,
+      (COALESCE(result->'scope'->>'kind', 'full') = 'full') DESC,
+      (cache_key = ${previewKey}) DESC,
+      computed_at DESC
     LIMIT 1
   `;
   if (!rows.length) return null;
@@ -116,6 +148,24 @@ export async function getCachedComparison(
     cacheKey: rows[0].cache_key as string,
     computedAt: new Date(rows[0].computed_at as string).toISOString(),
   };
+}
+
+/**
+ * How many readers a stored comparison has served.
+ *
+ * The number exists to be said back to whoever funded it: a donation buys other
+ * people's reading, and "112 people have read what you paid for" is the only
+ * honest way to describe what the money did. Incremented on the serving path, so
+ * it is deliberately fire-and-forget — a failure to count a read must never
+ * delay or fail the read itself, which is the same rule `/api/recent` follows
+ * when it answers with an empty list rather than an error.
+ */
+export async function bumpServedCount(cacheKey: string): Promise<void> {
+  try {
+    await sql()`UPDATE comparisons SET served_count = served_count + 1 WHERE cache_key = ${cacheKey}`;
+  } catch (error) {
+    console.warn("served_count not incremented:", error instanceof Error ? error.message : error);
+  }
 }
 
 /**
@@ -160,25 +210,41 @@ export async function recentComparisons(limit = 12): Promise<RecentArticle[]> {
   }));
 }
 
+/**
+ * `fundedBy` is who paid for this row, when anybody did.
+ *
+ * Nothing reads it to decide access — the whole point is that a funded
+ * comparison belongs to everyone the moment it exists. It is here so the credit
+ * bar can tell a donor how many people have since read what they paid for, which
+ * needs to know which rows were theirs. An overwriting refresh reassigns it to
+ * whoever paid for the refresh, and `served_count` restarts with the answer it
+ * describes: the new row is a different comparison, and carrying the old one's
+ * readership onto it would credit the new donor with somebody else's readers.
+ */
 export async function putComparison(
   key: string,
   result: ComparisonResult,
   overwrite = false,
+  fundedBy: string | null = null,
 ): Promise<void> {
   const payload = JSON.stringify(result);
   // A ?fresh=1 run recomputed on purpose, so it should replace what is stored
   // rather than compute a new answer and silently discard it.
   if (overwrite) {
     await sql()`
-      INSERT INTO comparisons (cache_key, qid, result)
-      VALUES (${key}, ${result.qid}, ${payload})
-      ON CONFLICT (cache_key) DO UPDATE SET result = EXCLUDED.result, computed_at = now()
+      INSERT INTO comparisons (cache_key, qid, result, funded_by)
+      VALUES (${key}, ${result.qid}, ${payload}, ${fundedBy})
+      ON CONFLICT (cache_key) DO UPDATE
+        SET result = EXCLUDED.result,
+            computed_at = now(),
+            funded_by = EXCLUDED.funded_by,
+            served_count = 0
     `;
     return;
   }
   await sql()`
-    INSERT INTO comparisons (cache_key, qid, result)
-    VALUES (${key}, ${result.qid}, ${payload})
+    INSERT INTO comparisons (cache_key, qid, result, funded_by)
+    VALUES (${key}, ${result.qid}, ${payload}, ${fundedBy})
     ON CONFLICT (cache_key) DO NOTHING
   `;
 }

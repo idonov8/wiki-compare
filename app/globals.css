@@ -934,3 +934,387 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
   .columns { display: block; }
   .column { border-left: none; border-top: 1px solid var(--rule); }
 }
+
+/* ---- the funded preview ----
+   An uncached article is read as far as the free preview pays for and no
+   further, so the columns are rendered twice: the sections that were actually
+   compared, then the gate, then the remainder. The remainder is real article
+   text with no marks on it, which is exactly what it looks like. */
+
+/* The unread remainder. It fades out rather than being cut off, because the
+   article does not end there — only our reading of it does.
+
+   No `user-select: none`: the text below the gate is Wikipedia's own, free to
+   anyone, and locking it would be charging for something we neither wrote nor
+   paid for. Only the comparison is unfunded. `pointer-events` is off because
+   there is nothing here to hover — no marks were placed in this half — and a
+   help cursor over plain text would promise a card that never opens. */
+.columns-faded {
+  -webkit-mask-image: linear-gradient(to bottom, black 0, transparent 340px);
+  mask-image: linear-gradient(to bottom, black 0, transparent 340px);
+  pointer-events: none;
+}
+
+/* The seam between the two halves: a full-width bar between the grids, ruled
+   top and bottom like every other division in the page. Raised paper rather
+   than a box, no shadow and no accent colour — it is the point where the
+   article stops being compared, stated plainly, not a panel selling something. */
+.gate {
+  padding: 34px 24px 32px;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper-raised);
+  text-align: center;
+}
+
+.gate h2 {
+  font-family: var(--display);
+  font-size: 27px;
+  font-weight: 400;
+  margin: 0 0 6px;
+}
+
+.gate p {
+  max-width: 56ch;
+  margin: 0 auto 18px;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+
+.gate-cta {
+  padding: 10px 22px;
+  background: var(--ink);
+  color: var(--paper-raised);
+  border: 1px solid var(--ink);
+}
+
+.gate-cta:disabled { opacity: 0.45; cursor: progress; }
+
+/* The line under the button: what it costs, or who is already signed in. */
+.gate-note {
+  margin: 12px 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+/* ---- credit in the masthead ----
+   Money, kept to the size of a caption. A reader with credit should be able to
+   see how much is left without being reminded of it, so this is a figure and a
+   3px rule, not a widget. */
+
+.credit {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 148px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+  cursor: help;
+}
+
+.credit-balance {
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.credit-balance b { font-weight: 600; }
+.credit-balance span { color: var(--ink-soft); }
+
+/* Proportion of the account's own peak, not of some notional full tank: the
+   denominator is the most this person ever held, so the bar empties against
+   what they gave rather than against a number we invented. */
+.credit-meter {
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ink) 11%, transparent);
+  overflow: hidden;
+}
+
+.credit-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--ink);
+  transition: width 240ms ease;
+}
+
+/* Same construction as `.cached-tip`, deliberately: both are anchored to the
+   top of the page, so neither can be pushed off the bottom of the viewport and
+   neither needs the measured placement the claim card does. Opens on focus as
+   well as hover — `focus-within` here rather than `focus-visible`, because the
+   thing that takes focus inside is the sign-in form, not the container. */
+.credit-tip {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 8px);
+  inset-inline-end: 0;
+  width: 300px;
+  padding: 11px 13px;
+  background: var(--paper-raised);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 rgba(22, 24, 28, 0.14);
+  font-family: var(--body);
+  font-size: 13px;
+  line-height: 1.55;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: start;
+  color: var(--ink);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+.credit:hover .credit-tip,
+.credit:focus-within .credit-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* The tip carries the two numbers worth knowing: what this account paid to
+   process, and how many people have read those comparisons since. */
+.credit-tip b { font-weight: 600; }
+
+/* ---- signing in ----
+   One field, no password, no page of its own. Sitting in the masthead it has to
+   stay quieter than the search box beside it, so it is a size down from it. */
+
+.signin {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.signin:hover { color: var(--ink); }
+
+.signin-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.signin-form input {
+  flex: 1 1 190px;
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  color: inherit;
+}
+
+.signin-form input::placeholder { color: var(--ink-soft); }
+
+.signin-form button {
+  padding: 6px 13px;
+  background: var(--ink);
+  color: var(--paper-raised);
+  border: 1px solid var(--ink);
+  font-size: 13px;
+}
+
+.signin-form button:disabled { opacity: 0.45; cursor: progress; }
+
+/* What the form says once the link is on its way, in place of the field. */
+.signin-sent {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-soft);
+  max-width: 34ch;
+}
+
+/* ---- donating ----
+   A single column at reading width. Nothing on this page is beside anything
+   else: it is one decision, taken in one line of sight, and a two-column layout
+   would only invite the eye to compare tiers. */
+
+.donate {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 56px 24px 88px;
+}
+
+.donate h1 {
+  font-family: var(--display);
+  font-size: 34px;
+  font-weight: 400;
+  line-height: 1.15;
+  margin: 0 0 12px;
+}
+
+.donate > p {
+  margin: 0 0 22px;
+  color: var(--ink-soft);
+}
+
+.donate-amounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 26px;
+}
+
+/* The same two states as `.toggle`, at the size of a decision rather than of a
+   filter: outline while unchosen, solid ink once chosen. */
+.amount {
+  flex: 1 1 132px;
+  padding: 13px 14px;
+  background: transparent;
+  border: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 16px;
+  line-height: 1.3;
+  color: var(--ink-soft);
+  text-align: center;
+}
+
+.amount[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper-raised);
+}
+
+/* What the money buys, under the price. `inherit` and opacity rather than a
+   fixed grey, so the line stays legible when the tile fills with ink. */
+.amount-articles {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: inherit;
+  opacity: 0.72;
+}
+
+/* Label on the left, a short value on the right: the custom amount, the
+   contribution to running the thing, and the coupon all read as one column of
+   figures against the same margin. */
+.donate-field {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.donate-field label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.donate-field small {
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.donate-field input {
+  flex: 0 0 118px;
+  width: 118px;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 14px;
+  padding: 8px 10px;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  color: inherit;
+  text-align: end;
+}
+
+.donate-field input::placeholder { color: var(--ink-soft); }
+
+.donate-monthly {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 14px 0;
+  margin: 0 0 26px;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  font-size: 14px;
+}
+
+.donate-monthly input {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--ink);
+}
+
+.donate-monthly small {
+  display: block;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+
+.donate-pay {
+  display: block;
+  width: 100%;
+  padding: 14px 22px;
+  background: var(--ink);
+  color: var(--paper-raised);
+  border: 1px solid var(--ink);
+  font-size: 16px;
+}
+
+.donate-pay:disabled { opacity: 0.45; cursor: progress; }
+
+/* The reveal.
+   Set large in the display face because it is the sentence the whole page was
+   built to deliver, and ruled off in `--rule` rather than given the
+   `.error` treatment: nothing went wrong, we simply cannot take the money.
+   Warm, and a little embarrassed about it. */
+.donate-reveal {
+  margin: 34px 0 0;
+  padding: 26px 0 0;
+  border-top: 1px solid var(--rule);
+  font-family: var(--display);
+  font-size: 25px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.donate-reveal small {
+  display: block;
+  margin-top: 14px;
+  font-family: var(--body);
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+
+/* Narrow screens, on the same breakpoint the columns collapse at. The masthead
+   already wraps, so the credit block only needs to stop reserving width. */
+@media (max-width: 860px) {
+  .credit { min-width: 0; flex: 1 1 100%; }
+  .credit-tip { inset-inline-end: auto; inset-inline-start: 0; width: min(300px, calc(100vw - 48px)); }
+  .signin-form { flex: 1 1 100%; }
+}
+
+@media (max-width: 560px) {
+  .gate { padding: 26px 18px 24px; }
+  .gate h2 { font-size: 23px; }
+  .donate { padding: 38px 18px 64px; }
+  .donate h1 { font-size: 28px; }
+  /* The value keeps its own line rather than being squeezed against the label. */
+  .donate-field { flex-wrap: wrap; gap: 6px 14px; }
+  .donate-field input { flex: 1 1 100%; width: auto; text-align: start; }
+  .donate-reveal { font-size: 21px; }
+}
