@@ -159,7 +159,9 @@ span the label and the value, as the 2006 seat split does).
 
 The open article lives in the URL (`/?title=<title>&lang=<source>`), so a comparison is linkable
 and the browser's back button walks the history; `Compare` reads it on load and on `popstate` and
-pushes a new entry when the box is submitted or a link is followed. Wikipedia-internal links
+pushes a new entry when a result is chosen or a link is followed. That URL opens the preview, and
+confirming adds `&compare=1` in place (a shared link to a finished comparison doesn't ask for the
+subject to be confirmed a second time; a link to an article does). Wikipedia-internal links
 survive parsing as character ranges into each section's text (`extractLinks`, located by finding
 each anchor's visible label in the already-normalised text) and are re-pointed at our own
 comparison of the linked article, in that column's language — so following one from the Arabic
