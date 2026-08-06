@@ -40,9 +40,8 @@ function cacheNote(cache: CacheInfo): string {
       ? `The ${names[0]} article has`
       : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} have`;
   return (
-    `${subject} been edited on Wikipedia since this comparison was computed ${relative(cache.computedAt)}. ` +
-    `A comparison is reused for ${CACHE_WINDOW_DAYS} days, so these columns show the cached text rather ` +
-    `than what is live now. Recomputed on the first request ${relative(cache.expiresAt)}.`
+    `${subject} been edited on Wikipedia since this comparison was processed ${relative(cache.computedAt)}. ` +
+    `Donate to update this page.`
   );
 }
 
