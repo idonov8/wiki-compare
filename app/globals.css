@@ -524,6 +524,120 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
 
 .error { border-inline-start: 3px solid var(--contradiction); padding-inline-start: 16px; }
 
+/* ---- recently cached ----
+   Ruled rows rather than chips: a chip row reads as a set of suggestions, and
+   these are a history. Each row sets its own `dir`, so a Hebrew or Arabic title
+   runs the right way inside a left-to-right list. */
+
+.recent {
+  list-style: none;
+  margin: 26px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.recent li { border-bottom: 1px solid var(--rule); }
+
+.recent button {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  width: 100%;
+  padding: 9px 8px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--wiki-link);
+  text-align: start;
+  cursor: pointer;
+}
+
+.recent button:hover { background: var(--paper-raised); }
+.recent button:hover .recent-title { text-decoration: underline; }
+
+/* `dir` on the row is there to order the title's own characters, not to move it:
+   the list is a left-to-right piece of interface whichever script a title is in,
+   and letting `start` resolve per row left the Hebrew and Arabic titles floating
+   against the language column while the English ones sat at the margin. */
+.recent-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.recent-langs {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+
+/* ---- cached badge ----
+   Shown only when the served comparison is older than what is on Wikipedia now.
+   The tooltip is CSS-only — unlike the claim card there is one of these and it
+   never needs to dodge the viewport edge, being anchored to the meta line at the
+   top of the page. It opens on focus as well as hover, so it is reachable
+   without a pointer. */
+
+.cached-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-inline-start: 9px;
+  padding: 2px 7px;
+  border: 1px solid var(--rule);
+  background: var(--paper-raised);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  cursor: help;
+}
+
+.cached-badge::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--framing);
+}
+
+.cached-tip {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 8px);
+  inset-inline-end: 0;
+  width: 300px;
+  padding: 11px 13px;
+  background: var(--paper-raised);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 rgba(22, 24, 28, 0.14);
+  font-family: var(--body);
+  font-size: 13px;
+  line-height: 1.55;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: start;
+  color: var(--ink);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+.cached-badge:hover .cached-tip,
+.cached-badge:focus-visible .cached-tip {
+  opacity: 1;
+  visibility: visible;
+}
+
 /* ---- loading ----
    A globe of scripts assembling itself while the articles are fetched and read.
    Everything here is CSS animation rather than SMIL so that the reduced-motion

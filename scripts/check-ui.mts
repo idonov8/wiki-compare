@@ -40,13 +40,134 @@ const page = await browser.newPage({ viewport: { width: 1440, height: 1400 } });
 const pageErrors: string[] = [];
 page.on("pageerror", (e) => pageErrors.push(e.message));
 
+// Both stubs stand in for a database. The landing list and the cached badge are
+// the only two things the client renders from state it cannot reach through the
+// demo fixture path, so they are served here rather than left unchecked.
+await page.route("**/api/recent", (route) =>
+  route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({
+      items: [
+        {
+          qid: "Q1",
+          title: `demo:${FIXTURE}`,
+          lang: "en",
+          langs: ["en", "he", "ar"],
+          computedAt: new Date(Date.now() - 3600_000).toISOString(),
+        },
+        {
+          qid: "Q2",
+          title: "הדג נחש",
+          lang: "he",
+          langs: ["he", "ar"],
+          computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
+        },
+      ],
+    }),
+  }),
+);
+
+// The comparison the fixture returns, re-served as a two-day-old cached answer
+// that two of the three articles have been edited past. Scoped to fixture
+// requests: the internal-link check below follows a link to a real article, and
+// re-serving that one would put a live fetch behind a route callback that is
+// still in flight when the browser closes.
+await page.route(
+  (url) =>
+    url.pathname === "/api/compare" &&
+    (url.searchParams.get("title") ?? "").startsWith("demo:"),
+  async (route) => {
+    const response = await route.fetch();
+    const json = await response.json();
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...json,
+        fromCache: true,
+        cache: {
+          computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
+          expiresAt: new Date(Date.now() + 86400_000).toISOString(),
+          edited: ["he", "ar"],
+        },
+      }),
+    });
+  },
+);
+
+console.log(`\n${FIXTURE}`);
+
+// ---- recently cached, before any search ------------------------------------
+
+await page.goto(BASE, { waitUntil: "domcontentloaded" });
+await page.waitForSelector(".recent li", { timeout: 5000 });
+
+const recent = await page.$$eval(".recent li button", (els) =>
+  els.map((el) => {
+    const title = el.querySelector(".recent-title") as HTMLElement | null;
+    return {
+      title: title?.textContent ?? "",
+      dir: title?.getAttribute("dir") ?? "",
+      langs: el.querySelector(".recent-langs")?.textContent ?? "",
+    };
+  }),
+);
+check(recent.length === 2, "recently cached articles list before any search", `${recent.length} rows`);
+check(
+  recent.some((r) => r.dir === "rtl") && recent.some((r) => r.dir === "ltr"),
+  "each row carries its own direction",
+  recent.map((r) => `${r.title}=${r.dir}`).join("; "),
+);
+check(
+  recent.every((r) => /^[A-Z]{2}( · [A-Z]{2})*$/.test(r.langs)),
+  "rows show which languages were compared",
+  recent.map((r) => r.langs).join("; "),
+);
+check(
+  (await page.$$(".recent h2, .recent h3")).length === 0,
+  "the list carries no heading of its own",
+);
+
+// The list is a history, so a row has to actually open its comparison.
+await page.click(".recent li:first-child button");
+await page.waitForSelector("mark.claim", { timeout: 30000 });
+check(/[?&]title=/.test(page.url()), "clicking a recent article opens it", page.url());
+
+// ---- cached badge -----------------------------------------------------------
+
+check(!!(await page.$(".cached-badge")), "a cached comparison served past an edit is badged");
+{
+  const tip = await page.$(".cached-tip");
+  const hiddenAtRest = await tip?.evaluate((el) => getComputedStyle(el).visibility === "hidden");
+  check(!!hiddenAtRest, "its tooltip stays shut until hover");
+  await (await page.$(".cached-badge"))!.hover();
+  await page.waitForTimeout(200);
+  const open = await tip!.evaluate((el) => ({
+    visible: getComputedStyle(el).visibility === "visible",
+    text: el.textContent ?? "",
+    box: el.getBoundingClientRect().toJSON(),
+  }));
+  check(open.visible, "hovering the badge opens the tooltip");
+  check(
+    /Hebrew and Arabic have been edited/.test(open.text) && /reused for 3 days/.test(open.text),
+    "the tooltip names what changed and how long the cache holds",
+    open.text.slice(0, 120),
+  );
+  const vp = page.viewportSize()!;
+  check(
+    open.box.x >= 0 && open.box.x + open.box.width <= vp.width,
+    "the tooltip stays on screen",
+    `x=${Math.round(open.box.x)} w=${Math.round(open.box.width)} vp=${vp.width}`,
+  );
+  await page.mouse.move(0, 0);
+}
+
+// ---- the comparison itself --------------------------------------------------
+
 await page.goto(BASE, { waitUntil: "domcontentloaded" });
 await page.fill('input[aria-label="Article title"]', `demo:${FIXTURE}`);
 // `demo:` skips the search-and-confirm flow and compares the fixture directly.
 await page.click("button:has-text('Search')");
 await page.waitForSelector("mark.claim", { timeout: 30000 });
-
-console.log(`\n${FIXTURE}`);
 
 // ---- highlights -------------------------------------------------------------
 
@@ -203,6 +324,9 @@ check(!(await page.$(".card")), "Escape dismisses the card");
 
 check(pageErrors.length === 0, "no uncaught page errors", pageErrors.join("; "));
 
+// A stub still mid-flight when the browser goes away throws from its callback,
+// which lands as an unhandled rejection and takes the exit code with it.
+await page.unrouteAll({ behavior: "ignoreErrors" });
 await browser.close();
 console.log(failures ? `\n${failures} check(s) failed\n` : "\nall checks passed\n");
 process.exit(failures ? 1 : 0);
