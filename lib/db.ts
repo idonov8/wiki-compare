@@ -1,5 +1,12 @@
 import { neon } from "@neondatabase/serverless";
-import type { ArticleSnapshot, ComparisonResult, Lang } from "./types";
+import {
+  CACHE_WINDOW_DAYS,
+  LANGS,
+  type ArticleSnapshot,
+  type ComparisonResult,
+  type Lang,
+  type RecentArticle,
+} from "./types";
 
 function sql() {
   const url = process.env.DATABASE_URL;
@@ -10,11 +17,14 @@ function sql() {
 /**
  * Two caches, both write-once.
  *
- * Wikipedia revision ids are immutable, so neither cache ever needs a TTL or an
+ * Wikipedia revision ids are immutable, so neither cache ever needs an
  * invalidation pass. Keying article text on revid alone means an edit to the
  * Hebrew page does not invalidate the English or Arabic fetch. Keying the
  * comparison on all three revids plus the prompt version means the model runs
  * again only when an article actually changed or the prompt did.
+ *
+ * Rows are still never overwritten by that rule alone, but reads are looser than
+ * writes: see CACHE_WINDOW_DAYS in lib/types.ts.
  */
 
 export async function getArticle(
@@ -51,11 +61,103 @@ export function comparisonKey(
   return `${qid}:${parts}:${promptVersion}:${parserVersion}`;
 }
 
-export async function getComparison(key: string): Promise<ComparisonResult | null> {
+export interface CachedComparison {
+  result: ComparisonResult;
+  /** The key the row was stored under. Equal to the requested key on an exact
+   *  hit; different means it was computed from revisions that have since moved. */
+  cacheKey: string;
+  computedAt: string;
+}
+
+/**
+ * The comparison to serve for `qid`, or null if none is usable.
+ *
+ * One statement covers both reads. An exact key match is preferred whatever its
+ * age — it describes exactly the revisions being asked about, so it is never
+ * stale — and otherwise the newest row inside the window answers. Sorting on key
+ * equality first is what makes that preference hold rather than merely usually
+ * hold, since a row for superseded revisions can be the more recently written of
+ * the two.
+ *
+ * The window forgives one thing only: revision ids that have moved on. A row
+ * computed under a different prompt or parser version is never reused for
+ * revisions it was not keyed to, because those two versions are the whole way we
+ * say "our reading of this changed" — letting them ride the window would make
+ * every prompt fix invisible for three days on precisely the busy articles it
+ * was written for. The versions are read out of the stored result rather than
+ * parsed back off the key, which keeps the key's shape an implementation detail
+ * of `comparisonKey`.
+ */
+export async function getCachedComparison(
+  qid: string,
+  key: string,
+  promptVersion: string,
+  parserVersion: string,
+  windowDays: number = CACHE_WINDOW_DAYS,
+): Promise<CachedComparison | null> {
   const rows = await sql()`
-    SELECT result FROM comparisons WHERE cache_key = ${key} LIMIT 1
+    SELECT cache_key, result, computed_at
+    FROM comparisons
+    WHERE qid = ${qid}
+      AND (
+        cache_key = ${key}
+        OR (
+          computed_at > now() - make_interval(days => ${windowDays}::int)
+          AND result->>'promptVersion' = ${promptVersion}
+          AND result->>'parserVersion' IS NOT DISTINCT FROM ${parserVersion}
+        )
+      )
+    ORDER BY (cache_key = ${key}) DESC, computed_at DESC
+    LIMIT 1
   `;
-  return rows.length ? (rows[0].result as ComparisonResult) : null;
+  if (!rows.length) return null;
+  return {
+    result: rows[0].result as ComparisonResult,
+    cacheKey: rows[0].cache_key as string,
+    computedAt: new Date(rows[0].computed_at as string).toISOString(),
+  };
+}
+
+/**
+ * The most recently computed comparison for each subject, newest first.
+ *
+ * Titles and language lists are projected out in SQL rather than in TypeScript:
+ * `result` holds every article's full section text, so selecting the column to
+ * pick two strings off it would pull megabytes across the wire to render a
+ * dozen list rows.
+ */
+export async function recentComparisons(limit = 12): Promise<RecentArticle[]> {
+  const rows = await sql()`
+    SELECT qid, title, lang, langs, computed_at FROM (
+      SELECT DISTINCT ON (qid)
+        qid,
+        COALESCE(
+          result->'articles'->'en'->>'title',
+          result->'articles'->'he'->>'title',
+          result->'articles'->'ar'->>'title'
+        ) AS title,
+        CASE
+          WHEN jsonb_exists(result->'articles', 'en') THEN 'en'
+          WHEN jsonb_exists(result->'articles', 'he') THEN 'he'
+          ELSE 'ar'
+        END AS lang,
+        ARRAY(SELECT jsonb_object_keys(result->'articles')) AS langs,
+        computed_at
+      FROM comparisons
+      ORDER BY qid, computed_at DESC
+    ) latest
+    WHERE title IS NOT NULL
+    ORDER BY computed_at DESC
+    LIMIT ${limit}
+  `;
+  return rows.map((row) => ({
+    qid: row.qid as string,
+    title: row.title as string,
+    lang: row.lang as Lang,
+    // jsonb orders its own keys; restore the reading order the columns use.
+    langs: LANGS.filter((l) => (row.langs as string[]).includes(l)),
+    computedAt: new Date(row.computed_at as string).toISOString(),
+  }));
 }
 
 export async function putComparison(

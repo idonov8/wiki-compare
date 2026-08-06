@@ -1,7 +1,21 @@
 import { NextResponse } from "next/server";
-import { LANGS, type ArticleSnapshot, type ComparisonResult, type Lang } from "@/lib/types";
+import {
+  CACHE_WINDOW_DAYS,
+  LANGS,
+  type ArticleSnapshot,
+  type ComparisonResult,
+  type Lang,
+} from "@/lib/types";
 import { PARSER_VERSION, currentRevid, fetchArticle, fetchLabels, resolveSitelinks } from "@/lib/wikipedia";
-import { comparisonKey, getArticle, getComparison, getLabels, putArticle, putComparison, putLabels } from "@/lib/db";
+import {
+  comparisonKey,
+  getArticle,
+  getCachedComparison,
+  getLabels,
+  putArticle,
+  putComparison,
+  putLabels,
+} from "@/lib/db";
 import { coverageGaps } from "@/lib/deterministic";
 import { PROMPT_VERSION, runComparison } from "@/lib/compare";
 
@@ -66,9 +80,24 @@ export async function GET(request: Request) {
     // deleting rows or commenting out the check and forgetting to restore it.
     const bypassCache = params.get("fresh") === "1";
 
-    const cached = bypassCache ? null : await getComparison(key);
+    const cached = bypassCache
+      ? null
+      : await getCachedComparison(qid, key, PROMPT_VERSION, PARSER_VERSION);
     if (cached) {
-      return NextResponse.json({ ...cached, fromCache: true });
+      // Which languages the reader is seeing at an older revision than the live
+      // one. Computed against the served snapshot rather than the cache key, so
+      // a key that differs only by prompt version reports no edits — and a
+      // language that has appeared since is counted, its cached revid being
+      // absent rather than merely different.
+      const edited = langs.filter((l) => cached.result.articles[l]?.revid !== revids[l]);
+      const expiresAt = new Date(
+        new Date(cached.computedAt).getTime() + CACHE_WINDOW_DAYS * 86_400_000,
+      ).toISOString();
+      return NextResponse.json({
+        ...cached.result,
+        fromCache: true,
+        cache: { computedAt: cached.computedAt, expiresAt, edited },
+      });
     }
 
     const articles: ArticleSnapshot[] = await Promise.all(
