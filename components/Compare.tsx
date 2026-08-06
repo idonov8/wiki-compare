@@ -1,18 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import Highlighted, { comparePath } from "./Highlighted";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Columns from "./Columns";
+import { comparePath } from "./Highlighted";
 import DiffNav from "./DiffNav";
 import Loading from "./Loading";
 import {
-  KEY_FACTS_HEADING,
   LANGS,
   LANG_META,
-  LEAD_HEADING,
+  type ArticleSnapshot,
   type Claim,
   type ComparePayload,
   type Lang,
-  type LinkSpan,
 } from "@/lib/types";
 
 const asLang = (value: string | null): Lang =>
@@ -32,78 +31,171 @@ interface CardState {
   bottom?: number;
 }
 
+interface Hit {
+  lang: string;
+  title: string;
+  description?: string;
+  url: string;
+}
+
 /** Keep in sync with `.card { max-width }` in globals.css. */
 const CARD_WIDTH = 340;
 const CARD_MARGIN = 8;
 /** Enough room to place the card below a mark without it running off-screen. */
 const CARD_CLEARANCE = 190;
 
+/**
+ * A comparison costs tokens and about a minute, and every second of it is
+ * wasted if the subject was wrong — so the article is chosen from search
+ * results rather than guessed from the box. The choice starts the comparison
+ * immediately, and the article itself is what fills the wait: it is fetched in
+ * parallel and on screen within a second, so the reader can see they picked the
+ * right page while the model is still reading it.
+ */
+type Phase = "idle" | "results" | "comparing" | "done";
+
 export default function Compare() {
   const [query, setQuery] = useState("Palestinian Legislative Council");
-  const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hits, setHits] = useState<Hit[]>([]);
+  const [target, setTarget] = useState<Hit | null>(null);
+  const [articles, setArticles] = useState<Record<string, ArticleSnapshot>>({});
   const [data, setData] = useState<ComparePayload | null>(null);
-  /** The title actually submitted, so the loading state does not retitle itself
-   *  as someone edits the box while a comparison is in flight. */
-  const [pending, setPending] = useState("");
   const [shown, setShown] = useState<Lang[]>([...LANGS]);
   const [card, setCard] = useState<CardState | null>(null);
 
-  const load = useCallback(async (raw: string, sourceLang: Lang = "en") => {
-    const title = raw.trim();
-    if (!title) return;
-    setPending(title);
-    setLoading(true);
+  const reset = () => {
     setError(null);
     setCard(null);
-    try {
-      const res = await fetch(
-        `/api/compare?title=${encodeURIComponent(title)}&lang=${sourceLang}`,
-      );
+  };
+
+  /** The querystring we last acted on, so a pushState of our own doesn't
+   *  look like a navigation to re-apply. */
+  const appliedUrl = useRef<string | null>(null);
+
+  /**
+   * Open an article: the comparison and the articles alone are requested at the
+   * same time. `/api/articles` answers in about a second and fills the columns;
+   * `/api/compare` takes a minute and only adds the marks — and it reads the
+   * same cache the first request just warmed, so the pair costs one fetch.
+   */
+  const open = useCallback(async (hit: Hit) => {
+    reset();
+    setTarget(hit);
+    setArticles({});
+    setData(null);
+    setPhase("comparing");
+
+    const compare = fetch(
+      `/api/compare?title=${encodeURIComponent(hit.title)}&lang=${encodeURIComponent(hit.lang)}`,
+    ).then(async (res) => {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Comparison failed.");
-      setData(json as ComparePayload);
+      return json as ComparePayload;
+    });
+    compare.catch(() => {}); // handled below; this only keeps an early reject quiet
+
+    try {
+      const res = await fetch(
+        `/api/articles?title=${encodeURIComponent(hit.title)}&lang=${encodeURIComponent(hit.lang)}`,
+      );
+      const json = await res.json();
+      if (res.ok) {
+        setArticles(json.articles ?? {});
+        setShown(LANGS.filter((l) => json.articles?.[l]));
+      }
+      // A failure here isn't fatal: the comparison returns the articles too, and
+      // its own error is the one worth showing.
+    } catch {}
+
+    try {
+      const json = await compare;
+      setData(json);
+      setArticles(json.articles ?? {});
       setShown(LANGS.filter((l) => json.articles?.[l]));
+      setPhase("done");
     } catch (e) {
-      setData(null);
       setError(e instanceof Error ? e.message : "Comparison failed.");
-    } finally {
-      setLoading(false);
+      setPhase(hits.length ? "results" : "idle");
     }
-  }, []);
+  }, [hits.length]);
 
   // The open article lives in the URL, so a comparison is linkable and the back
-  // button works. Clicking a wiki link or submitting the box pushes a new entry.
-  const navigate = useCallback(
-    (raw: string, sourceLang: Lang = "en") => {
-      const title = raw.trim();
-      if (!title) return;
-      setQuery(title);
-      window.history.pushState(null, "", comparePath(title, sourceLang));
-      window.scrollTo({ top: 0 });
-      load(title, sourceLang);
-    },
-    [load],
-  );
+  // button works. A ref keeps the popstate listener from being torn down and
+  // re-run — re-running it would refetch the article on every state change.
+  const openRef = useRef(open);
+  openRef.current = open;
+
+  const navigate = useCallback((title: string, lang: string) => {
+    const t = title.trim();
+    if (!t) return;
+    setQuery(t);
+    setHits([]);
+    window.history.pushState(null, "", comparePath(t, lang));
+    appliedUrl.current = window.location.search;
+    window.scrollTo({ top: 0 });
+    void openRef.current({ lang, title: t, url: "" });
+  }, []);
 
   useEffect(() => {
     const apply = () => {
+      if (window.location.search === appliedUrl.current) return;
+      appliedUrl.current = window.location.search;
       const params = new URLSearchParams(window.location.search);
       const title = params.get("title");
-      if (title) {
-        setQuery(title);
-        load(title, asLang(params.get("lang")));
-      } else {
+      if (!title) {
+        setPhase("idle");
+        setArticles({});
         setData(null);
         setError(null);
+        return;
       }
+      setQuery(title);
+      setHits([]);
+      void openRef.current({ lang: asLang(params.get("lang")), title, url: "" });
     };
     apply();
     window.addEventListener("popstate", apply);
     return () => window.removeEventListener("popstate", apply);
-  }, [load]);
+  }, []);
 
-  const available = useMemo(() => LANGS.filter((l) => data?.articles?.[l]), [data]);
+  const search = useCallback(async () => {
+    const q = query.trim();
+    if (!q) return;
+
+    // The fixture route is a rendering harness, not a subject: it has no search
+    // results to pick from, so it is opened directly.
+    if (q.startsWith("demo:")) {
+      navigate(q, "en");
+      return;
+    }
+
+    reset();
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Search failed.");
+      const results = (json.results ?? []) as Hit[];
+      if (!results.length) throw new Error(`Nothing on Wikipedia matches “${q}”.`);
+      setHits(results);
+      // A pasted URL names one article, so there is nothing to pick between.
+      if (json.exact) navigate(results[0].title, results[0].lang);
+      else setPhase("results");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Search failed.");
+      setPhase("idle");
+    } finally {
+      setBusy(false);
+    }
+  }, [query, navigate]);
+
+  const available = useMemo(
+    () => LANGS.filter((l) => articles[l]),
+    [articles],
+  );
   const visible = shown.filter((l) => available.includes(l));
 
   // A tooltip reached by keyboard needs a way out that isn't Tab. Blur alone
@@ -148,6 +240,9 @@ export default function Compare() {
     );
   };
 
+  const hasColumns = visible.length > 0;
+  const comparing = phase === "comparing";
+
   return (
     <>
       <header className="masthead">
@@ -158,17 +253,17 @@ export default function Compare() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && navigate(query)}
-            placeholder="Article title in English, Hebrew or Arabic"
+            onKeyDown={(e) => e.key === "Enter" && search()}
+            placeholder="Article title, or paste a Wikipedia URL"
             aria-label="Article title"
           />
-          <button onClick={() => navigate(query)} disabled={loading}>
-            {loading ? "Comparing…" : "Compare"}
+          <button onClick={search} disabled={busy}>
+            {busy ? "Working…" : "Search"}
           </button>
         </div>
       </header>
 
-      {data && !loading && (
+      {(comparing || phase === "done") && hasColumns && (
         <div className="controls">
           <div className="toggles">
             {available.map((lang) => (
@@ -188,30 +283,32 @@ export default function Compare() {
             <span><i className="swatch framing" /> different framing</span>
           </div>
           <div className="meta">
-            {data.qid} · {data.claims.length} marked ·{" "}
-            {data.fromCache
-              ? "cached, 0 tokens"
-              : `${data.usage.inputTokens.toLocaleString()} in / ${data.usage.outputTokens.toLocaleString()} out`}
+            {data
+              ? `${data.qid} · ${data.claims.length} marked · ${
+                  data.fromCache
+                    ? "cached, 0 tokens"
+                    : `${data.usage.inputTokens.toLocaleString()} in / ${data.usage.outputTokens.toLocaleString()} out`
+                }`
+              : "reading all three…"}
           </div>
         </div>
       )}
 
-      {loading && <Loading title={pending} />}
-
-      {error && !loading && (
+      {error && (
         <div className="state error">
           <h2>That didn&apos;t work</h2>
           <p>{error}</p>
         </div>
       )}
 
-      {!data && !error && !loading && (
+      {phase === "idle" && !error && (
         <div className="state">
           <h2>Three encyclopedias, one subject</h2>
           <p>
-            Enter an article title. The English, Hebrew and Arabic versions load side by side, and
+            Search for an article, or paste a Wikipedia URL, and pick which article you meant. The
+            English, Hebrew and Arabic versions appear side by side while they are compared, and
             every place they contradict each other, cover something the others skip, or frame the
-            same fact differently is highlighted. Hover a highlight to see what the difference is.
+            same fact differently is highlighted.
           </p>
           <p>
             Try <code>Palestinian Legislative Council</code>, <code>Six-Day War</code> or{" "}
@@ -220,99 +317,50 @@ export default function Compare() {
         </div>
       )}
 
-      {data && !loading && (
-        <>
-          <div
-            className="columns"
-            style={{ gridTemplateColumns: `repeat(${visible.length}, minmax(0, 1fr))` }}
-          >
-            {visible.map((lang) => {
-              const article = data.articles[lang];
-              const meta = LANG_META[lang];
-              const keyFacts = article.sections.find((s) => s.heading === KEY_FACTS_HEADING);
-              const body = article.sections.filter((s) => s.heading !== KEY_FACTS_HEADING);
-              const highlight = (text: string, links?: LinkSpan[]) => (
-                <Highlighted
-                  text={text}
-                  lang={lang}
-                  claims={data.claims}
-                  links={links}
-                  activeId={card?.claim.id ?? null}
-                  onEnter={onEnter}
-                  onLeave={() => setCard(null)}
-                  onLink={navigate}
-                />
-              );
-              return (
-                <section key={lang} className="column" dir={meta.dir} lang={lang}>
-                  <div className="column-head">
-                    <span className="native">{meta.native}</span>
-                    <span className="arrow" aria-hidden="true">
-                      {meta.dir === "rtl" ? "←" : "→"}
-                    </span>
-                    <a href={article.url} target="_blank" rel="noreferrer">
-                      rev {article.revid}
-                    </a>
-                  </div>
-                  <h1 className="article-title">{article.title}</h1>
-                  {article.image && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      className="article-image"
-                      src={article.image.src}
-                      alt={article.image.alt ?? article.title}
-                      loading="lazy"
-                    />
-                  )}
-                  {keyFacts && (
-                    <details className="key-facts">
-                      <summary>Key facts</summary>
-                      <dl className="kf-body">
-                        {keyFacts.text.split("\n").map((line, i) => {
-                          // A claim can span the label and value of one row, so a
-                          // row carrying one stays a single highlightable unit
-                          // rather than being split into bold label + value.
-                          const hasClaim = data.claims.some(
-                            (c) => c.spans[lang] && line.includes(c.spans[lang]!),
-                          );
-                          if (hasClaim) {
-                            return (
-                              <div key={i} className="kf-row kf-row-full">
-                                {highlight(line)}
-                              </div>
-                            );
-                          }
-                          const sep = line.indexOf(": ");
-                          if (sep === -1) {
-                            return (
-                              <div key={i} className="kf-group">
-                                {line}
-                              </div>
-                            );
-                          }
-                          return (
-                            <div key={i} className="kf-row">
-                              <dt className="kf-label">{line.slice(0, sep)}</dt>
-                              <dd className="kf-value">{line.slice(sep + 2)}</dd>
-                            </div>
-                          );
-                        })}
-                      </dl>
-                    </details>
-                  )}
-                  {body.map((section, i) => (
-                    <div key={`${section.heading}-${i}`}>
-                      {section.heading !== LEAD_HEADING && (
-                        <h3 className="section-heading">{section.heading}</h3>
-                      )}
-                      {highlight(section.text, section.links)}
-                    </div>
-                  ))}
-                </section>
-              );
-            })}
-          </div>
+      {phase === "results" && (
+        <div className="results">
+          <h2>Which article did you mean?</h2>
+          <p className="results-note">
+            Results from {LANG_META[hits[0]?.lang as Lang]?.label ?? hits[0]?.lang} Wikipedia. The
+            other languages are found through the article&apos;s Wikidata item.
+          </p>
+          <ul>
+            {hits.map((hit) => (
+              <li key={`${hit.lang}:${hit.title}`}>
+                <button
+                  className="hit"
+                  onClick={() => navigate(hit.title, hit.lang)}
+                  disabled={busy}
+                >
+                  <span className="hit-title">{hit.title}</span>
+                  {hit.description && <span className="hit-desc">{hit.description}</span>}
+                </button>
+                <a className="hit-link" href={hit.url} target="_blank" rel="noreferrer">
+                  open on Wikipedia ↗
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
+      {hasColumns && (comparing || phase === "done") && (
+        <Columns
+          articles={articles}
+          visible={visible}
+          claims={data?.claims ?? []}
+          ghost={comparing}
+          activeId={card?.claim.id ?? null}
+          onEnter={onEnter}
+          onLeave={() => setCard(null)}
+          onLink={navigate}
+        />
+      )}
+
+      {comparing && <Loading title={target?.title ?? ""} />}
+
+      {phase === "done" && data && (
+        <>
           {data.claims.length > 0 && <DiffNav signature={`${data.qid}:${visible.join("")}`} />}
 
           {data.coverage.length > 0 && (

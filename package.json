@@ -13,7 +13,8 @@
     "fixtures:refresh": "tsx scripts/save-fixture.mts",
     "check:parser": "tsx scripts/check-parser.mts",
     "check:deterministic": "tsx scripts/check-deterministic.mts",
-    "check": "npm run check:parser && npm run check:deterministic",
+    "check:input": "tsx scripts/check-input.mts",
+    "check": "npm run check:input && npm run check:parser && npm run check:deterministic",
     "check:ui": "tsx scripts/check-ui.mts"
   },
   "keywords": [],

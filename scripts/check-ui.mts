@@ -42,7 +42,8 @@ page.on("pageerror", (e) => pageErrors.push(e.message));
 
 await page.goto(BASE, { waitUntil: "domcontentloaded" });
 await page.fill('input[aria-label="Article title"]', `demo:${FIXTURE}`);
-await page.click("button:has-text('Compare')");
+// `demo:` skips the search-and-confirm flow and compares the fixture directly.
+await page.click("button:has-text('Search')");
 await page.waitForSelector("mark.claim", { timeout: 30000 });
 
 console.log(`\n${FIXTURE}`);
