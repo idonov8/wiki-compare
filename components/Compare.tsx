@@ -3,8 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Columns from "./Columns";
 import { comparePath } from "./Highlighted";
+import CreditBar from "./CreditBar";
 import DiffNav from "./DiffNav";
 import Loading from "./Loading";
+import PreviewGate from "./PreviewGate";
+import { initAnalytics, track } from "@/lib/analytics";
+import { formatCost } from "@/lib/pricing";
 import {
   CACHE_WINDOW_DAYS,
   LANGS,
@@ -14,6 +18,7 @@ import {
   type Claim,
   type ComparePayload,
   type Lang,
+  type MeResponse,
   type RecentArticle,
 } from "@/lib/types";
 
@@ -94,11 +99,27 @@ export default function Compare() {
   const [shown, setShown] = useState<Lang[]>([...LANGS]);
   const [card, setCard] = useState<CardState | null>(null);
   const [recent, setRecent] = useState<RecentArticle[]>([]);
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [funding, setFunding] = useState(false);
+  const [fundError, setFundError] = useState<string | null>(null);
 
   const reset = () => {
     setError(null);
     setCard(null);
+    setFundError(null);
   };
+
+  const refreshMe = useCallback(() => {
+    fetch("/api/me")
+      .then((res) => res.json())
+      .then((json) => setMe(json))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    initAnalytics();
+    refreshMe();
+  }, [refreshMe]);
 
   /** The querystring we last acted on, so a pushState of our own doesn't
    *  look like a navigation to re-apply. */
@@ -242,6 +263,60 @@ export default function Compare() {
   );
   const visible = shown.filter((l) => available.includes(l));
   const badged = !!data?.cache && data.cache.edited.length > 0;
+  const preview = data?.scope?.kind === "preview";
+
+  const goDonate = useCallback((from: string) => {
+    void track("gate_cta_clicked", { from });
+    window.location.href = `/donate?from=${encodeURIComponent(from)}`;
+  }, []);
+
+  /**
+   * Buy the rest of this article, or a re-read of one whose revisions have moved
+   * on. The reply is a whole comparison, so it simply replaces what is on screen
+   * — the gate disappears because the payload it was describing is gone, not
+   * because anything told it to.
+   */
+  const fund = useCallback(
+    async (kind: "full" | "refresh") => {
+      if (!target || funding) return;
+      setFunding(true);
+      setFundError(null);
+      void track(kind === "refresh" ? "stale_update_clicked" : "gate_cta_clicked", {
+        qid: data?.qid,
+        from: "fund",
+      });
+      try {
+        const res = await fetch("/api/compare", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title: target.title, lang: target.lang, kind }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? "That didn't work.");
+        setData(json as ComparePayload);
+        setArticles(json.articles ?? {});
+        refreshMe();
+      } catch (e) {
+        setFundError(e instanceof Error ? e.message : "That didn't work.");
+      } finally {
+        setFunding(false);
+      }
+    },
+    [target, funding, data?.qid, refreshMe],
+  );
+
+  // Fired off the payload rather than from `open`, because `open` does not know
+  // yet which of the three things it will turn out to be — cached, preview or a
+  // full run — and that distinction is the whole reason to count opens.
+  useEffect(() => {
+    if (!data) return;
+    void track("article_opened", {
+      qid: data.qid,
+      cached: data.fromCache,
+      scope: data.scope?.kind ?? "full",
+    });
+    if (data.scope?.kind === "preview") void track("preview_gate_shown", { qid: data.qid });
+  }, [data]);
 
   // A tooltip reached by keyboard needs a way out that isn't Tab. Blur alone
   // leaves someone who opened the card with focus no way to dismiss it in place.
@@ -306,6 +381,7 @@ export default function Compare() {
             {busy ? "Working…" : "Search"}
           </button>
         </div>
+        <CreditBar me={me} onDonate={() => goDonate("masthead")} />
       </header>
 
       {(comparing || phase === "done") && hasColumns && (
@@ -330,25 +406,48 @@ export default function Compare() {
           <div className="meta">
             {/* The badge says "cached" in its own right, so the cost note drops
                 the word rather than printing it twice in four words. */}
-            {data
-              ? `${data.qid} · ${data.claims.length} marked · ${
+            {/* The cost, not the token counts. What a reader can act on is what
+                this spent, and "14,203 in / 5,110 out" is not that — it is two
+                numbers nobody can price without a rate card. A cache hit says
+                free outright, because free is exactly what it was. */}
+            {data ? (
+              <span
+                title={
                   data.fromCache
-                    ? badged
-                      ? "0 tokens"
-                      : "cached, 0 tokens"
-                    : `${data.usage.inputTokens.toLocaleString()} in / ${data.usage.outputTokens.toLocaleString()} out`
-                }`
-              : "reading all three…"}
+                    ? "Served from the cache. No model ran."
+                    : `${data.usage.inputTokens.toLocaleString()} tokens in, ` +
+                      `${data.usage.outputTokens.toLocaleString()} out`
+                }
+              >
+                {data.qid} · {data.claims.length} marked ·{" "}
+                {data.fromCache
+                  ? badged
+                    ? "free"
+                    : "free — already processed"
+                  : preview
+                    ? `preview · ${formatCost(data.usage.costUsd ?? 0)}`
+                    : `~${formatCost(data.usage.costUsd ?? 0)}`}
+              </span>
+            ) : (
+              "reading all three…"
+            )}
             {/* Only when the cached answer and Wikipedia have actually diverged.
                 An exact-revision hit is cached too, but it describes the live
                 text, so badging it would cry wolf on the ordinary case. */}
             {badged && data?.cache && (
-              <span className="cached-badge" tabIndex={0} aria-describedby="cached-tip">
-                cached
-                <span className="cached-tip" id="cached-tip" role="tooltip">
-                  {cacheNote(data.cache)}
+              <>
+                <span className="cached-badge" tabIndex={0} aria-describedby="cached-tip">
+                  cached
+                  <span className="cached-tip" id="cached-tip" role="tooltip">
+                    {cacheNote(data.cache)}
+                  </span>
                 </span>
-              </span>
+                {/* The tooltip has promised an update since before one existed.
+                    This is that promise, next to the claim it makes. */}
+                <button className="signin" disabled={funding} onClick={() => fund("refresh")}>
+                  {funding ? "Re-reading…" : "Update this article"}
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -432,7 +531,10 @@ export default function Compare() {
         </div>
       )}
 
-      {hasColumns && (comparing || phase === "done") && (
+      {/* A funded comparison is one grid. A preview is three pieces: what was
+          read, the seam, and what wasn't — so the boundary lands as a single
+          rule across all three columns instead of three fades at three heights. */}
+      {hasColumns && (comparing || phase === "done") && !preview && (
         <Columns
           articles={articles}
           visible={visible}
@@ -443,6 +545,38 @@ export default function Compare() {
           onLeave={() => setCard(null)}
           onLink={navigate}
         />
+      )}
+
+      {hasColumns && phase === "done" && preview && data && (
+        <>
+          <Columns
+            articles={articles}
+            visible={visible}
+            claims={data.claims}
+            activeId={card?.claim.id ?? null}
+            processedThrough={data.scope?.processedThrough}
+            part="head"
+            onEnter={onEnter}
+            onLeave={() => setCard(null)}
+            onLink={navigate}
+          />
+          <PreviewGate
+            busy={funding}
+            signedIn={!!me}
+            creditCents={me?.creditCents ?? 0}
+            error={fundError}
+            onFund={() => fund("full")}
+            onDonate={() => goDonate("preview-gate")}
+          />
+          <Columns
+            articles={articles}
+            visible={visible}
+            claims={data.claims}
+            processedThrough={data.scope?.processedThrough}
+            part="tail"
+            onLink={navigate}
+          />
+        </>
       )}
 
       {comparing && <Loading title={target?.title ?? ""} />}

@@ -84,6 +84,39 @@ export interface CoverageGap {
   missingFrom: Lang[];
 }
 
+export interface TokenCount {
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+}
+
+/**
+ * What a run spent.
+ *
+ * The totals are what they always were. `byModel` is the addition that makes the
+ * figure priceable: heading alignment runs on Haiku and the claim diff on
+ * Sonnet, three times the price, so a summed total cannot be costed at either
+ * rate without being wrong in one direction. `costUsd` is computed once, at the
+ * end of the run that spent it, and stored — prices move, and a comparison from
+ * three weeks ago should keep reporting its own bill rather than being re-priced
+ * by today's table.
+ */
+export interface Usage extends TokenCount {
+  byModel?: Record<string, TokenCount>;
+  costUsd?: number;
+}
+
+/** How much of the article a comparison actually read. */
+export type ScopeKind = "preview" | "full";
+
+export interface ComparisonScope {
+  kind: ScopeKind;
+  /** Per language, the index into the body sections (the article's sections with
+   *  the key-facts block removed, as `Columns` renders them) of the first section
+   *  this comparison did not read. Absent on a full run. */
+  processedThrough?: Partial<Record<Lang, number>>;
+}
+
 export interface ComparisonResult {
   qid: string;
   articles: Record<string, ArticleSnapshot>;
@@ -92,7 +125,9 @@ export interface ComparisonResult {
   promptVersion: string;
   parserVersion?: string;
   computedAt: string;
-  usage: { inputTokens: number; outputTokens: number; cachedInputTokens: number };
+  usage: Usage;
+  /** Absent on rows written before previews existed; treat those as full. */
+  scope?: ComparisonScope;
   /** How many verbatim spans the model offered and how many were located. A low
    *  match rate means the prompt needs tightening, not the matcher loosening. */
   spans?: { offered: number; matched: number; droppedClaims: number };
@@ -112,6 +147,50 @@ export interface CacheInfo {
 export interface ComparePayload extends ComparisonResult {
   fromCache: boolean;
   cache?: CacheInfo;
+}
+
+/* ---- accounts and credits ---- */
+
+/**
+ * Who is reading, and what they have left to spend.
+ *
+ * Identity comes from Better Auth; the two credit figures are our columns on its
+ * user record. `articlesProcessed` and `readsOfThoseArticles` are the two numbers
+ * the credit bar thanks somebody with — what they paid for, and how many people
+ * have read it since, which is the part that makes the donation mean something.
+ */
+export interface MeResponse {
+  email: string;
+  creditCents: number;
+  /** The most this account has ever held, so the meter has a denominator. */
+  peakCreditCents: number;
+  articlesProcessed: number;
+  readsOfThoseArticles: number;
+}
+
+/** What the mock payment page submits. Amounts are whole cents. */
+export interface DonateRequest {
+  amountCents: number;
+  maintenanceCents: number;
+  monthly: boolean;
+  coupon?: string;
+  /** Which surface sent them here, for the funnel. */
+  from?: string;
+}
+
+/**
+ * The reveal.
+ *
+ * `granted` is false on every attempt after the first — the intent is still
+ * recorded, because people trying to pay is the number worth knowing, but the
+ * credit is not granted twice and the copy becomes a promise to come back to
+ * them rather than a refusal.
+ */
+export interface DonateResponse {
+  granted: boolean;
+  grantedCents: number;
+  creditCents: number;
+  message: string;
 }
 
 /** One row of the recently-cached list shown before any search. */
