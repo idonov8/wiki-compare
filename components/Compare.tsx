@@ -443,8 +443,14 @@ export default function Compare() {
                   </span>
                 </span>
                 {/* The tooltip has promised an update since before one existed.
-                    This is that promise, next to the claim it makes. */}
-                <button className="signin" disabled={funding} onClick={() => fund("refresh")}>
+                    This is that promise, next to the claim it makes. Signed out,
+                    it goes to the donate page rather than to a 401 — the button
+                    should never be a dead end for the reader who believed it. */}
+                <button
+                  className="signin"
+                  disabled={funding}
+                  onClick={() => (me ? fund("refresh") : goDonate("stale-badge"))}
+                >
                   {funding ? "Re-reading…" : "Update this article"}
                 </button>
               </>
