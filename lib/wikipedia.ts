@@ -1,5 +1,5 @@
 import { type HTMLElement, type Node, parse } from "node-html-parser";
-import type { ArticleSnapshot, Lang, Section } from "./types";
+import type { ArticleImage, ArticleSnapshot, Lang, LinkSpan, Section } from "./types";
 import { KEY_FACTS_HEADING, LANGS, LEAD_HEADING } from "./types";
 
 /**
@@ -11,7 +11,7 @@ import { KEY_FACTS_HEADING, LANGS, LEAD_HEADING } from "./types";
  * the stale snapshot keeps being served, and the fix appears not to work. Also
  * folded into the comparison key, since a comparison is downstream of a parse.
  */
-export const PARSER_VERSION = "v2";
+export const PARSER_VERSION = "v4";
 
 const UA = "wiki-compare/0.1 (https://github.com/)";
 const MAX_SECTION_CHARS = 4000;
@@ -150,6 +150,70 @@ function extractKeyFacts(root: HTMLElement): string {
   return [...new Set(lines)].join("\n");
 }
 
+/** Resolve the protocol-relative `//upload.wikimedia.org/…` srcs Wikipedia
+ *  emits, and the occasional site-relative one, to an absolute https URL. */
+function resolveSrc(src: string, lang: Lang): string | null {
+  if (!src) return null;
+  if (src.startsWith("//")) return `https:${src}`;
+  if (src.startsWith("http")) return src;
+  if (src.startsWith("/")) return `https://${lang}.wikipedia.org${src}`;
+  return null;
+}
+
+/** The highest-density URL a thumbnail offers, so it stays crisp when shown
+ *  larger than its 1x size. Falls back to `src`. */
+function bestSrc(img: HTMLElement): string {
+  const srcset = img.getAttribute("srcset");
+  if (srcset) {
+    const best = srcset
+      .split(",")
+      .map((entry) => {
+        const [url, density] = entry.trim().split(/\s+/);
+        return { url, density: parseFloat(density) || 1 };
+      })
+      .sort((a, b) => b.density - a.density)[0];
+    if (best?.url) return best.url;
+  }
+  return img.getAttribute("src") ?? "";
+}
+
+/**
+ * The article's lead photo, taken from the infobox (then any inline figure as a
+ * fallback). Read from the parsed tree before `stripChrome` discards figures.
+ *
+ * Icons — flags, pog markers, maintenance-template glyphs — are filtered by
+ * rendered width, and photographs (`.jpg`) are preferred over the logos and
+ * coats of arms an infobox also carries, so the picture shown is the one a
+ * reader would call the article's photo.
+ */
+export function extractLeadImage(html: string, lang: Lang): ArticleImage | undefined {
+  const root = parse(html);
+  const candidates = [
+    ...root.querySelectorAll("table.infobox img"),
+    ...root.querySelectorAll(".infobox-image img"),
+    ...root.querySelectorAll("figure img"),
+    ...root.querySelectorAll(".thumb img"),
+  ]
+    .map((img) => ({ img, width: Number(img.getAttribute("width")) || 0 }))
+    .filter(({ width }) => width >= 100);
+
+  candidates.sort((a, b) => rankPhoto(a.img) - rankPhoto(b.img));
+
+  for (const { img, width } of candidates) {
+    const src = resolveSrc(bestSrc(img), lang);
+    if (!src) continue;
+    return {
+      src,
+      alt: img.getAttribute("alt") || undefined,
+      width: width || undefined,
+      height: Number(img.getAttribute("height")) || undefined,
+    };
+  }
+  return undefined;
+}
+
+const rankPhoto = (img: HTMLElement) => (/\.jpe?g/i.test(img.getAttribute("src") ?? "") ? 0 : 1);
+
 /** Headings whose sections are navigation apparatus rather than article content.
  *  Filtering only the English names left the Hebrew and Arabic columns carrying
  *  reference and external-link sections the English column had already dropped,
@@ -211,6 +275,53 @@ export function toText(html: string): string {
     .trim();
 }
 
+/** The article title an anchor points at, or null if it isn't a plain
+ *  article-namespace link (red links, `File:`/`Category:`/… and external links
+ *  are dropped). Shared shape with `linkTitlesOf`. */
+function articleTitleFromHref(href: string, cls: string): string | null {
+  if (cls.split(/\s+/).includes("new")) return null;
+  const match = /^(?:\.\/|\/wiki\/)([^#?]+)/.exec(href);
+  if (!match) return null;
+  let title: string;
+  try {
+    title = decodeURIComponent(match[1]).replace(/_/g, " ");
+  } catch {
+    return null;
+  }
+  return !title || title.includes(":") ? null : title;
+}
+
+/**
+ * Locate each Wikipedia-internal link as a character range into `text` (the
+ * plain text `toText` produced for the same html), so the client can turn them
+ * into links to our own comparison of that article without re-parsing.
+ *
+ * ponytail: a forward-moving cursor binds each anchor to the first occurrence
+ * of its label at or after the previous one — document order, so it is right in
+ * practice. Ceiling: a link whose visible text repeats an earlier identical
+ * phrase on the way could bind to the wrong occurrence; upgrade by tracking
+ * offsets through `toText`'s normalisation instead of re-finding the label.
+ */
+function extractLinks(html: string, text: string): LinkSpan[] {
+  const root = parse(html);
+  const spans: LinkSpan[] = [];
+  let cursor = 0;
+  for (const anchor of root.querySelectorAll("a")) {
+    const title = articleTitleFromHref(
+      anchor.getAttribute("href") ?? "",
+      anchor.getAttribute("class") ?? "",
+    );
+    if (!title) continue;
+    const label = toText(anchor.innerHTML).replace(/\s+/g, " ").trim();
+    if (!label) continue;
+    const start = text.indexOf(label, cursor);
+    if (start === -1) continue; // dropped by MAX_SECTION_CHARS or reworded by normalisation
+    spans.push({ start, end: start + label.length, title });
+    cursor = start + label.length;
+  }
+  return spans;
+}
+
 export function splitSections(html: string): Section[] {
   const root = parse(html);
 
@@ -227,8 +338,11 @@ export function splitSections(html: string): Section[] {
   let buffer: string[] = [];
 
   const flush = () => {
-    const text = toText(buffer.join("")).slice(0, MAX_SECTION_CHARS);
-    if (text.length > 40 && !isBoilerplate(heading)) sections.push({ heading, level, text });
+    const html = buffer.join("");
+    const text = toText(html).slice(0, MAX_SECTION_CHARS);
+    if (text.length > 40 && !isBoilerplate(heading)) {
+      sections.push({ heading, level, text, links: extractLinks(html, text) });
+    }
     buffer = [];
   };
 
@@ -402,6 +516,7 @@ export function snapshotOf(lang: Lang, page: ParsedPage, linkQids: string[]): Ar
     revid: page.revid,
     url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, "_"))}`,
     sections: splitSections(page.text),
+    image: extractLeadImage(page.text, lang),
     linkQids,
   };
 }

@@ -25,10 +25,26 @@ export interface Claim {
   spans: Partial<Record<Lang, string>>;
 }
 
+/** A Wikipedia-internal link, as a character range into a section's `text`.
+ *  `title` is the linked article's title in that section's own language. */
+export interface LinkSpan {
+  start: number;
+  end: number;
+  title: string;
+}
+
 export interface Section {
   heading: string;
   level: number;
   text: string;
+  links?: LinkSpan[];
+}
+
+export interface ArticleImage {
+  src: string;
+  alt?: string;
+  width?: number;
+  height?: number;
 }
 
 export interface ArticleSnapshot {
@@ -37,6 +53,8 @@ export interface ArticleSnapshot {
   revid: number;
   url: string;
   sections: Section[];
+  /** The article's lead photo, pulled from the infobox, shown under the title. */
+  image?: ArticleImage;
   /** Wikidata QIDs of linked concepts, used for the zero-token coverage diff. */
   linkQids: string[];
 }
