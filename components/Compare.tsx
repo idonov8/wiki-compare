@@ -83,7 +83,7 @@ const CARD_CLEARANCE = 190;
 type Phase = "idle" | "results" | "comparing" | "done";
 
 export default function Compare() {
-  const [query, setQuery] = useState("Palestinian Legislative Council");
+  const [query, setQuery] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -292,7 +292,7 @@ export default function Compare() {
     <>
       <header className="masthead">
         <div className="wordmark">
-          wiki<span>-</span>compare
+          wiki<span>-</span>compare*
         </div>
         <div className="search">
           <input
@@ -362,19 +362,30 @@ export default function Compare() {
       )}
 
       {phase === "idle" && !error && (
-        <div className="state">
-          <h2>Three encyclopedias, one subject</h2>
-          <p>
-            Search for an article, or paste a Wikipedia URL, and pick which article you meant. The
-            English, Hebrew and Arabic versions appear side by side while they are compared, and
-            every place they contradict each other, cover something the others skip, or frame the
-            same fact differently is highlighted.
-          </p>
+        <div className={`state${recent.length > 0 ? " state-grid" : ""}`}>
+          <div className="state-intro">
+            <h2>Same Article, different language - different information.</h2>
+            <p>
+              Search for an article, or paste a Wikipedia URL. The different versions appear side by side and you'll get to see every place they contradict each other, cover something the others skip, or frame the
+              same fact differently. <b>You'd be surprised how often it happens.</b>
+            </p>
+            {/* The hand-picked suggestions are only worth the space while there
+                is no history to show beside the intro. */}
+            {recent.length === 0 && (
+              <p>
+                Try <code>Palestinian Legislative Council</code>, <code>Six-Day War</code> or{" "}
+                <code>Al-Aqsa Mosque</code>.
+              </p>
+            )}
+          </div>
           {/* Already-compared articles, carrying no heading of their own: the
               rows are self-evidently a list of articles, and the hand-picked
               suggestions are only worth the space while there is nothing here. */}
-          {recent.length > 0 ? (
-            <ul className="recent">
+          {recent.length > 0 && (
+            <div className="recent-container">
+              <h2>Recently cached articles:</h2>
+              <p>View them freely & quickly.</p>
+              <ul className="recent">
               {recent.map((item) => (
                 <li key={item.qid}>
                   <button
@@ -395,12 +406,8 @@ export default function Compare() {
                   </button>
                 </li>
               ))}
-            </ul>
-          ) : (
-            <p>
-              Try <code>Palestinian Legislative Council</code>, <code>Six-Day War</code> or{" "}
-              <code>Al-Aqsa Mosque</code>.
-            </p>
+              </ul>
+            </div>
           )}
         </div>
       )}
