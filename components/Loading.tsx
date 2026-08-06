@@ -175,7 +175,7 @@ export default function Loading({ title }: { title: string }) {
         </p>
         {elapsed > PATIENCE_MS && (
           <p className="waited">
-            All three articles are being processed.
+            All three articles are being processed. <br />
             Can you find the differences first?
           </p>
         )}

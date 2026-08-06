@@ -77,9 +77,10 @@ title ──▶ Wikidata QID ──▶ en/he/ar titles
              │
      ┌───────┴────────┐
      │ comparisons    │  key: qid:en{rev}.he{rev}.ar{rev}:promptVersion
-     │ cache hit?     │──▶ yes: return, zero tokens
-     └───────┬────────┘
-             │ no
+     │ cache hit?     │──▶ exact key:      return, zero tokens
+     │                │──▶ same subject,   return, zero tokens, flagged `cached`
+     └───────┬────────┘    revids moved,
+             │ no           under 3 days old
              ▼
         articles cache (key: lang+revid) ──▶ miss: parse + resolve link QIDs
              │
@@ -98,15 +99,31 @@ title ──▶ Wikidata QID ──▶ en/he/ar titles
 
 ### Why it stays cheap
 
-Wikipedia revision ids are immutable, so both caches are write-once and never expire. Keying
-article text on `revid` alone means an edit to the Hebrew page doesn't invalidate the English
-fetch. Keying the comparison on all three revids plus `PROMPT_VERSION` means a stable article
-costs zero tokens on every request after the first.
+Wikipedia revision ids are immutable, so both caches are write-once. Keying article text on
+`revid` alone means an edit to the Hebrew page doesn't invalidate the English fetch. Keying the
+comparison on all three revids plus `PROMPT_VERSION` means a stable article costs zero tokens on
+every request after the first.
 
 Article snapshots are additionally keyed on `PARSER_VERSION`. Only the *input* is immutable, not
 our reading of it: keyed on revision id alone, a parser fix stays invisible to every article
 already cached, because the revision hasn't changed. `?fresh=1` recomputes and overwrites one
 comparison, so iterating on the prompt never means deleting rows.
+
+Writes stay exact; reads are looser. Keying reads on revision ids too was correct and far too
+eager — a Wikipedia article of any prominence is edited several times a day, most of those edits
+touching a category or a citation, and every one of them missed the cache and bought three article
+fetches, a parse and a model run. So a stored comparison keeps answering for `CACHE_WINDOW_DAYS`
+(3) after the revisions it was computed from have moved on. Nothing is overwritten to make that
+work: the key still records exactly which revisions an answer describes, which is how a request
+reusing one across an edit knows it is serving something older than live and can say so, rather
+than presenting stale text as current. An exact key match is preferred whatever its age, and is
+never flagged — it is by definition a description of the live revisions.
+
+The window forgives revision ids and nothing else. A row computed under a different
+`PROMPT_VERSION` or `PARSER_VERSION` is never reused for revisions it wasn't keyed to: those two
+versions are the whole way the code says *our reading of this changed*, so letting them ride the
+window would make each prompt fix invisible for three days on exactly the busy articles it was
+written for.
 
 Before any model call, `lib/deterministic.ts` does the work that doesn't need one: linked-concept
 coverage is pure set arithmetic over Wikidata ids, and numeric divergence — with Arabic-Indic
@@ -160,6 +177,29 @@ is the first prose in each column, and each line is rendered as an infobox row �
 value — except a row that carries a difference, which stays one highlightable unit (a claim can
 span the label and the value, as the 2006 seat split does).
 
+Before any search, the landing page lists what is already cached, newest first and one row per
+subject — the cheapest articles in the system to open are the ones somebody already opened. A row
+goes straight to the comparison rather than through the picker above: the picker exists to settle
+which Wikidata item a typed phrase meant, and a cached row is already a settled one. It carries no
+heading of its own: ruled rows of article titles beside their language sets are legible as a
+history without being labelled one, and the hand-picked suggestions underneath it are only worth
+the space while the list is empty. Each row sets its own `dir`, so a Hebrew or Arabic title
+orders its characters correctly, but titles stay left-aligned regardless — the list is a
+left-to-right piece of interface whichever script a title happens to be in, and letting alignment
+resolve per row left the RTL titles floating mid-row while the English ones sat at the margin.
+`/api/recent` projects the titles and language sets out in SQL rather than in TypeScript, because
+`result` holds every article's full section text and selecting the column to pick two strings off
+it would pull megabytes over the wire to render a dozen rows. It also never fails the caller: an
+unreachable or absent database leaves the landing page one section shorter rather than showing an
+error for something nobody asked for.
+
+The `cached` badge on the meta line appears only when the served comparison and Wikipedia have
+actually diverged — an exact-revision hit is cached too, but it describes the live text, so
+badging it would cry wolf on the ordinary case. Hovering or focusing it names which languages were
+edited since, and when the answer expires. Its tooltip is plain CSS rather than the claim card's
+measured placement: there is one of these and it is anchored to the top of the page, so it never
+needs to dodge the viewport edge.
+
 The open article lives in the URL (`/?title=<title>&lang=<source>`), so a comparison is linkable
 and the browser's back button walks the history; `Compare` reads it on load and on `popstate` and
 pushes a new entry when a result is chosen or a link is followed. Wikipedia-internal links
@@ -174,6 +214,7 @@ can overlap without either being lost.
 
 ```
 app/api/compare/route.ts   orchestration and cache checks
+app/api/recent/route.ts    the recently cached list, for the landing page
 lib/wikipedia.ts           MediaWiki + Wikidata fetching, search, URL parsing, HTML → sections
 lib/articles.ts            sitelinks + revisions + cached snapshots, shared by both routes
 lib/ghost.ts               where the drifting marks go while a comparison runs

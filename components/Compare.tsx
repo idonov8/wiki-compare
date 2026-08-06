@@ -6,16 +6,44 @@ import { comparePath } from "./Highlighted";
 import DiffNav from "./DiffNav";
 import Loading from "./Loading";
 import {
+  CACHE_WINDOW_DAYS,
   LANGS,
   LANG_META,
   type ArticleSnapshot,
+  type CacheInfo,
   type Claim,
   type ComparePayload,
   type Lang,
+  type RecentArticle,
 } from "@/lib/types";
 
 const asLang = (value: string | null): Lang =>
   value && (LANGS as readonly string[]).includes(value) ? (value as Lang) : "en";
+
+const RELATIVE = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+/** "3 hours ago" / "in 2 days", at the coarsest unit that still says something. */
+function relative(iso: string): string {
+  const ms = new Date(iso).getTime() - Date.now();
+  const abs = Math.abs(ms);
+  const [unit, size]: [Intl.RelativeTimeFormatUnit, number] =
+    abs < 3_600_000 ? ["minute", 60_000] : abs < 86_400_000 ? ["hour", 3_600_000] : ["day", 86_400_000];
+  return RELATIVE.format(Math.round(ms / size), unit);
+}
+
+/** What the `cached` badge says on hover: which versions moved, and until when
+ *  this answer keeps being served in their place. */
+function cacheNote(cache: CacheInfo): string {
+  const names = cache.edited.map((l) => LANG_META[l].label);
+  const subject =
+    names.length === 1
+      ? `The ${names[0]} article has`
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} have`;
+  return (
+    `${subject} been edited on Wikipedia since this comparison was processed ${relative(cache.computedAt)}. ` +
+    `Donate to update this page.`
+  );
+}
 
 const KIND_LABEL: Record<Claim["type"], string> = {
   contradiction: "Contradiction",
@@ -65,6 +93,7 @@ export default function Compare() {
   const [data, setData] = useState<ComparePayload | null>(null);
   const [shown, setShown] = useState<Lang[]>([...LANGS]);
   const [card, setCard] = useState<CardState | null>(null);
+  const [recent, setRecent] = useState<RecentArticle[]>([]);
 
   const reset = () => {
     setError(null);
@@ -161,6 +190,21 @@ export default function Compare() {
     return () => window.removeEventListener("popstate", apply);
   }, []);
 
+  // Refreshed on every return to the landing state, so an article compared and
+  // then backed out of is at the top of the list waiting. Reading the URL rather
+  // than trusting the phase alone keeps a deep link from spending a request on a
+  // list it will never show: `idle` is also the phase of the first render before
+  // the effect above has opened the article named in the querystring.
+  useEffect(() => {
+    if (phase !== "idle" || new URLSearchParams(window.location.search).get("title")) return;
+    const abort = new AbortController();
+    fetch("/api/recent", { signal: abort.signal })
+      .then((res) => res.json())
+      .then((json) => setRecent(json.items ?? []))
+      .catch(() => {});
+    return () => abort.abort();
+  }, [phase]);
+
   const search = useCallback(async () => {
     const q = query.trim();
     if (!q) return;
@@ -197,6 +241,7 @@ export default function Compare() {
     [articles],
   );
   const visible = shown.filter((l) => available.includes(l));
+  const badged = !!data?.cache && data.cache.edited.length > 0;
 
   // A tooltip reached by keyboard needs a way out that isn't Tab. Blur alone
   // leaves someone who opened the card with focus no way to dismiss it in place.
@@ -283,13 +328,28 @@ export default function Compare() {
             <span><i className="swatch framing" /> different framing</span>
           </div>
           <div className="meta">
+            {/* The badge says "cached" in its own right, so the cost note drops
+                the word rather than printing it twice in four words. */}
             {data
               ? `${data.qid} · ${data.claims.length} marked · ${
                   data.fromCache
-                    ? "cached, 0 tokens"
+                    ? badged
+                      ? "0 tokens"
+                      : "cached, 0 tokens"
                     : `${data.usage.inputTokens.toLocaleString()} in / ${data.usage.outputTokens.toLocaleString()} out`
                 }`
               : "reading all three…"}
+            {/* Only when the cached answer and Wikipedia have actually diverged.
+                An exact-revision hit is cached too, but it describes the live
+                text, so badging it would cry wolf on the ordinary case. */}
+            {badged && data?.cache && (
+              <span className="cached-badge" tabIndex={0} aria-describedby="cached-tip">
+                cached
+                <span className="cached-tip" id="cached-tip" role="tooltip">
+                  {cacheNote(data.cache)}
+                </span>
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -310,10 +370,38 @@ export default function Compare() {
             every place they contradict each other, cover something the others skip, or frame the
             same fact differently is highlighted.
           </p>
-          <p>
-            Try <code>Palestinian Legislative Council</code>, <code>Six-Day War</code> or{" "}
-            <code>Al-Aqsa Mosque</code>.
-          </p>
+          {/* Already-compared articles, carrying no heading of their own: the
+              rows are self-evidently a list of articles, and the hand-picked
+              suggestions are only worth the space while there is nothing here. */}
+          {recent.length > 0 ? (
+            <ul className="recent">
+              {recent.map((item) => (
+                <li key={item.qid}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(item.title, item.lang)}
+                    aria-label={`Compare ${item.title}, cached ${relative(item.computedAt)}`}
+                  >
+                    <span
+                      className="recent-title"
+                      dir={LANG_META[item.lang].dir}
+                      lang={item.lang}
+                    >
+                      {item.title}
+                    </span>
+                    <span className="recent-langs">
+                      {item.langs.map((l) => l.toUpperCase()).join(" · ")}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>
+              Try <code>Palestinian Legislative Council</code>, <code>Six-Day War</code> or{" "}
+              <code>Al-Aqsa Mosque</code>.
+            </p>
+          )}
         </div>
       )}
 
