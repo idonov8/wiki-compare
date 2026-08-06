@@ -42,18 +42,21 @@ Variables, and run `npm run db:init` once locally against the same database.
 ## Picking the article first
 
 A comparison costs tokens and about a minute, and all of it is wasted if the subject was wrong —
-"Coffee" the drink, the film and the town are three different Wikidata items. So nothing expensive
-runs until the reader has confirmed which article they meant:
+"Coffee" the drink, the film and the town are three different Wikidata items. So the subject is
+picked from search results rather than guessed from the box, and the choice starts everything at
+once:
 
 ```
 query ──▶ /api/search   pasted URL? one exact hit. otherwise search results with descriptions
    │                    (searched in the script's own edition: Hebrew query → he.wikipedia)
    ▼
-choice ─▶ /api/articles resolve sitelinks, pull all three, render them side by side
-   │                    no model, no tokens — and it warms the cache the comparison reads
-   ▼
-confirm ▶ /api/compare  the run below
+choice ─┬▶ /api/articles  sitelinks + all three revisions. ~1s, no model, no tokens
+        │                 → the columns, on screen while the rest runs
+        └▶ /api/compare   the run below. reads the cache the request above just warmed
 ```
+
+The two requests are fired together and the article is what fills the wait: the reader sees the
+page they picked seconds in, rather than confirming it in a dialogue first.
 
 Any Wikipedia edition can be pasted, not only the three compared: the QID lookup only needs one
 wiki that has the page, so the French URL of an article is a valid way in.
@@ -159,9 +162,7 @@ span the label and the value, as the 2006 seat split does).
 
 The open article lives in the URL (`/?title=<title>&lang=<source>`), so a comparison is linkable
 and the browser's back button walks the history; `Compare` reads it on load and on `popstate` and
-pushes a new entry when a result is chosen or a link is followed. That URL opens the preview, and
-confirming adds `&compare=1` in place (a shared link to a finished comparison doesn't ask for the
-subject to be confirmed a second time; a link to an article does). Wikipedia-internal links
+pushes a new entry when a result is chosen or a link is followed. Wikipedia-internal links
 survive parsing as character ranges into each section's text (`extractLinks`, located by finding
 each anchor's visible label in the already-normalised text) and are re-pointed at our own
 comparison of the linked article, in that column's language — so following one from the Arabic
@@ -180,12 +181,12 @@ lib/deterministic.ts       zero-token coverage diff and section screening
 lib/compare.ts             heading alignment + claim diff
 lib/db.ts                  Neon cache layer
 db/schema.sql              three tables: articles, comparisons, labels
-components/Compare.tsx     search → choose → confirm → compare, toggles, hover card
+components/Compare.tsx     search → choose → compare, toggles, hover card
 components/Columns.tsx     the articles side by side, with or without a comparison
 components/Highlighted.tsx span location and marking
 components/DiffNav.tsx     right-edge rail + jump-to-difference controls
 app/api/search/route.ts    candidate articles for a query, or a pasted URL
-app/api/articles/route.ts  the articles alone, for the preview
+app/api/articles/route.ts  the articles alone, ahead of the comparison
 fixtures/                  recorded API responses + loader
 scripts/                   fixture recorder and the check suites
 ```
@@ -206,7 +207,7 @@ Palestinian Legislative Council case with known answers, Coffee as a low-stakes 
 Hadag Nahash (en+he) and Tamer Hosny (ar+en) for the two-language path.
 
 In development, searching for `demo:<fixture-slug>` (or `?title=demo:<slug>` on either route)
-renders a recorded fixture through the real components, skipping search and confirmation, without
+renders a recorded fixture through the real components, skipping search, without
 a model call or a database — useful for working on the rendering layer. Its
 claims are located in the real text so the spans are exact, but they are hand-written, not model
 output. The route is inert in production.

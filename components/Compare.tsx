@@ -45,13 +45,14 @@ const CARD_MARGIN = 8;
 const CARD_CLEARANCE = 190;
 
 /**
- * The flow, and why it has this many steps: a comparison costs tokens and about
- * a minute, and every second of it is wasted if the subject was wrong. So the
- * article is chosen from search results, then read in full, and only then
- * compared — the reader confirms the right page by looking at it, not by
- * trusting a title match.
+ * A comparison costs tokens and about a minute, and every second of it is
+ * wasted if the subject was wrong — so the article is chosen from search
+ * results rather than guessed from the box. The choice starts the comparison
+ * immediately, and the article itself is what fills the wait: it is fetched in
+ * parallel and on screen within a second, so the reader can see they picked the
+ * right page while the model is still reading it.
  */
-type Phase = "idle" | "results" | "preview" | "comparing" | "done";
+type Phase = "idle" | "results" | "comparing" | "done";
 
 export default function Compare() {
   const [query, setQuery] = useState("Palestinian Legislative Council");
@@ -74,65 +75,58 @@ export default function Compare() {
    *  look like a navigation to re-apply. */
   const appliedUrl = useRef<string | null>(null);
 
-  const runComparison = useCallback(async (hit: Hit) => {
-    reset();
-    setTarget(hit);
-    setPhase("comparing");
-    // Same article, now compared: replace rather than push, so Back leaves the
-    // subject instead of stepping into its own preview.
-    window.history.replaceState(null, "", comparePath(hit.title, hit.lang, true));
-    appliedUrl.current = window.location.search;
-    setBusy(true);
-    try {
-      const res = await fetch(
-        `/api/compare?title=${encodeURIComponent(hit.title)}&lang=${encodeURIComponent(hit.lang)}`,
-      );
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Comparison failed.");
-      setData(json as ComparePayload);
-      setArticles(json.articles ?? {});
-      setShown(LANGS.filter((l) => json.articles?.[l]));
-      setPhase("done");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Comparison failed.");
-      setPhase(Object.keys(articles).length ? "preview" : "idle");
-    } finally {
-      setBusy(false);
-    }
-  }, [articles]);
-
-  /** Pull the chosen article in every language it exists in. No model, no
-   *  tokens — and it warms the cache the comparison then reads. */
-  const choose = useCallback(async (hit: Hit) => {
+  /**
+   * Open an article: the comparison and the articles alone are requested at the
+   * same time. `/api/articles` answers in about a second and fills the columns;
+   * `/api/compare` takes a minute and only adds the marks — and it reads the
+   * same cache the first request just warmed, so the pair costs one fetch.
+   */
+  const open = useCallback(async (hit: Hit) => {
     reset();
     setTarget(hit);
     setArticles({});
     setData(null);
-    setPhase("preview");
-    setBusy(true);
+    setPhase("comparing");
+
+    const compare = fetch(
+      `/api/compare?title=${encodeURIComponent(hit.title)}&lang=${encodeURIComponent(hit.lang)}`,
+    ).then(async (res) => {
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Comparison failed.");
+      return json as ComparePayload;
+    });
+    compare.catch(() => {}); // handled below; this only keeps an early reject quiet
+
     try {
       const res = await fetch(
         `/api/articles?title=${encodeURIComponent(hit.title)}&lang=${encodeURIComponent(hit.lang)}`,
       );
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Could not load the articles.");
+      if (res.ok) {
+        setArticles(json.articles ?? {});
+        setShown(LANGS.filter((l) => json.articles?.[l]));
+      }
+      // A failure here isn't fatal: the comparison returns the articles too, and
+      // its own error is the one worth showing.
+    } catch {}
+
+    try {
+      const json = await compare;
+      setData(json);
       setArticles(json.articles ?? {});
       setShown(LANGS.filter((l) => json.articles?.[l]));
+      setPhase("done");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load the articles.");
+      setError(e instanceof Error ? e.message : "Comparison failed.");
       setPhase(hits.length ? "results" : "idle");
-    } finally {
-      setBusy(false);
     }
   }, [hits.length]);
 
-  // The open article lives in the URL, so a preview or a comparison is linkable
-  // and the back button works. Refs keep the popstate listener from being torn
-  // down and re-run — re-running it would refetch the article on every change.
-  const chooseRef = useRef(choose);
-  const compareRef = useRef(runComparison);
-  chooseRef.current = choose;
-  compareRef.current = runComparison;
+  // The open article lives in the URL, so a comparison is linkable and the back
+  // button works. A ref keeps the popstate listener from being torn down and
+  // re-run — re-running it would refetch the article on every state change.
+  const openRef = useRef(open);
+  openRef.current = open;
 
   const navigate = useCallback((title: string, lang: string) => {
     const t = title.trim();
@@ -142,7 +136,7 @@ export default function Compare() {
     window.history.pushState(null, "", comparePath(t, lang));
     appliedUrl.current = window.location.search;
     window.scrollTo({ top: 0 });
-    void chooseRef.current({ lang, title: t, url: "" });
+    void openRef.current({ lang, title: t, url: "" });
   }, []);
 
   useEffect(() => {
@@ -160,14 +154,7 @@ export default function Compare() {
       }
       setQuery(title);
       setHits([]);
-      const hit = { lang: asLang(params.get("lang")), title, url: "" };
-      // A shared link to a finished comparison shouldn't ask for the article to
-      // be confirmed again; a bare title opens the preview.
-      if (params.get("compare") === "1" || title.startsWith("demo:")) {
-        void compareRef.current(hit);
-      } else {
-        void chooseRef.current(hit);
-      }
+      void openRef.current({ lang: asLang(params.get("lang")), title, url: "" });
     };
     apply();
     window.addEventListener("popstate", apply);
@@ -179,12 +166,9 @@ export default function Compare() {
     if (!q) return;
 
     // The fixture route is a rendering harness, not a subject: it has no search
-    // results and nothing to confirm, so it goes straight to the comparison.
+    // results to pick from, so it is opened directly.
     if (q.startsWith("demo:")) {
-      const hit = { lang: "en", title: q, url: "" };
-      setTarget(hit);
-      setArticles({});
-      void runComparison(hit);
+      navigate(q, "en");
       return;
     }
 
@@ -206,14 +190,13 @@ export default function Compare() {
     } finally {
       setBusy(false);
     }
-  }, [query, navigate, runComparison]);
+  }, [query, navigate]);
 
   const available = useMemo(
     () => LANGS.filter((l) => articles[l]),
     [articles],
   );
   const visible = shown.filter((l) => available.includes(l));
-  const missing = LANGS.filter((l) => !available.includes(l));
 
   // A tooltip reached by keyboard needs a way out that isn't Tab. Blur alone
   // leaves someone who opened the card with focus no way to dismiss it in place.
@@ -280,7 +263,7 @@ export default function Compare() {
         </div>
       </header>
 
-      {(phase === "preview" || comparing || phase === "done") && hasColumns && (
+      {(comparing || phase === "done") && hasColumns && (
         <div className="controls">
           <div className="toggles">
             {available.map((lang) => (
@@ -306,7 +289,7 @@ export default function Compare() {
                     ? "cached, 0 tokens"
                     : `${data.usage.inputTokens.toLocaleString()} in / ${data.usage.outputTokens.toLocaleString()} out`
                 }`
-              : "not compared yet"}
+              : "reading all three…"}
           </div>
         </div>
       )}
@@ -322,10 +305,10 @@ export default function Compare() {
         <div className="state">
           <h2>Three encyclopedias, one subject</h2>
           <p>
-            Search for an article, or paste a Wikipedia URL. You pick which article you meant and
-            read it first; then the English, Hebrew and Arabic versions are compared, and every
-            place they contradict each other, cover something the others skip, or frame the same
-            fact differently is highlighted.
+            Search for an article, or paste a Wikipedia URL, and pick which article you meant. The
+            English, Hebrew and Arabic versions appear side by side while they are compared, and
+            every place they contradict each other, cover something the others skip, or frame the
+            same fact differently is highlighted.
           </p>
           <p>
             Try <code>Palestinian Legislative Council</code>, <code>Six-Day War</code> or{" "}
@@ -361,38 +344,7 @@ export default function Compare() {
         </div>
       )}
 
-      {phase === "preview" && (
-        <div className="confirm">
-          <div className="confirm-text">
-            <h2>{target?.title}</h2>
-            <p>
-              {busy
-                ? "Loading the article in each language…"
-                : `Found in ${available.map((l) => LANG_META[l].label).join(", ")}${
-                    missing.length
-                      ? ` — no ${missing.map((l) => LANG_META[l].label).join(" or ")} version`
-                      : ""
-                  }. Read it below, and compare when it's the right one.`}
-            </p>
-          </div>
-          <div className="confirm-actions">
-            {hits.length > 1 && (
-              <button className="ghost-button" onClick={() => setPhase("results")}>
-                Not this one
-              </button>
-            )}
-            <button
-              className="primary-button"
-              onClick={() => target && runComparison(target)}
-              disabled={busy || !hasColumns}
-            >
-              Compare these
-            </button>
-          </div>
-        </div>
-      )}
-
-      {hasColumns && (phase === "preview" || comparing || phase === "done") && (
+      {hasColumns && (comparing || phase === "done") && (
         <Columns
           articles={articles}
           visible={visible}
