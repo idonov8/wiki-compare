@@ -150,7 +150,9 @@ button {
 .column {
   min-width: 0;
   padding: 22px 26px 80px;
-  border-inline-start: 1px solid var(--rule);
+  /* Physical, not inline: columns always sit en|he|ar left-to-right regardless
+     of each column's own direction, so the seam belongs between every pair. */
+  border-left: 1px solid var(--rule);
 }
 
 /* The article title, styled like the page heading on Wikipedia itself. */
@@ -165,7 +167,7 @@ button {
   color: var(--wiki-text);
 }
 
-.column:first-child { border-inline-start: none; }
+.column:first-child { border-left: none; }
 
 /* The signature: the seam between columns marks where reading direction flips.
    The glyph sits at the top of the boundary and points the way that column runs. */
@@ -724,5 +726,5 @@ mark.claim.diff-flash { animation: diff-flash 1.3s ease-out; }
 
 @media (max-width: 860px) {
   .columns { display: block; }
-  .column { border-inline-start: none; border-top: 1px solid var(--rule); }
+  .column { border-left: none; border-top: 1px solid var(--rule); }
 }
