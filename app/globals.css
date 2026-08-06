@@ -506,6 +506,19 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
   color: var(--ink-soft);
 }
 
+/* Two-up landing layout: the intro sits beside the recently-cached list rather
+   than above it, so a returning reader sees their history without scrolling
+   past the pitch. Narrow viewports fall back to the original single column. */
+.state-grid {
+  max-width: 1120px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 64px;
+  align-items: start;
+}
+
+.state-intro { min-width: 0; }
+
 .state h2 {
   font-family: var(--display);
   font-size: 27px;
@@ -933,4 +946,13 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
 @media (max-width: 860px) {
   .columns { display: block; }
   .column { border-left: none; border-top: 1px solid var(--rule); }
+}
+
+/* Landing grid collapses to the original single column on narrow screens. */
+@media (max-width: 860px) {
+  .state-grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+    max-width: 58ch;
+  }
 }
