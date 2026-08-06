@@ -5,18 +5,47 @@ import Highlighted, { comparePath } from "./Highlighted";
 import DiffNav from "./DiffNav";
 import Loading from "./Loading";
 import {
+  CACHE_WINDOW_DAYS,
   KEY_FACTS_HEADING,
   LANGS,
   LANG_META,
   LEAD_HEADING,
+  type CacheInfo,
   type Claim,
   type ComparePayload,
   type Lang,
   type LinkSpan,
+  type RecentArticle,
 } from "@/lib/types";
 
 const asLang = (value: string | null): Lang =>
   value && (LANGS as readonly string[]).includes(value) ? (value as Lang) : "en";
+
+const RELATIVE = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+/** "3 hours ago" / "in 2 days", at the coarsest unit that still says something. */
+function relative(iso: string): string {
+  const ms = new Date(iso).getTime() - Date.now();
+  const abs = Math.abs(ms);
+  const [unit, size]: [Intl.RelativeTimeFormatUnit, number] =
+    abs < 3_600_000 ? ["minute", 60_000] : abs < 86_400_000 ? ["hour", 3_600_000] : ["day", 86_400_000];
+  return RELATIVE.format(Math.round(ms / size), unit);
+}
+
+/** What the `cached` badge says on hover: which versions moved, and until when
+ *  this answer keeps being served in their place. */
+function cacheNote(cache: CacheInfo): string {
+  const names = cache.edited.map((l) => LANG_META[l].label);
+  const subject =
+    names.length === 1
+      ? `The ${names[0]} article has`
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} have`;
+  return (
+    `${subject} been edited on Wikipedia since this comparison was computed ${relative(cache.computedAt)}. ` +
+    `A comparison is reused for ${CACHE_WINDOW_DAYS} days, so these columns show the cached text rather ` +
+    `than what is live now. Recomputed on the first request ${relative(cache.expiresAt)}.`
+  );
+}
 
 const KIND_LABEL: Record<Claim["type"], string> = {
   contradiction: "Contradiction",
@@ -48,6 +77,7 @@ export default function Compare() {
   const [pending, setPending] = useState("");
   const [shown, setShown] = useState<Lang[]>([...LANGS]);
   const [card, setCard] = useState<CardState | null>(null);
+  const [recent, setRecent] = useState<RecentArticle[]>([]);
 
   const load = useCallback(async (raw: string, sourceLang: Lang = "en") => {
     const title = raw.trim();
@@ -103,8 +133,25 @@ export default function Compare() {
     return () => window.removeEventListener("popstate", apply);
   }, [load]);
 
+  // Refreshed on every return to the empty state, so an article compared and
+  // then backed out of is at the top of the list waiting. Reading the URL rather
+  // than trusting `idle` alone keeps a deep link from spending a request on a
+  // list it will never show: on that first render nothing has loaded yet, so the
+  // state is indistinguishable from an ordinary cold landing.
+  const idle = !data && !error && !loading;
+  useEffect(() => {
+    if (!idle || new URLSearchParams(window.location.search).get("title")) return;
+    const abort = new AbortController();
+    fetch("/api/recent", { signal: abort.signal })
+      .then((res) => res.json())
+      .then((json) => setRecent(json.items ?? []))
+      .catch(() => {});
+    return () => abort.abort();
+  }, [idle]);
+
   const available = useMemo(() => LANGS.filter((l) => data?.articles?.[l]), [data]);
   const visible = shown.filter((l) => available.includes(l));
+  const badged = !!data?.cache && data.cache.edited.length > 0;
 
   // A tooltip reached by keyboard needs a way out that isn't Tab. Blur alone
   // leaves someone who opened the card with focus no way to dismiss it in place.
@@ -189,9 +236,24 @@ export default function Compare() {
           </div>
           <div className="meta">
             {data.qid} · {data.claims.length} marked ·{" "}
+            {/* The badge says "cached" in its own right, so the cost note drops
+                the word rather than printing it twice in four words. */}
             {data.fromCache
-              ? "cached, 0 tokens"
+              ? badged
+                ? "0 tokens"
+                : "cached, 0 tokens"
               : `${data.usage.inputTokens.toLocaleString()} in / ${data.usage.outputTokens.toLocaleString()} out`}
+            {/* Only when the cached answer and Wikipedia have actually diverged.
+                An exact-revision hit is cached too, but it describes the live
+                text, so badging it would cry wolf on the ordinary case. */}
+            {badged && data.cache && (
+              <span className="cached-badge" tabIndex={0} aria-describedby="cached-tip">
+                cached
+                <span className="cached-tip" id="cached-tip" role="tooltip">
+                  {cacheNote(data.cache)}
+                </span>
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -205,7 +267,7 @@ export default function Compare() {
         </div>
       )}
 
-      {!data && !error && !loading && (
+      {idle && (
         <div className="state">
           <h2>Three encyclopedias, one subject</h2>
           <p>
@@ -213,10 +275,38 @@ export default function Compare() {
             every place they contradict each other, cover something the others skip, or frame the
             same fact differently is highlighted. Hover a highlight to see what the difference is.
           </p>
-          <p>
-            Try <code>Palestinian Legislative Council</code>, <code>Six-Day War</code> or{" "}
-            <code>Al-Aqsa Mosque</code>.
-          </p>
+          {/* Already-compared articles, carrying no heading of their own: the
+              rows are self-evidently a list of articles, and the hand-picked
+              suggestions are only worth the space while there is nothing here. */}
+          {recent.length > 0 ? (
+            <ul className="recent">
+              {recent.map((item) => (
+                <li key={item.qid}>
+                  <button
+                    type="button"
+                    onClick={() => navigate(item.title, item.lang)}
+                    aria-label={`Compare ${item.title}, cached ${relative(item.computedAt)}`}
+                  >
+                    <span
+                      className="recent-title"
+                      dir={LANG_META[item.lang].dir}
+                      lang={item.lang}
+                    >
+                      {item.title}
+                    </span>
+                    <span className="recent-langs">
+                      {item.langs.map((l) => l.toUpperCase()).join(" · ")}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>
+              Try <code>Palestinian Legislative Council</code>, <code>Six-Day War</code> or{" "}
+              <code>Al-Aqsa Mosque</code>.
+            </p>
+          )}
         </div>
       )}
 
