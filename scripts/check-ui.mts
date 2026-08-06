@@ -147,10 +147,19 @@ check(!!(await page.$(".cached-badge")), "a cached comparison served past an edi
     box: el.getBoundingClientRect().toJSON(),
   }));
   check(open.visible, "hovering the badge opens the tooltip");
+  // The copy used to state how long the answer keeps being served; it now
+  // offers to replace it instead, which is the more useful thing to say once
+  // there is a control that actually does it. Assert what it promises now, and
+  // that the promise is reachable — a tooltip offering an update beside no way
+  // to update is the failure worth catching here.
   check(
-    /Hebrew and Arabic have been edited/.test(open.text) && /reused for 3 days/.test(open.text),
-    "the tooltip names what changed and how long the cache holds",
+    /Hebrew and Arabic have been edited/.test(open.text) && /Donate to update/.test(open.text),
+    "the tooltip names what changed and offers to update it",
     open.text.slice(0, 120),
+  );
+  check(
+    !!(await page.$('.meta button:has-text("Update this article")')),
+    "the offer to update has a control beside it",
   );
   const vp = page.viewportSize()!;
   check(
