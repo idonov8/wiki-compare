@@ -39,6 +39,34 @@ ever read server-side in `lib/compare.ts` and never reaches the browser.
 Deploying to Vercel: import the repo, set both variables in Project Settings → Environment
 Variables, and run `npm run db:init` once locally against the same database.
 
+## Picking the article first
+
+A comparison costs tokens and about a minute, and all of it is wasted if the subject was wrong —
+"Coffee" the drink, the film and the town are three different Wikidata items. So the subject is
+picked from search results rather than guessed from the box, and the choice starts everything at
+once:
+
+```
+query ──▶ /api/search   pasted URL? one exact hit. otherwise search results with descriptions
+   │                    (searched in the script's own edition: Hebrew query → he.wikipedia)
+   ▼
+choice ─┬▶ /api/articles  sitelinks + all three revisions. ~1s, no model, no tokens
+        │                 → the columns, on screen while the rest runs
+        └▶ /api/compare   the run below. reads the cache the request above just warmed
+```
+
+The two requests are fired together and the article is what fills the wait: the reader sees the
+page they picked seconds in, rather than confirming it in a dialogue first.
+
+Any Wikipedia edition can be pasted, not only the three compared: the QID lookup only needs one
+wiki that has the page, so the French URL of an article is a valid way in.
+
+The articles stay on screen for the whole comparison — the wait is spent reading the article rather
+than a spinner. Arbitrary phrases in it drift in and out in the three difference colours while the
+model reads: they say the text is being worked over, and are distinguishable from findings by having
+no rule under the band, no hover card and no tick on the rail. The globe sits in a small panel at
+the bottom centre with its stage text below it, click-through, so it never covers the columns.
+
 ## How a request works
 
 ```
@@ -150,10 +178,12 @@ value — except a row that carries a difference, which stays one highlightable 
 span the label and the value, as the 2006 seat split does).
 
 Before any search, the landing page lists what is already cached, newest first and one row per
-subject — the cheapest articles in the system to open are the ones somebody already opened. It
-carries no heading of its own: ruled rows of article titles beside their language sets are legible
-as a history without being labelled one, and the hand-picked suggestions underneath it are only
-worth the space while the list is empty. Each row sets its own `dir`, so a Hebrew or Arabic title
+subject — the cheapest articles in the system to open are the ones somebody already opened. A row
+goes straight to the comparison rather than through the picker above: the picker exists to settle
+which Wikidata item a typed phrase meant, and a cached row is already a settled one. It carries no
+heading of its own: ruled rows of article titles beside their language sets are legible as a
+history without being labelled one, and the hand-picked suggestions underneath it are only worth
+the space while the list is empty. Each row sets its own `dir`, so a Hebrew or Arabic title
 orders its characters correctly, but titles stay left-aligned regardless — the list is a
 left-to-right piece of interface whichever script a title happens to be in, and letting alignment
 resolve per row left the RTL titles floating mid-row while the English ones sat at the margin.
@@ -172,7 +202,7 @@ needs to dodge the viewport edge.
 
 The open article lives in the URL (`/?title=<title>&lang=<source>`), so a comparison is linkable
 and the browser's back button walks the history; `Compare` reads it on load and on `popstate` and
-pushes a new entry when the box is submitted or a link is followed. Wikipedia-internal links
+pushes a new entry when a result is chosen or a link is followed. Wikipedia-internal links
 survive parsing as character ranges into each section's text (`extractLinks`, located by finding
 each anchor's visible label in the already-normalised text) and are re-pointed at our own
 comparison of the linked article, in that column's language — so following one from the Arabic
@@ -185,14 +215,19 @@ can overlap without either being lost.
 ```
 app/api/compare/route.ts   orchestration and cache checks
 app/api/recent/route.ts    the recently cached list, for the landing page
-lib/wikipedia.ts           MediaWiki + Wikidata fetching, HTML → sections
+lib/wikipedia.ts           MediaWiki + Wikidata fetching, search, URL parsing, HTML → sections
+lib/articles.ts            sitelinks + revisions + cached snapshots, shared by both routes
+lib/ghost.ts               where the drifting marks go while a comparison runs
 lib/deterministic.ts       zero-token coverage diff and section screening
 lib/compare.ts             heading alignment + claim diff
 lib/db.ts                  Neon cache layer
 db/schema.sql              three tables: articles, comparisons, labels
-components/Compare.tsx     columns, toggles, hover card
+components/Compare.tsx     search → choose → compare, toggles, hover card
+components/Columns.tsx     the articles side by side, with or without a comparison
 components/Highlighted.tsx span location and marking
-components/DiffNav.tsx      right-edge rail + jump-to-difference controls
+components/DiffNav.tsx     right-edge rail + jump-to-difference controls
+app/api/search/route.ts    candidate articles for a query, or a pasted URL
+app/api/articles/route.ts  the articles alone, ahead of the comparison
 fixtures/                  recorded API responses + loader
 scripts/                   fixture recorder and the check suites
 ```
@@ -200,7 +235,8 @@ scripts/                   fixture recorder and the check suites
 ## Testing
 
 ```bash
-npm run check              # parser + deterministic, no network, no model, no database
+npm run check              # input + parser + deterministic, no model, no database
+npm run check:input        # URL parsing, search language, drifting-mark placement (no network)
 npm run check:ui           # rendering, needs `npm run dev` in another shell
 npm run fixtures:save "Article title"   # record a new fixture
 npm run fixtures:refresh                # re-record the existing ones
@@ -211,8 +247,9 @@ worth testing, so a fixture holding its output would assert nothing. Four are re
 Palestinian Legislative Council case with known answers, Coffee as a low-stakes control, and
 Hadag Nahash (en+he) and Tamer Hosny (ar+en) for the two-language path.
 
-In development, `?title=demo:<fixture-slug>` renders a recorded fixture through the real
-components without a model call or a database — useful for working on the rendering layer. Its
+In development, searching for `demo:<fixture-slug>` (or `?title=demo:<slug>` on either route)
+renders a recorded fixture through the real components, skipping search, without
+a model call or a database — useful for working on the rendering layer. Its
 claims are located in the real text so the spans are exact, but they are hand-written, not model
 output. The route is inert in production.
 
