@@ -13,7 +13,21 @@ import { KEY_FACTS_HEADING, LANGS, LEAD_HEADING } from "./types";
  */
 export const PARSER_VERSION = "v4";
 
-const UA = "wiki-compare/0.1 (https://github.com/)";
+/**
+ * Wikimedia's rate limits are tiered by how well a client identifies itself: a
+ * request carrying nothing but an IP gets 10/min, one with a policy-compliant
+ * User-Agent gets 200/min. A cold comparison costs upwards of fifty requests, so
+ * the low tier fails outright — and because that tier is keyed on IP, it is
+ * shared with every other unidentified client on the same egress, which is why
+ * the resulting 429s look intermittent rather than constant.
+ *
+ * So the contact information below is load-bearing, not decoration. The format
+ * is fixed by policy: <client>/<version> (<contact url or email>), and the
+ * contact has to be something that actually reaches a maintainer.
+ * https://foundation.wikimedia.org/wiki/Policy:User-Agent_policy
+ */
+const CONTACT = process.env.WIKI_CONTACT || "https://wiki-compare.vercel.app; idonov8@gmail.com";
+const UA = `wiki-compare/0.1 (${CONTACT})`;
 const MAX_SECTION_CHARS = 4000;
 const MAX_LINKS = 400;
 
