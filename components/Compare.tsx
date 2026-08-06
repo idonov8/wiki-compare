@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Columns from "./Columns";
+import { comparePath } from "./Highlighted";
 import DiffNav from "./DiffNav";
 import Loading from "./Loading";
 import {
@@ -12,6 +13,9 @@ import {
   type ComparePayload,
   type Lang,
 } from "@/lib/types";
+
+const asLang = (value: string | null): Lang =>
+  value && (LANGS as readonly string[]).includes(value) ? (value as Lang) : "en";
 
 const KIND_LABEL: Record<Claim["type"], string> = {
   contradiction: "Contradiction",
@@ -66,9 +70,18 @@ export default function Compare() {
     setCard(null);
   };
 
+  /** The querystring we last acted on, so a pushState of our own doesn't
+   *  look like a navigation to re-apply. */
+  const appliedUrl = useRef<string | null>(null);
+
   const runComparison = useCallback(async (hit: Hit) => {
     reset();
+    setTarget(hit);
     setPhase("comparing");
+    // Same article, now compared: replace rather than push, so Back leaves the
+    // subject instead of stepping into its own preview.
+    window.history.replaceState(null, "", comparePath(hit.title, hit.lang, true));
+    appliedUrl.current = window.location.search;
     setBusy(true);
     try {
       const res = await fetch(
@@ -113,6 +126,54 @@ export default function Compare() {
     }
   }, [hits.length]);
 
+  // The open article lives in the URL, so a preview or a comparison is linkable
+  // and the back button works. Refs keep the popstate listener from being torn
+  // down and re-run — re-running it would refetch the article on every change.
+  const chooseRef = useRef(choose);
+  const compareRef = useRef(runComparison);
+  chooseRef.current = choose;
+  compareRef.current = runComparison;
+
+  const navigate = useCallback((title: string, lang: string) => {
+    const t = title.trim();
+    if (!t) return;
+    setQuery(t);
+    setHits([]);
+    window.history.pushState(null, "", comparePath(t, lang));
+    appliedUrl.current = window.location.search;
+    window.scrollTo({ top: 0 });
+    void chooseRef.current({ lang, title: t, url: "" });
+  }, []);
+
+  useEffect(() => {
+    const apply = () => {
+      if (window.location.search === appliedUrl.current) return;
+      appliedUrl.current = window.location.search;
+      const params = new URLSearchParams(window.location.search);
+      const title = params.get("title");
+      if (!title) {
+        setPhase("idle");
+        setArticles({});
+        setData(null);
+        setError(null);
+        return;
+      }
+      setQuery(title);
+      setHits([]);
+      const hit = { lang: asLang(params.get("lang")), title, url: "" };
+      // A shared link to a finished comparison shouldn't ask for the article to
+      // be confirmed again; a bare title opens the preview.
+      if (params.get("compare") === "1" || title.startsWith("demo:")) {
+        void compareRef.current(hit);
+      } else {
+        void chooseRef.current(hit);
+      }
+    };
+    apply();
+    window.addEventListener("popstate", apply);
+    return () => window.removeEventListener("popstate", apply);
+  }, []);
+
   const search = useCallback(async () => {
     const q = query.trim();
     if (!q) return;
@@ -137,7 +198,7 @@ export default function Compare() {
       if (!results.length) throw new Error(`Nothing on Wikipedia matches “${q}”.`);
       setHits(results);
       // A pasted URL names one article, so there is nothing to pick between.
-      if (json.exact) await choose(results[0]);
+      if (json.exact) navigate(results[0].title, results[0].lang);
       else setPhase("results");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Search failed.");
@@ -145,7 +206,7 @@ export default function Compare() {
     } finally {
       setBusy(false);
     }
-  }, [query, choose, runComparison]);
+  }, [query, navigate, runComparison]);
 
   const available = useMemo(
     () => LANGS.filter((l) => articles[l]),
@@ -283,7 +344,11 @@ export default function Compare() {
           <ul>
             {hits.map((hit) => (
               <li key={`${hit.lang}:${hit.title}`}>
-                <button className="hit" onClick={() => choose(hit)} disabled={busy}>
+                <button
+                  className="hit"
+                  onClick={() => navigate(hit.title, hit.lang)}
+                  disabled={busy}
+                >
                   <span className="hit-title">{hit.title}</span>
                   {hit.description && <span className="hit-desc">{hit.description}</span>}
                 </button>
@@ -336,6 +401,7 @@ export default function Compare() {
           activeId={card?.claim.id ?? null}
           onEnter={onEnter}
           onLeave={() => setCard(null)}
+          onLink={navigate}
         />
       )}
 
