@@ -1340,3 +1340,21 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
     max-width: 58ch;
   }
 }
+
+/* ============================================================================
+   Regions below are owned by one concern each. Keep additions inside your own
+   region so that edits to the sign-in screen, the donate page, the masthead
+   control and the article meta strip never collide.
+   ========================================================================= */
+
+/* --- region: signin ------------------------------------------------------ */
+/* --- end region: signin -------------------------------------------------- */
+
+/* --- region: donate-page ------------------------------------------------- */
+/* --- end region: donate-page --------------------------------------------- */
+
+/* --- region: masthead-credit --------------------------------------------- */
+/* --- end region: masthead-credit ----------------------------------------- */
+
+/* --- region: article-meta ------------------------------------------------ */
+/* --- end region: article-meta -------------------------------------------- */
