@@ -72,6 +72,12 @@ await page.route("**/api/recent", (route) =>
 // requests: the internal-link check below follows a link to a real article, and
 // re-serving that one would put a live fetch behind a route callback that is
 // still in flight when the browser closes.
+//
+// The cost is injected here because the fixture has none, and what a cached
+// comparison cost somebody is now the thing the meta strip reports. Setting it
+// to null serves the other case: a row stored before costs were recorded, which
+// must report no figure rather than invent one.
+let storedCost: number | null = 0.1932;
 await page.route(
   (url) =>
     url.pathname === "/api/compare" &&
@@ -79,10 +85,14 @@ await page.route(
   async (route) => {
     const response = await route.fetch();
     const json = await response.json();
+    const usage = { ...json.usage, inputTokens: 14203, outputTokens: 5110 };
+    if (storedCost === null) delete usage.costUsd;
+    else usage.costUsd = storedCost;
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         ...json,
+        usage,
         fromCache: true,
         cache: {
           computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
@@ -132,13 +142,58 @@ await page.click(".recent li:first-child button");
 await page.waitForSelector("mark.claim", { timeout: 30000 });
 check(/[?&]title=/.test(page.url()), "clicking a recent article opens it", page.url());
 
+// ---- meta strip -------------------------------------------------------------
+
+// A cache hit is not free and must never say so: somebody paid to process this
+// article and everyone since has read it for nothing, which is the argument the
+// whole site rests on. The figure is the one stored with the answer.
+const metaSpan = () =>
+  page.$eval(".meta > span:first-child", (el) => ({
+    text: el.textContent ?? "",
+    title: el.getAttribute("title") ?? "",
+  }));
+
+{
+  const meta = await metaSpan();
+  check(
+    /\$0\.19 was paid to process this article/.test(meta.text),
+    "a cached comparison reports what was paid to process it",
+    meta.text,
+  );
+  check(!/free/i.test(meta.text), "nothing in the strip calls a cached comparison free", meta.text);
+  check(
+    /14,203 tokens in, 5,110 out/.test(meta.title),
+    "the token breakdown stays in the title attribute",
+    meta.title,
+  );
+}
+
+// A row stored before costs were recorded knows what it found and not what it
+// cost. It has to say the first without claiming the second — "$0.00" would be
+// the same lie the word "free" was.
+{
+  storedCost = null;
+  await page.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("mark.claim", { timeout: 30000 });
+  const meta = await metaSpan();
+  check(
+    /marked/.test(meta.text) && !/\$/.test(meta.text) && !/free/i.test(meta.text),
+    "a comparison with no recorded cost claims none",
+    meta.text,
+  );
+  check(/tokens in,/.test(meta.title), "and still carries its token breakdown", meta.title);
+  storedCost = 0.1932;
+  await page.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("mark.claim", { timeout: 30000 });
+}
+
 // ---- cached badge -----------------------------------------------------------
 
 check(!!(await page.$(".cached-badge")), "a cached comparison served past an edit is badged");
 {
   const tip = await page.$(".cached-tip");
   const hiddenAtRest = await tip?.evaluate((el) => getComputedStyle(el).visibility === "hidden");
-  check(!!hiddenAtRest, "its tooltip stays shut until hover");
+  check(!!hiddenAtRest, "its panel stays shut until hover");
   await (await page.$(".cached-badge"))!.hover();
   await page.waitForTimeout(200);
   const open = await tip!.evaluate((el) => ({
@@ -146,27 +201,93 @@ check(!!(await page.$(".cached-badge")), "a cached comparison served past an edi
     text: el.textContent ?? "",
     box: el.getBoundingClientRect().toJSON(),
   }));
-  check(open.visible, "hovering the badge opens the tooltip");
+  check(open.visible, "hovering the badge opens the panel");
   // The copy used to state how long the answer keeps being served; it now
   // offers to replace it instead, which is the more useful thing to say once
   // there is a control that actually does it. Assert what it promises now, and
-  // that the promise is reachable — a tooltip offering an update beside no way
-  // to update is the failure worth catching here.
+  // that the promise is reachable — a panel offering an update with no working
+  // way to update is the failure worth catching here, which is what the click
+  // test further down is for.
   check(
     /Hebrew and Arabic have been edited/.test(open.text) && /Donate to update/.test(open.text),
-    "the tooltip names what changed and offers to update it",
+    "the panel names what changed and offers to update it",
     open.text.slice(0, 120),
   );
+  // The control that keeps the promise now sits inside the panel, directly under
+  // the sentence that makes it — and nowhere else, which is the half of the move
+  // that a "does it exist" check on its own would miss.
   check(
-    !!(await page.$('.meta button:has-text("Update this article")')),
-    "the offer to update has a control beside it",
+    !!(await page.$('.cached-tip button:has-text("Update this article")')),
+    "the offer to update carries its control inside the panel",
+  );
+  check(
+    (await page.$$(".meta > button")).length === 0,
+    "and no longer beside the badge",
   );
   const vp = page.viewportSize()!;
   check(
     open.box.x >= 0 && open.box.x + open.box.width <= vp.width,
-    "the tooltip stays on screen",
+    "the panel stays on screen",
     `x=${Math.round(open.box.x)} w=${Math.round(open.box.width)} vp=${vp.width}`,
   );
+  await page.mouse.move(0, 0);
+
+  // Reachable without a pointer: focusing the badge opens the panel, and the
+  // next Tab lands on the button inside it.
+  const focused = await page.evaluate(() => {
+    const badge = document.querySelector<HTMLElement>(".cached-badge");
+    badge?.focus();
+    return document.activeElement === badge;
+  });
+  check(focused, "keyboard focus reaches the cached badge");
+  check(
+    await page.$eval(".cached-tip", (el) => getComputedStyle(el).visibility === "visible"),
+    "focusing the badge opens the panel",
+  );
+  await page.keyboard.press("Tab");
+  const tabbed = await page.evaluate(() => document.activeElement?.className ?? "");
+  check(tabbed.includes("cached-update"), "Tab reaches the update button inside it", tabbed);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.waitForTimeout(200);
+  check(
+    await page.$eval(".cached-tip", (el) => getComputedStyle(el).visibility === "hidden"),
+    "the panel shuts again once focus leaves",
+  );
+
+  // The trap this whole arrangement exists to avoid: a button inside a hover
+  // panel that the pointer can never reach, because the panel closes somewhere
+  // between the badge and the button. So travel the actual distance with the
+  // actual mouse and press the actual button. Signed out it goes to the donate
+  // page, which is stubbed here — the click registering is what is under test,
+  // not whatever that page renders.
+  await page.route("**/donate*", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<html><body>donate</body></html>" }),
+  );
+  {
+    await (await page.$(".cached-badge"))!.hover();
+    await page.waitForTimeout(150);
+    const box = (await (await page.$(".cached-tip button"))!.boundingBox())!;
+    // In steps, so the pointer crosses the gap between badge and panel rather
+    // than teleporting over it.
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 12 });
+    const live = await page.$eval(".cached-tip", (el) => {
+      const s = getComputedStyle(el);
+      return { visible: s.visibility === "visible", clickable: s.pointerEvents !== "none" };
+    });
+    check(live.visible, "the panel survives the trip from badge to button");
+    check(live.clickable, "and takes pointer events while it is open");
+    await page.mouse.down();
+    await page.mouse.up();
+    await page
+      .waitForFunction(() => location.pathname === "/donate", null, { timeout: 5000 })
+      .catch(() => {});
+    check(
+      /\/donate\?from=stale-badge/.test(page.url()),
+      "clicking the button inside the panel registers",
+      page.url(),
+    );
+  }
+  await page.unroute("**/donate*");
   await page.mouse.move(0, 0);
 }
 

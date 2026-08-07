@@ -36,8 +36,8 @@ function relative(iso: string): string {
   return RELATIVE.format(Math.round(ms / size), unit);
 }
 
-/** What the `cached` badge says on hover: which versions moved, and until when
- *  this answer keeps being served in their place. */
+/** What the `cached` badge says when it opens: which versions moved, and the
+ *  offer to replace this answer with one read from the live text. */
 function cacheNote(cache: CacheInfo): string {
   const names = cache.edited.map((l) => LANG_META[l].label);
   const subject =
@@ -48,6 +48,42 @@ function cacheNote(cache: CacheInfo): string {
     `${subject} been edited on Wikipedia since this comparison was processed ${relative(cache.computedAt)}. ` +
     `Donate to update this page.`
   );
+}
+
+/**
+ * What this comparison cost somebody, in the meta strip.
+ *
+ * A cache hit is not free and must never say so. Somebody paid to have this
+ * article read, and everyone arriving after them reads it for nothing — that
+ * exchange is the whole argument this site makes for donating, and printing
+ * "free" at the end of it threw the argument away. The figure is the one priced
+ * at the moment that run finished and stored alongside the answer, so it is what
+ * it cost then rather than what it would cost at today's rates.
+ *
+ * Rows written before costs were recorded carry no figure. Those get no cost
+ * clause at all: `formatCost(0)` would print "$0.00", which is the same lie in
+ * different words, and estimating one from the token counts would invent a
+ * number nobody actually paid.
+ */
+function costNote(data: ComparePayload): string | null {
+  const usd = data.usage.costUsd;
+  const cost = typeof usd === "number" && usd > 0 ? formatCost(usd) : null;
+  // A preview is the one case where the scope matters more than the money: it
+  // says what it is first, because the columns below it fade out.
+  if (data.scope?.kind === "preview") return cost ? `preview · ${cost}` : "preview";
+  if (!cost) return null;
+  return data.fromCache
+    ? `${cost} was paid to process this article`
+    : `${cost} to process this article`;
+}
+
+/** The token breakdown, which stays in the title attribute: two numbers nobody
+ *  can price without a rate card do not belong in the strip itself. */
+function tokenNote(data: ComparePayload): string {
+  const counts =
+    `${data.usage.inputTokens.toLocaleString()} tokens in, ` +
+    `${data.usage.outputTokens.toLocaleString()} out`;
+  return data.fromCache ? `${counts}, on the run that processed this article` : counts;
 }
 
 const KIND_LABEL: Record<Claim["type"], string> = {
@@ -404,29 +440,13 @@ export default function Compare() {
             <span><i className="swatch framing" /> different framing</span>
           </div>
           <div className="meta">
-            {/* The badge says "cached" in its own right, so the cost note drops
-                the word rather than printing it twice in four words. */}
-            {/* The cost, not the token counts. What a reader can act on is what
-                this spent, and "14,203 in / 5,110 out" is not that — it is two
-                numbers nobody can price without a rate card. A cache hit says
-                free outright, because free is exactly what it was. */}
+            {/* What it cost to process this article, whoever paid it and
+                whenever they did — see `costNote`. The badge beside it says
+                "cached" in its own right, so the sentence never repeats it. */}
             {data ? (
-              <span
-                title={
-                  data.fromCache
-                    ? "Served from the cache. No model ran."
-                    : `${data.usage.inputTokens.toLocaleString()} tokens in, ` +
-                      `${data.usage.outputTokens.toLocaleString()} out`
-                }
-              >
-                {data.qid} · {data.claims.length} marked ·{" "}
-                {data.fromCache
-                  ? badged
-                    ? "free"
-                    : "free — already processed"
-                  : preview
-                    ? `preview · ${formatCost(data.usage.costUsd ?? 0)}`
-                    : `~${formatCost(data.usage.costUsd ?? 0)}`}
+              <span title={tokenNote(data)}>
+                {data.qid} · {data.claims.length} marked
+                {costNote(data) ? ` · ${costNote(data)}` : ""}
               </span>
             ) : (
               "reading all three…"
@@ -435,25 +455,28 @@ export default function Compare() {
                 An exact-revision hit is cached too, but it describes the live
                 text, so badging it would cry wolf on the ordinary case. */}
             {badged && data?.cache && (
-              <>
-                <span className="cached-badge" tabIndex={0} aria-describedby="cached-tip">
-                  cached
-                  <span className="cached-tip" id="cached-tip" role="tooltip">
-                    {cacheNote(data.cache)}
-                  </span>
+              <span className="cached-badge" tabIndex={0} aria-describedby="cached-note">
+                cached
+                {/* Not a tooltip any more, and not labelled as one: it contains
+                    the button that keeps the promise its last sentence makes, so
+                    it is a small popover. The note alone is what describes the
+                    badge; the button is a control beside it, reachable by
+                    pointer (the panel stays open while the pointer is anywhere
+                    inside it) and by Tab (it stays open while anything in it has
+                    focus). Signed out, the button goes to the donate page rather
+                    than to a 401 — it should never be a dead end for the reader
+                    who believed the sentence above it. */}
+                <span className="cached-tip">
+                  <span id="cached-note">{cacheNote(data.cache)}</span>
+                  <button
+                    className="cached-update"
+                    disabled={funding}
+                    onClick={() => (me ? fund("refresh") : goDonate("stale-badge"))}
+                  >
+                    {funding ? "Re-reading…" : "Update this article"}
+                  </button>
                 </span>
-                {/* The tooltip has promised an update since before one existed.
-                    This is that promise, next to the claim it makes. Signed out,
-                    it goes to the donate page rather than to a 401 — the button
-                    should never be a dead end for the reader who believed it. */}
-                <button
-                  className="signin"
-                  disabled={funding}
-                  onClick={() => (me ? fund("refresh") : goDonate("stale-badge"))}
-                >
-                  {funding ? "Re-reading…" : "Update this article"}
-                </button>
-              </>
+              </span>
             )}
           </div>
         </div>

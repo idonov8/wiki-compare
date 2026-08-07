@@ -53,10 +53,92 @@ CREATE TABLE IF NOT EXISTS labels (
   label TEXT NOT NULL
 );
 
--- Better Auth's own tables — user, session, account, verification — are not in
--- this file. Its CLI generates and migrates them from lib/auth.ts, and two tools
--- issuing DDL for the same table is how the two descriptions start to disagree,
--- silently, in whichever environment happened to run them in the other order.
+-- Better Auth's own tables — user, session, account, verification.
+--
+-- These used to live only in Better Auth's migrator, on the reasoning that two
+-- tools issuing DDL for one table is how two descriptions of it start to
+-- disagree. That reasoning cost more than it saved: setup was two commands, the
+-- second was skippable, and skipping it left an app whose every sign-in attempt
+-- 500s against tables that were never created. A schema that is one command
+-- behind is not a safer schema, it is a broken one.
+--
+-- So the DDL below is transcribed from `npx @better-auth/cli generate`, which
+-- reads lib/auth.ts and is still the source of truth: when that file's fields
+-- change, re-run the generator and bring the diff here rather than hand-editing.
+-- `auth:migrate` remains in package.json and remains compatible — it is just no
+-- longer load-bearing, because IF NOT EXISTS means whichever runs first wins and
+-- the other is a no-op instead of a conflict.
+--
+-- "user" is a reserved word and the columns are camelCase, so every identifier
+-- here stays quoted; an unquoted "creditCents" folds to "creditcents" and stops
+-- matching the column lib/credits.ts writes to.
+
+CREATE TABLE IF NOT EXISTS "user" (
+  "id"              TEXT        NOT NULL PRIMARY KEY,
+  "name"            TEXT        NOT NULL,
+  "email"           TEXT        NOT NULL UNIQUE,
+  "emailVerified"   BOOLEAN     NOT NULL,
+  "image"           TEXT,
+  "createdAt"       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  "updatedAt"       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Declared in lib/auth.ts as additionalFields with `input: false`. DEFAULT 0
+  -- is ours, not the generator's: Better Auth applies its defaultValue in
+  -- application code, which leaves any row inserted by SQL — a fixture, a
+  -- backfill, a future provider that writes its own — with a NULL balance that
+  -- lib/credits.ts would arithmetic into more NULL rather than into a number.
+  "creditCents"     INTEGER     NOT NULL DEFAULT 0,
+  "peakCreditCents" INTEGER     NOT NULL DEFAULT 0
+);
+
+-- For databases whose user table was created by `auth:migrate` back when the
+-- credit columns were not part of it. No-ops everywhere else.
+ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "creditCents"     INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "peakCreditCents" INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS "session" (
+  "id"        TEXT        NOT NULL PRIMARY KEY,
+  "expiresAt" TIMESTAMPTZ NOT NULL,
+  "token"     TEXT        NOT NULL UNIQUE,
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+  "updatedAt" TIMESTAMPTZ NOT NULL,
+  "ipAddress" TEXT,
+  "userAgent" TEXT,
+  "userId"    TEXT        NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE
+);
+
+-- One row per way an account can prove it is itself: the magic-link identity,
+-- and a row per OAuth provider once Google is configured. The token columns are
+-- what a social sign-in fills and a magic link leaves null.
+CREATE TABLE IF NOT EXISTS "account" (
+  "id"                    TEXT        NOT NULL PRIMARY KEY,
+  "accountId"             TEXT        NOT NULL,
+  "providerId"            TEXT        NOT NULL,
+  "userId"                TEXT        NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+  "accessToken"           TEXT,
+  "refreshToken"          TEXT,
+  "idToken"               TEXT,
+  "accessTokenExpiresAt"  TIMESTAMPTZ,
+  "refreshTokenExpiresAt" TIMESTAMPTZ,
+  "scope"                 TEXT,
+  "password"              TEXT,
+  "createdAt"             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  "updatedAt"             TIMESTAMPTZ NOT NULL
+);
+
+-- Short-lived tokens: the magic link's own value lands here and is deleted on
+-- use, which is why a row count of zero is the healthy steady state.
+CREATE TABLE IF NOT EXISTS "verification" (
+  "id"         TEXT        NOT NULL PRIMARY KEY,
+  "identifier" TEXT        NOT NULL,
+  "value"      TEXT        NOT NULL,
+  "expiresAt"  TIMESTAMPTZ NOT NULL,
+  "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  "updatedAt"  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS "session_userId_idx"          ON "session" ("userId");
+CREATE INDEX IF NOT EXISTS "account_userId_idx"          ON "account" ("userId");
+CREATE INDEX IF NOT EXISTS "verification_identifier_idx" ON "verification" ("identifier");
 
 -- Every attempt to donate, funded or not.
 --
@@ -67,12 +149,14 @@ CREATE TABLE IF NOT EXISTS labels (
 -- and a table that stores just the grants cannot answer that.
 --
 -- user_id is TEXT and carries no foreign key to Better Auth's user(id), on
--- purpose. That table is migrated by a different tool on its own schedule, so a
--- cross-tool foreign key makes whichever migration runs first fail — this one
--- against a table that does not exist yet, or theirs against a dependency it
--- does not know about. This ledger is append-only and never joined for
--- correctness, so a dangling id after a deleted account is a cheaper failure
--- than a boot-order dependency between two migration systems.
+-- purpose. The original reason was boot order between two migration tools, and
+-- that reason is gone now that "user" is created above this line in the same
+-- file. The remaining reason is the one that actually matters: this ledger is
+-- append-only evidence about what happened, not a projection of who currently
+-- exists. "user" deletes cascade to session and account by design; cascading
+-- them to here would quietly rewrite the donation history every time somebody
+-- closed an account, and the count of people who tried to pay is the one number
+-- this table exists to keep. A dangling id is the correct outcome.
 CREATE TABLE IF NOT EXISTS donations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id TEXT NOT NULL,

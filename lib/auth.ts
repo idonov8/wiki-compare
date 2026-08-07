@@ -23,8 +23,50 @@ import ws from "ws";
  */
 neonConfig.webSocketConstructor = ws;
 
+const googleClientId = process.env.GOOGLE_CLIENT_ID;
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+/**
+ * Whether Google sign-in is actually available, as opposed to merely mentioned.
+ *
+ * Both halves of the credential are required, and the check is what decides
+ * whether the provider is registered at all. Registering `google` with an
+ * undefined clientId does not fail at boot — it fails later, at the end of a
+ * redirect, on Google's own error page, which is the worst possible place to
+ * learn that an environment variable was never set. An unconfigured deployment
+ * should have no Google button rather than a Google button that dead-ends.
+ */
+export const googleEnabled = !!(googleClientId && googleClientSecret);
+
+/**
+ * The browser cannot read the two variables above — they are secrets and have no
+ * NEXT_PUBLIC_ prefix — so components/SignIn.tsx keys its button off
+ * NEXT_PUBLIC_GOOGLE_ENABLED instead. Two variables describing one fact can
+ * disagree, and the failure is silent in both directions: a button that leads
+ * nowhere, or a configured provider nobody is offered. Neither is worth throwing
+ * over, so this says so once at boot, where a maintainer reads logs anyway.
+ */
+if (process.env.NODE_ENV !== "test") {
+  const advertised = process.env.NEXT_PUBLIC_GOOGLE_ENABLED === "true";
+  if (advertised !== googleEnabled) {
+    console.warn(
+      `[auth] NEXT_PUBLIC_GOOGLE_ENABLED is ${advertised}, but Google credentials are ` +
+        `${googleEnabled ? "set" : "missing"}. Set both GOOGLE_CLIENT_ID and ` +
+        `GOOGLE_CLIENT_SECRET and NEXT_PUBLIC_GOOGLE_ENABLED="true", or none of them.`,
+    );
+  }
+}
+
 export const auth = betterAuth({
   database: new Pool({ connectionString: process.env.DATABASE_URL }),
+  socialProviders: {
+    // Spread rather than a `google: undefined` key: Better Auth treats the
+    // presence of the key as the registration, so the provider has to be absent
+    // from the object entirely, not present and empty.
+    ...(googleEnabled
+      ? { google: { clientId: googleClientId!, clientSecret: googleClientSecret! } }
+      : {}),
+  },
   user: {
     additionalFields: {
       /**
@@ -67,11 +109,21 @@ export const auth = betterAuth({
  * that silently goes nowhere is worse than a request that fails: the person is
  * left refreshing an inbox for something that was never sent, and nothing in the
  * logs says so. A failed request at least surfaces as a failure to both of us.
+ *
+ * The discriminator is VERCEL_ENV, not NODE_ENV, and the difference is not
+ * cosmetic. Vercel builds preview deployments with NODE_ENV="production" — that
+ * is what makes them a faithful build of production — so keying on NODE_ENV made
+ * every preview throw on every sign-in attempt, which is exactly the environment
+ * where nobody has bothered to set a mail key and where printing the link to the
+ * build log is the intended flow. VERCEL_ENV is the variable that actually
+ * distinguishes "production" from "preview" and "development", so only a real
+ * production deployment refuses to swallow the failure. Off Vercel it is unset,
+ * which lands on the console branch — right for local `next dev` and for CI.
  */
 export async function sendLoginEmail(email: string, url: string): Promise<void> {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
-    if (process.env.NODE_ENV === "production") {
+    if (process.env.VERCEL_ENV === "production") {
       throw new Error("RESEND_API_KEY is not set, so the login link cannot be delivered.");
     }
     console.log(`[auth] login link for ${email}: ${url}`);
