@@ -28,6 +28,19 @@
 
 * { box-sizing: border-box; }
 
+/* Visually hidden but available to screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 body {
   margin: 0;
   background: var(--paper);
@@ -1162,10 +1175,11 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
 
 .donate h1 {
   font-family: var(--display);
-  font-size: 34px;
+  font-size: 46px;
   font-weight: 400;
-  line-height: 1.15;
-  margin: 0 0 12px;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  margin: 0 0 16px;
 }
 
 .donate > p {
@@ -1288,29 +1302,82 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
 
 .donate-pay:disabled { opacity: 0.45; cursor: progress; }
 
-/* The reveal.
-   Set large in the display face because it is the sentence the whole page was
-   built to deliver, and ruled off in `--rule` rather than given the
-   `.error` treatment: nothing went wrong, we simply cannot take the money.
-   Warm, and a little embarrassed about it. */
-.donate-reveal {
-  margin: 34px 0 0;
-  padding: 26px 0 0;
-  border-top: 1px solid var(--rule);
-  font-family: var(--display);
-  font-size: 25px;
+/* The reveal — laid out on the dark screen (see `.donate-done` below) as a
+   hierarchy rather than one flat sentence: a mono kicker sets the register, the
+   display headline carries the emotion, the granted amount lands as a hero
+   figure, and the body closes with the thanks or the promise. Nothing went
+   wrong, we simply cannot take the money — warm, and a little embarrassed. */
+.donate-reveal-kicker {
+  margin: 0 0 18px;
+  font-family: var(--mono);
+  font-size: 11px;
   font-weight: 400;
-  line-height: 1.35;
-  color: var(--ink);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--paper-raised) 62%, transparent);
 }
 
-.donate-reveal small {
-  display: block;
-  margin-top: 14px;
+.donate-reveal-headline {
+  margin: 0 0 28px;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(28px, 6vw, 38px);
+  line-height: 1.12;
+  color: var(--paper-raised);
+}
+
+/* The gift: the granted amount as the largest thing on the screen, with a quiet
+   mono label beneath it. Only present when credit was actually granted. */
+.donate-reveal-gift {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 30px;
+}
+
+.donate-reveal-gift-amount {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(56px, 16vw, 84px);
+  line-height: 0.95;
+  color: var(--paper-raised);
+}
+
+.donate-reveal-gift-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--paper-raised) 55%, transparent);
+}
+
+.donate-reveal-body {
+  margin: 0 0 18px;
   font-family: var(--body);
-  font-size: 14px;
-  line-height: 1.65;
-  color: var(--ink-soft);
+  font-size: 17px;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--paper-raised) 86%, transparent);
+}
+
+.donate-reveal-note {
+  margin: 0 0 32px;
+  font-family: var(--body);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: color-mix(in srgb, var(--paper-raised) 60%, transparent);
+}
+
+.donate-reveal-back { margin: 0; }
+
+.donate-reveal-back a {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper-raised);
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
 /* Narrow screens, on the same breakpoint the columns collapse at. The masthead
@@ -1325,11 +1392,10 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
   .gate { padding: 26px 18px 24px; }
   .gate h2 { font-size: 23px; }
   .donate { padding: 38px 18px 64px; }
-  .donate h1 { font-size: 28px; }
+  .donate h1 { font-size: 32px; }
   /* The value keeps its own line rather than being squeezed against the label. */
   .donate-field { flex-wrap: wrap; gap: 6px 14px; }
   .donate-field input { flex: 1 1 100%; width: auto; text-align: start; }
-  .donate-reveal { font-size: 21px; }
 }
 
 /* Landing grid collapses to the original single column on narrow screens. */
@@ -1563,16 +1629,22 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
 
 /* Step two. Wider than the reading column, because there are now two of them. */
 .donate.donate-checkout {
-  max-width: 940px;
+  max-width: 1080px;
 }
 
+/* The heading spans the full measure so the page opens with a clear title;
+   the lede beneath it is capped at a readable measure rather than the column
+   width, so the lines stay comfortable however wide the checkout gets. */
 .donate-head {
-  max-width: 62ch;
-  margin: 0 0 34px;
+  max-width: none;
+  margin: 0 0 40px;
 }
 
 .donate-head p {
+  max-width: 70ch;
   margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
   color: var(--ink-soft);
 }
 
@@ -1580,8 +1652,8 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
    one column, because on a phone the thing you scroll towards is the total. */
 .donate-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 328px;
-  gap: 44px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 56px;
   align-items: start;
 }
 
@@ -1623,11 +1695,50 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
 
 /* The reveal now arrives on a page of its own rather than under the form it
    replaced, so the rule it used to be separated by has nothing above it to
-   separate from. The sentence opens the page instead. */
-.donate-done .donate-reveal {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
+   separate from. The sentence opens the page instead — and the page turns
+   dark, so the form the user just left is gone from view before the thank-you
+   lands. White on ink, centred, nothing else on the screen. */
+.donate-done {
+  position: fixed;
+  inset: 0;
+  max-width: none;
+  margin: 0;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: var(--ink);
+  color: var(--paper-raised);
+  z-index: 1000;
+}
+
+/* The content fades in once the loader has had its beat, so the sentence
+   arrives rather than snapping. Wide enough for the gift figure to breathe. */
+.donate-reveal-content {
+  max-width: 40ch;
+  animation: donate-reveal-in 0.5s ease both;
+}
+
+@keyframes donate-reveal-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The loader: a quiet ring on the dark screen, the only thing moving while the
+   thank-you is being prepared. */
+.donate-reveal-loader {
+  width: 34px;
+  height: 34px;
+  border: 3px solid color-mix(in srgb, var(--paper-raised) 22%, transparent);
+  border-top-color: var(--paper-raised);
+  border-radius: 50%;
+  animation: donate-spin 0.8s linear infinite;
+}
+
+@keyframes donate-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ---- the summary ---- */
@@ -1888,6 +1999,33 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
 }
 
 .credit-detail-cta:hover { opacity: 0.82; }
+
+/* The sign-out button sits beside the Donate CTA as the quieter of the two: no
+   fill, just the ink outline, so the action that funds reading stays the visual
+   primary and the one that leaves stays secondary. */
+.credit-detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 11px;
+}
+
+.credit-detail-actions .credit-detail-cta {
+  margin-top: 0;
+}
+
+.credit-detail-signout {
+  padding: 6px 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  transition: opacity 0.12s ease;
+}
+
+.credit-detail-signout:hover { opacity: 0.82; }
 
 /* Narrow screens: the masthead wraps and `.credit` goes full width, so the
    panel flips to the leading edge and stops overhanging the viewport. Matches

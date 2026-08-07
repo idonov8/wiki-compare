@@ -52,6 +52,16 @@ export default function Donate() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DonateResponse | null>(null);
+  // The reveal holds for a beat on a dark screen before the sentence lands, so
+  // the form the user just filled in is gone from view first — the page turns
+  // dark, a loader turns, and only then does the thank-you arrive.
+  const [revealing, setRevealing] = useState(false);
+
+  useEffect(() => {
+    if (!revealing) return;
+    const t = setTimeout(() => setRevealing(false), 2600);
+    return () => clearTimeout(t);
+  }, [revealing]);
 
   useEffect(() => {
     // Read off the URL here rather than during render: the server has no
@@ -80,16 +90,40 @@ export default function Donate() {
   if (result) {
     return (
       <div className="donate donate-done">
-        <p className="donate-reveal">{result.message}</p>
-        {result.granted && (
-          <p>
-            That&apos;s {articlesFor(result.grantedCents)} articles. Every one you process stays
-            readable for everyone who comes after you.
-          </p>
+        {revealing ? (
+          <div className="donate-reveal-loader" aria-label="Preparing your thank-you" />
+        ) : (
+          <div className="donate-reveal-content">
+            {/* The full sentence, for screen readers; the sighted layout below
+                carries the same meaning split into a hierarchy. */}
+            <p className="sr-only">{result.message}</p>
+
+            {result.reveal.kicker && (
+              <p className="donate-reveal-kicker">{result.reveal.kicker}</p>
+            )}
+            <h2 className="donate-reveal-headline">{result.reveal.headline}</h2>
+
+            {result.reveal.gift && (
+              <div className="donate-reveal-gift" aria-label={`${result.reveal.gift} of credit`}>
+                <span className="donate-reveal-gift-amount">{result.reveal.gift}</span>
+                <span className="donate-reveal-gift-label">of credit, on us</span>
+              </div>
+            )}
+
+            <p className="donate-reveal-body">{result.reveal.body}</p>
+
+            {result.granted && (
+              <p className="donate-reveal-note">
+                That&apos;s {articlesFor(result.grantedCents)} articles. Every one you process stays
+                readable for everyone who comes after you.
+              </p>
+            )}
+
+            <p className="donate-reveal-back">
+              <a href="/">Back to the main site</a>
+            </p>
+          </div>
         )}
-        <p>
-          <a href="/">Back to the articles</a>
-        </p>
       </div>
     );
   }
@@ -107,8 +141,8 @@ export default function Donate() {
     return (
       <SignIn
         callbackURL={`/donate${from ? `?from=${encodeURIComponent(from)}` : ""}`}
-        heading="First, who is this from?"
-        blurb="Credit lands on an account, so there has to be an account for it to land on. No password — we email you a link, and you come straight back here to finish."
+        heading="Nice to meet you"
+        blurb="Please sign in. Your donation will be linked to your account, and you can choose how it's used."
       />
     );
   }
@@ -118,11 +152,11 @@ export default function Donate() {
   return (
     <div className="donate donate-checkout">
       <header className="donate-head">
-        <h1>Cover the cost of reading</h1>
+        <h1>Help us pay the bills</h1>
         <p>
-          This isn&apos;t a subscription and nobody is making money here. Comparing one article in
-          three languages costs real tokens; a donation covers a share of that. Whatever you process
-          is then free for everyone else who opens it — including people who never gave anything.
+          I&apos;m glad to see you here! This site is my passion project.
+          <br />
+          Your donation lets you process articles for everyone to read and learn from.
         </p>
       </header>
 
@@ -273,6 +307,7 @@ export default function Donate() {
                 const json = await res.json();
                 if (!res.ok) throw new Error(json.error ?? "That didn't go through.");
                 setResult(json as DonateResponse);
+                setRevealing(true);
               } catch (e) {
                 setError(e instanceof Error ? e.message : "That didn't go through.");
               } finally {
