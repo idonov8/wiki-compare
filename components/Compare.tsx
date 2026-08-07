@@ -3,8 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Columns from "./Columns";
 import { comparePath } from "./Highlighted";
+import CreditBar from "./CreditBar";
 import DiffNav from "./DiffNav";
 import Loading from "./Loading";
+import PreviewGate from "./PreviewGate";
+import { initAnalytics, track } from "@/lib/analytics";
+import { formatCost, storedCost } from "@/lib/pricing";
 import {
   CACHE_WINDOW_DAYS,
   LANGS,
@@ -14,6 +18,7 @@ import {
   type Claim,
   type ComparePayload,
   type Lang,
+  type MeResponse,
   type RecentArticle,
 } from "@/lib/types";
 
@@ -31,8 +36,8 @@ function relative(iso: string): string {
   return RELATIVE.format(Math.round(ms / size), unit);
 }
 
-/** What the `cached` badge says on hover: which versions moved, and until when
- *  this answer keeps being served in their place. */
+/** What the `cached` badge says when it opens: which versions moved, and the
+ *  offer to replace this answer with one read from the live text. */
 function cacheNote(cache: CacheInfo): string {
   const names = cache.edited.map((l) => LANG_META[l].label);
   const subject =
@@ -43,6 +48,57 @@ function cacheNote(cache: CacheInfo): string {
     `${subject} been edited on Wikipedia since this comparison was processed ${relative(cache.computedAt)}. ` +
     `Donate to update this page.`
   );
+}
+
+/**
+ * What this comparison cost somebody, in the meta strip.
+ *
+ * A cache hit is not free and must never say so. Somebody paid to have this
+ * article read, and everyone arriving after them reads it for nothing — that
+ * exchange is the whole argument this site makes for donating, and printing
+ * "free" at the end of it threw the argument away.
+ *
+ * Most stored comparisons predate costs being recorded, so most of the time the
+ * figure is `storedCost`'s estimate from the token totals rather than the price
+ * struck on the day. That is worth saying and worth marking: "about $0.18" reads
+ * as an estimate on sight, without a legend and without a reader having to know
+ * that a stored row can be missing a field. The title attribute carries why, and
+ * that the estimate errs high. Only a run with no usable totals at all says
+ * nothing — there, any number would be invented.
+ */
+function costNote(data: ComparePayload): string | null {
+  const cost = storedCost(data.usage);
+  const amount = cost
+    ? cost.approximate
+      ? // "about <$0.01" is nonsense; under a cent, the bound is the estimate.
+        cost.usd < 0.01
+        ? "under $0.01"
+        : `about ${formatCost(cost.usd)}`
+      : formatCost(cost.usd)
+    : null;
+  // A preview is the one case where the scope matters more than the money: it
+  // says what it is first, because the columns below it fade out.
+  if (data.scope?.kind === "preview") return amount ? `preview · ${amount}` : "preview";
+  if (!amount) return null;
+  return data.fromCache
+    ? `${amount} was paid to process this article`
+    : `${amount} to process this article`;
+}
+
+/** The token breakdown, which stays in the title attribute: two numbers nobody
+ *  can price without a rate card do not belong in the strip itself. An estimated
+ *  figure explains itself here too — an approximation a reader cannot check the
+ *  provenance of is only a guess with a decimal point. */
+function tokenNote(data: ComparePayload): string {
+  const counts =
+    `${data.usage.inputTokens.toLocaleString()} tokens in, ` +
+    `${data.usage.outputTokens.toLocaleString()} out`;
+  const when = data.fromCache ? `${counts}, on the run that processed this article` : counts;
+  return storedCost(data.usage)?.approximate
+    ? `${when}. This run predates the per-model breakdown, so its tokens are ` +
+        `priced at the more expensive of the two models it used: the figure is ` +
+        `an upper bound on what was actually paid.`
+    : when;
 }
 
 const KIND_LABEL: Record<Claim["type"], string> = {
@@ -94,11 +150,27 @@ export default function Compare() {
   const [shown, setShown] = useState<Lang[]>([...LANGS]);
   const [card, setCard] = useState<CardState | null>(null);
   const [recent, setRecent] = useState<RecentArticle[]>([]);
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [funding, setFunding] = useState(false);
+  const [fundError, setFundError] = useState<string | null>(null);
 
   const reset = () => {
     setError(null);
     setCard(null);
+    setFundError(null);
   };
+
+  const refreshMe = useCallback(() => {
+    fetch("/api/me")
+      .then((res) => res.json())
+      .then((json) => setMe(json))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    initAnalytics();
+    refreshMe();
+  }, [refreshMe]);
 
   /** The querystring we last acted on, so a pushState of our own doesn't
    *  look like a navigation to re-apply. */
@@ -242,6 +314,60 @@ export default function Compare() {
   );
   const visible = shown.filter((l) => available.includes(l));
   const badged = !!data?.cache && data.cache.edited.length > 0;
+  const preview = data?.scope?.kind === "preview";
+
+  const goDonate = useCallback((from: string) => {
+    void track("gate_cta_clicked", { from });
+    window.location.href = `/donate?from=${encodeURIComponent(from)}`;
+  }, []);
+
+  /**
+   * Buy the rest of this article, or a re-read of one whose revisions have moved
+   * on. The reply is a whole comparison, so it simply replaces what is on screen
+   * — the gate disappears because the payload it was describing is gone, not
+   * because anything told it to.
+   */
+  const fund = useCallback(
+    async (kind: "full" | "refresh") => {
+      if (!target || funding) return;
+      setFunding(true);
+      setFundError(null);
+      void track(kind === "refresh" ? "stale_update_clicked" : "gate_cta_clicked", {
+        qid: data?.qid,
+        from: "fund",
+      });
+      try {
+        const res = await fetch("/api/compare", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ title: target.title, lang: target.lang, kind }),
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? "That didn't work.");
+        setData(json as ComparePayload);
+        setArticles(json.articles ?? {});
+        refreshMe();
+      } catch (e) {
+        setFundError(e instanceof Error ? e.message : "That didn't work.");
+      } finally {
+        setFunding(false);
+      }
+    },
+    [target, funding, data?.qid, refreshMe],
+  );
+
+  // Fired off the payload rather than from `open`, because `open` does not know
+  // yet which of the three things it will turn out to be — cached, preview or a
+  // full run — and that distinction is the whole reason to count opens.
+  useEffect(() => {
+    if (!data) return;
+    void track("article_opened", {
+      qid: data.qid,
+      cached: data.fromCache,
+      scope: data.scope?.kind ?? "full",
+    });
+    if (data.scope?.kind === "preview") void track("preview_gate_shown", { qid: data.qid });
+  }, [data]);
 
   // A tooltip reached by keyboard needs a way out that isn't Tab. Blur alone
   // leaves someone who opened the card with focus no way to dismiss it in place.
@@ -306,6 +432,7 @@ export default function Compare() {
             {busy ? "Working…" : "Search"}
           </button>
         </div>
+        <CreditBar me={me} onDonate={() => goDonate("masthead")} />
       </header>
 
       {(comparing || phase === "done") && hasColumns && (
@@ -328,25 +455,41 @@ export default function Compare() {
             <span><i className="swatch framing" /> different framing</span>
           </div>
           <div className="meta">
-            {/* The badge says "cached" in its own right, so the cost note drops
-                the word rather than printing it twice in four words. */}
-            {data
-              ? `${data.qid} · ${data.claims.length} marked · ${
-                  data.fromCache
-                    ? badged
-                      ? "0 tokens"
-                      : "cached, 0 tokens"
-                    : `${data.usage.inputTokens.toLocaleString()} in / ${data.usage.outputTokens.toLocaleString()} out`
-                }`
-              : "reading all three…"}
+            {/* What it cost to process this article, whoever paid it and
+                whenever they did — see `costNote`. The badge beside it says
+                "cached" in its own right, so the sentence never repeats it. */}
+            {data ? (
+              <span title={tokenNote(data)}>
+                {data.qid} · {data.claims.length} marked
+                {costNote(data) ? ` · ${costNote(data)}` : ""}
+              </span>
+            ) : (
+              "reading all three…"
+            )}
             {/* Only when the cached answer and Wikipedia have actually diverged.
                 An exact-revision hit is cached too, but it describes the live
                 text, so badging it would cry wolf on the ordinary case. */}
             {badged && data?.cache && (
-              <span className="cached-badge" tabIndex={0} aria-describedby="cached-tip">
+              <span className="cached-badge" tabIndex={0} aria-describedby="cached-note">
                 cached
-                <span className="cached-tip" id="cached-tip" role="tooltip">
-                  {cacheNote(data.cache)}
+                {/* Not a tooltip any more, and not labelled as one: it contains
+                    the button that keeps the promise its last sentence makes, so
+                    it is a small popover. The note alone is what describes the
+                    badge; the button is a control beside it, reachable by
+                    pointer (the panel stays open while the pointer is anywhere
+                    inside it) and by Tab (it stays open while anything in it has
+                    focus). Signed out, the button goes to the donate page rather
+                    than to a 401 — it should never be a dead end for the reader
+                    who believed the sentence above it. */}
+                <span className="cached-tip">
+                  <span id="cached-note">{cacheNote(data.cache)}</span>
+                  <button
+                    className="cached-update"
+                    disabled={funding}
+                    onClick={() => (me ? fund("refresh") : goDonate("stale-badge"))}
+                  >
+                    {funding ? "Re-reading…" : "Update this article"}
+                  </button>
                 </span>
               </span>
             )}
@@ -369,14 +512,6 @@ export default function Compare() {
               Search for an article, or paste a Wikipedia URL. The different versions appear side by side and you'll get to see every place they contradict each other, cover something the others skip, or frame the
               same fact differently. <b>You'd be surprised how often it happens.</b>
             </p>
-            {/* The hand-picked suggestions are only worth the space while there
-                is no history to show beside the intro. */}
-            {recent.length === 0 && (
-              <p>
-                Try <code>Palestinian Legislative Council</code>, <code>Six-Day War</code> or{" "}
-                <code>Al-Aqsa Mosque</code>.
-              </p>
-            )}
           </div>
           {/* Already-compared articles, carrying no heading of their own: the
               rows are self-evidently a list of articles, and the hand-picked
@@ -439,7 +574,10 @@ export default function Compare() {
         </div>
       )}
 
-      {hasColumns && (comparing || phase === "done") && (
+      {/* A funded comparison is one grid. A preview is three pieces: what was
+          read, the seam, and what wasn't — so the boundary lands as a single
+          rule across all three columns instead of three fades at three heights. */}
+      {hasColumns && (comparing || phase === "done") && !preview && (
         <Columns
           articles={articles}
           visible={visible}
@@ -450,6 +588,38 @@ export default function Compare() {
           onLeave={() => setCard(null)}
           onLink={navigate}
         />
+      )}
+
+      {hasColumns && phase === "done" && preview && data && (
+        <>
+          <Columns
+            articles={articles}
+            visible={visible}
+            claims={data.claims}
+            activeId={card?.claim.id ?? null}
+            processedThrough={data.scope?.processedThrough}
+            part="head"
+            onEnter={onEnter}
+            onLeave={() => setCard(null)}
+            onLink={navigate}
+          />
+          <PreviewGate
+            busy={funding}
+            signedIn={!!me}
+            creditCents={me?.creditCents ?? 0}
+            error={fundError}
+            onFund={() => fund("full")}
+            onDonate={() => goDonate("preview-gate")}
+          />
+          <Columns
+            articles={articles}
+            visible={visible}
+            claims={data.claims}
+            processedThrough={data.scope?.processedThrough}
+            part="tail"
+            onLink={navigate}
+          />
+        </>
       )}
 
       {comparing && <Loading title={target?.title ?? ""} />}

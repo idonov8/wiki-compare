@@ -23,20 +23,72 @@ Not yet verified — needs `ANTHROPIC_API_KEY` and `DATABASE_URL`:
   on every run and is the number to watch. If most claims are dropped the prompt needs tightening,
   not the matcher loosening.
 - Every database path: the schema, the caches, and the `?fresh=1` bypass.
+- Everything money touches. Sign-in has never completed, no credit has been granted or spent, and
+  no donation row exists. The debit statement is written to be safe under concurrency but that has
+  not been demonstrated against a real database; the check worth running first is two simultaneous
+  debits against a single article's worth of credit, which must leave the balance at zero rather
+  than below it.
+- That `creditCents` really is unreachable through Better Auth's own update endpoint. It is
+  declared `input: false`, which should make it server-owned; the flag is one word long and the
+  failure it prevents is anyone minting themselves credit, so it deserves a deliberate attempt to
+  break it rather than trust.
+- The preview boundary against a real article. `processedThrough` is derived from the section
+  objects the model was actually shown, so it should line up with what the columns render, but no
+  live article has been through it.
 
 ## Setup
 
 ```bash
 npm install
 cp .env.example .env.local     # fill in DATABASE_URL and ANTHROPIC_API_KEY
-npm run db:init                # applies db/schema.sql to Neon
+npm run db:init                # creates all nine tables
 npm run dev
 ```
 
-`DATABASE_URL` is the **pooled** Neon connection string. `ANTHROPIC_API_KEY` is yours; it is only
-ever read server-side in `lib/compare.ts` and never reaches the browser.
+One migration command, and it creates everything: the caches, the labels, the donation and
+spend ledgers, and Better Auth's `user`, `session`, `account` and `verification` — including
+the two credit columns declared in `lib/auth.ts`. Every statement is `IF NOT EXISTS`, so
+running it against a database that is already up to date is a no-op you can repeat freely.
 
-Deploying to Vercel: import the repo, set both variables in Project Settings → Environment
+It used to be two commands, with the auth tables owned by Better Auth's CLI on the reasoning
+that two tools issuing DDL for one table is how two descriptions of it drift apart. The
+reasoning was sound and the result was not: nothing enforced the second command, skipping it
+left a database with five tables out of nine, and the app that came up on top of it failed
+every sign-in with a 500 from inside the adapter. Setup that can be half-completed eventually
+is. The DDL now lives in `db/schema.sql`, transcribed from `npx @better-auth/cli generate` —
+still the source of truth, so when the fields in `lib/auth.ts` change, re-run the generator
+and bring the diff across rather than hand-editing. `npm run auth:migrate` still works and is
+still compatible; it is simply no longer something you have to remember.
+
+`DATABASE_URL` is the **pooled** Neon connection string. `ANTHROPIC_API_KEY` is yours; it is only
+ever read server-side in `lib/compare.ts` and never reaches the browser. `BETTER_AUTH_SECRET`
+signs sessions. `RESEND_API_KEY` sends the sign-in links and is optional outside production —
+without it the link is logged to the server console, which is all a local sign-in needs. That
+branch keys on `VERCEL_ENV`, not `NODE_ENV`: Vercel builds previews with `NODE_ENV=production`,
+so keying on `NODE_ENV` made every preview deployment throw on every sign-in attempt.
+
+### Signing in with Google
+
+Optional, and off unless configured. `lib/auth.ts` registers the provider only when both
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set, and `components/SignIn.tsx` shows the
+button only when `NEXT_PUBLIC_GOOGLE_ENABLED="true"`. Set all three together or none of them —
+lib/auth.ts compares them at startup and warns when they disagree, because a Google button
+that dead-ends and a configured provider nobody is offered are both silent failures.
+
+In Google Cloud Console: **APIs & Services → Credentials → Create OAuth client ID → Web
+application**. The authorised redirect URI must be exactly:
+
+```
+<origin>/api/auth/callback/google
+```
+
+so `http://localhost:3000/api/auth/callback/google` for local development, and the same path
+on each deployed origin. Google matches this string exactly — a trailing slash or the wrong
+port is the whole of most `redirect_uri_mismatch` errors. Preview deployments get a fresh
+hostname per branch, so either register the ones you use or let previews sign in by email link
+only, which they can always do.
+
+Deploying to Vercel: import the repo, set the variables in Project Settings → Environment
 Variables, and run `npm run db:init` once locally against the same database.
 
 ## Picking the article first
@@ -150,6 +202,53 @@ Character offsets from a model are unreliable in general and worse across bidire
 where the visual and logical order of a string differ. A claim whose span can't be found is
 dropped rather than displayed in the wrong place.
 
+## Who pays, and what that buys
+
+Reading anything already compared is free and always will be, signed in or not. What costs money
+is the act of comparing, and the arrangement is that whoever pays for it pays for everybody:
+a funded comparison is written to the cache like any other, so the next person to open that
+article gets it for nothing, and never finds out it was bought.
+
+That makes the free tier affordable rather than merely generous. An uncached article is read as
+far as the lead, the key facts and the first two sections, and the columns fade out below that
+under a bar inviting somebody to fund the rest — about 7c of tokens spent per article, not per
+visitor, because the preview is cached and shared exactly like a full run. The boundary is a
+prefix of the article rather than the most divergent sections of it: `screenGroups` picks the
+eight groups most likely to disagree and they are scattered through the page, which is right for
+a full run and useless for a fade, since a fade only reads as a boundary if everything above it
+was actually read. `previewGroups` in `lib/deterministic.ts` is the prefix version, and
+`screenGroups` is untouched.
+
+A preview and a full run of the same revisions are separate rows. Sharing a cache key would mean
+whichever ran first won permanently — the preview would keep satisfying the cache and the funded
+run would have nowhere to be stored, so somebody would pay for a comparison nobody could ever be
+served. `getCachedComparison` prefers a full run over a preview even when the preview is the
+exact-revision one and the full run is riding the freshness window: a preview read four sections
+and stopped, and being pedantic about revision ids that have probably only moved by a citation is
+not worth fading out most of the page for. Either way the reader is told, because an answer older
+than live still carries the `cached` badge.
+
+Costs are reported in money rather than tokens. `usage.byModel` records the two models
+separately, which is what makes that possible at all: heading alignment runs on Haiku and the
+claim diff on Sonnet at three times the price, so one summed total is wrong at either rate.
+`costUsd` is computed once by the run that spent it and stored with it, so a comparison from
+three weeks ago keeps reporting its own bill instead of being re-priced by today's rate card.
+
+Accounts are Better Auth, by magic link. It owns identity; we own the money. The balance lives on
+its user record as `creditCents`, declared with `input: false` so it cannot be set through Better
+Auth's own sign-up or update endpoints — without that flag anyone can mint themselves credit with
+a `curl`. Balance changes go through one statement in `lib/credits.ts` with the affordability test
+in the `WHERE` clause, rather than through the ORM, because a read-modify-write lets two tabs
+spend the same twenty cents.
+
+Payment is a mock. The pay button records the amount, the running-costs contribution, whether it
+was meant to repeat monthly and whether a coupon was typed, then admits it cannot take the money
+and grants $5 anyway. The row it writes is the entire point: the count of people who tried to give
+money to something that could not take it is the only evidence that any of this is worth building
+properly. The grant happens once per account; a second attempt is still recorded, and answered
+with a promise to email when payments work, which is a promise we can keep because signing in was
+a magic link.
+
 ## Design notes
 
 Highlights are filled bands in the difference's colour, with a darker rule under each so the type
@@ -213,16 +312,28 @@ can overlap without either being lost.
 ## Layout
 
 ```
-app/api/compare/route.ts   orchestration and cache checks
+app/api/compare/route.ts   GET: cache, or a free preview. POST: debits a credit, reads it all
 app/api/recent/route.ts    the recently cached list, for the landing page
+app/api/auth/[...all]/     Better Auth: sign-in, callback, session
+app/api/me/route.ts        balance, and what this account's donations have been read
+app/api/donate/route.ts    the mock payment, and the ledger row that is its real output
+app/donate/page.tsx        the payment page that cannot take a payment
+lib/auth.ts                Better Auth setup; credits declared server-owned
+lib/credits.ts             debit, grant and the ledger, in single statements
+lib/pricing.ts             tokens to dollars, and dollars to articles
+lib/analytics.ts           PostHog, and a no-op without a key
 lib/wikipedia.ts           MediaWiki + Wikidata fetching, search, URL parsing, HTML → sections
 lib/articles.ts            sitelinks + revisions + cached snapshots, shared by both routes
 lib/ghost.ts               where the drifting marks go while a comparison runs
 lib/deterministic.ts       zero-token coverage diff and section screening
 lib/compare.ts             heading alignment + claim diff
 lib/db.ts                  Neon cache layer
-db/schema.sql              three tables: articles, comparisons, labels
+db/schema.sql              all nine tables, ours and Better Auth's, every one idempotent
 components/Compare.tsx     search → choose → compare, toggles, hover card
+components/SignIn.tsx      the sign-in screen: Google, or a link by email
+components/PreviewGate.tsx the seam between what was read and what wasn't
+components/CreditBar.tsx   balance in the masthead, and the thank-you on hover
+components/Donate.tsx      amounts, running costs, monthly, coupon, and the reveal
 components/Columns.tsx     the articles side by side, with or without a comparison
 components/Highlighted.tsx span location and marking
 components/DiffNav.tsx     right-edge rail + jump-to-difference controls

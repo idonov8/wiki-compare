@@ -5,13 +5,16 @@
  *   npm run check:deterministic
  */
 import {
+  PREVIEW_SECTIONS,
   coverageGaps,
   extractNumbers,
   normaliseDigits,
+  previewGroups,
   screenGroups,
   type SectionGroup,
 } from "../lib/deterministic";
-import type { Lang, Section } from "../lib/types";
+import { articlesFor, costOfUsage, formatCost, ratesFor } from "../lib/pricing";
+import type { Lang, Section, Usage } from "../lib/types";
 import { fixtureLabels, fixtureSnapshots, listFixtures, loadFixture } from "../fixtures/loader";
 
 let failures = 0;
@@ -84,12 +87,14 @@ const groups: SectionGroup[] = [
     headings: {},
     sections: { en: sec("a".repeat(500)), he: sec("b".repeat(500)), ar: sec("c".repeat(500)) },
     reasons: [],
+    order: -2,
   },
   {
     key: "key-facts",
     headings: {},
     sections: { en: sec("Seats: 74"), he: sec("Seats: 76"), ar: sec("Seats: 74") },
     reasons: [],
+    order: -1,
   },
   {
     // Present everywhere, same figures, same length: the shape of a framing
@@ -102,9 +107,10 @@ const groups: SectionGroup[] = [
       ar: sec(`الضفة الغربية ${"x".repeat(400)}`),
     },
     reasons: [],
+    order: 0,
   },
-  { key: "en-only", headings: {}, sections: { en: sec("y".repeat(400)) }, reasons: [] },
-  { key: "empty", headings: {}, sections: {}, reasons: [] },
+  { key: "en-only", headings: {}, sections: { en: sec("y".repeat(400)) }, reasons: [], order: 1 },
+  { key: "empty", headings: {}, sections: {}, reasons: [], order: 2 },
 ];
 
 const picked = screenGroups(groups, langs, 8);
@@ -122,6 +128,103 @@ check(
   screenGroups(groups, langs, 2).length === 2,
   "the limit still caps how many groups reach the model",
 );
+
+console.log("\nPreview scoping");
+
+// The preview is a prefix of the article, not the most divergent parts of it.
+// The fade in the columns starts where this stops, and a fade is only coherent
+// if everything above it was read — so the assertion that matters is
+// contiguity, not which groups happen to score highest.
+const previewed = previewGroups(groups);
+const previewKeys = previewed.map((g) => g.key);
+console.log(`    previewed: ${previewKeys.join(", ")}`);
+
+check(previewKeys.includes("lead"), "the lead is always in the preview");
+check(previewKeys.includes("key-facts"), "key facts are always in the preview");
+check(
+  previewed.filter((g) => g.order >= 0).length === PREVIEW_SECTIONS,
+  `exactly ${PREVIEW_SECTIONS} ordinary sections are previewed`,
+);
+check(
+  previewed.every((g, i) => i === 0 || g.order >= previewed[i - 1].order),
+  "the previewed groups come back in document order",
+);
+const ordinary = previewed.filter((g) => g.order >= 0).map((g) => g.order);
+check(
+  ordinary.every((o, i) => i === 0 || o === ordinary[i - 1] + 1),
+  "the previewed sections are contiguous, with no gap for the fade to start inside",
+);
+// The shared fixture has only four scoring groups, so a preview of it is the
+// whole thing and proves nothing. Truncation only means anything on an article
+// long enough to be truncated.
+const longArticle: SectionGroup[] = [
+  groups[0],
+  groups[1],
+  ...Array.from({ length: 8 }, (_, i) => ({
+    key: `s${i}`,
+    headings: {},
+    sections: { en: sec("z".repeat(400)), he: sec("z".repeat(400)) },
+    reasons: [],
+    order: i,
+  })),
+];
+check(
+  previewGroups(longArticle).length < screenGroups(longArticle, langs, 8).length,
+  "on a long article a preview reads strictly less than a full run",
+  `preview ${previewGroups(longArticle).length}, full ${screenGroups(longArticle, langs, 8).length}`,
+);
+check(
+  previewGroups(longArticle).filter((g) => g.order >= 0).every((g) => g.order < PREVIEW_SECTIONS),
+  "the preview stops at the boundary rather than sampling past it",
+);
+
+console.log("\nPricing");
+
+// One summed token total cannot be priced: alignment runs on Haiku and the diff
+// on Sonnet at three times the rate. These figures are chosen so that pricing
+// the total at either single rate gives a visibly different answer from pricing
+// the two apart, which is the bug the byModel breakdown exists to prevent.
+const twoModels: Usage = {
+  inputTokens: 30_000,
+  outputTokens: 6_000,
+  cachedInputTokens: 0,
+  byModel: {
+    "claude-haiku-4-5-20251001": { inputTokens: 10_000, outputTokens: 1_000, cachedInputTokens: 0 },
+    "claude-sonnet-4-6": { inputTokens: 20_000, outputTokens: 5_000, cachedInputTokens: 0 },
+  },
+};
+const split = costOfUsage(twoModels, "claude-sonnet-4-6");
+const asIfAllSonnet = costOfUsage(
+  { inputTokens: 30_000, outputTokens: 6_000, cachedInputTokens: 0 },
+  "claude-sonnet-4-6",
+);
+// haiku 10k in @ $1 + 1k out @ $5 = $0.015; sonnet 20k in @ $3 + 5k out @ $15 = $0.135
+check(Math.abs(split - 0.15) < 1e-9, "per-model usage prices each call at its own rate", `${split}`);
+check(split < asIfAllSonnet, "pricing the summed total at one rate overstates the bill");
+
+check(
+  Math.abs(
+    costOfUsage(
+      { inputTokens: 1_000, outputTokens: 0, cachedInputTokens: 1_000 },
+      "claude-sonnet-4-6",
+    ) - 0.0003,
+  ) < 1e-9,
+  "cached input is billed at the cache-read rate, not the input rate",
+);
+
+// A model nobody has a rate for is a model somebody just set in the
+// environment. Pricing it at zero would under-bill every donor silently, which
+// is the one direction of wrong that nobody ever checks.
+const unknown = ratesFor("claude-something-unreleased");
+check(unknown.output >= 25, "an unknown model prices at the dearest rate, never at zero");
+
+check(formatCost(0) === "$0.00", "nothing spent reads as zero");
+check(formatCost(0.004) === "<$0.01", "a fraction of a cent never reads as free");
+check(formatCost(0.1234) === "$0.12", "an ordinary run reads in cents");
+
+check(articlesFor(500) === 25, "$5 buys 25 articles");
+check(articlesFor(0) === 0, "an empty balance buys nothing");
+check(articlesFor(-100) === 0, "a negative balance cannot buy a negative article");
 
 console.log(failures ? `\n${failures} check(s) failed\n` : "\nall checks passed\n");
 process.exit(failures ? 1 : 0);
