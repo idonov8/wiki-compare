@@ -11,12 +11,16 @@ import type {
 } from "./types";
 import { KEY_FACTS_HEADING, LANG_META, LEAD_HEADING } from "./types";
 import { previewGroups, screenGroups, type SectionGroup } from "./deterministic";
-import { costOfUsage } from "./pricing";
+import { costOfUsage, FALLBACK_PRICING_MODEL } from "./pricing";
 
 export const PROMPT_VERSION = "v1";
 
 const ALIGN_MODEL = process.env.ALIGN_MODEL || "claude-haiku-4-5-20251001";
-const DIFF_MODEL = process.env.DIFF_MODEL || "claude-sonnet-4-6";
+// The default is FALLBACK_PRICING_MODEL rather than a second copy of the same
+// string. The client prices rows that predate the per-model breakdown by
+// assuming they ran on this model, so if the default here ever moves and that
+// constant does not, every legacy row is silently priced at the wrong rate.
+const DIFF_MODEL = process.env.DIFF_MODEL || FALLBACK_PRICING_MODEL;
 const MAX_CHARS_PER_SECTION = 2500;
 const GROUPS_PER_CALL = 3;
 
