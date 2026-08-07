@@ -62,7 +62,21 @@ export default function Columns({
 }) {
   return (
     <div
-      className={part === "tail" ? "columns columns-faded" : "columns"}
+      className={
+        part === "tail"
+          ? // The unread remainder. It fades out rather than being cut off, because
+            // the article does not end there — only our reading of it does.
+            // No `user-select: none`: the text below the gate is Wikipedia's own,
+            // free to anyone, and locking it would be charging for something we
+            // neither wrote nor paid for. Only the comparison is unfunded.
+            // `pointer-events` is off because there is nothing here to hover — no
+            // marks were placed in this half — and a help cursor over plain text
+            // would promise a card that never opens.
+            // Both spellings of the mask: Safari still wants the prefix, and
+            // dropping it would cut the remainder off flat rather than fading it.
+            "columns columns-faded grid max-cols:block items-stretch bg-wiki-page [-webkit-mask-image:linear-gradient(to_bottom,black_0,transparent_340px)] [mask-image:linear-gradient(to_bottom,black_0,transparent_340px)] pointer-events-none"
+          : "columns grid max-cols:block items-stretch bg-wiki-page"
+      }
       aria-hidden={part === "tail" ? true : undefined}
       style={{ gridTemplateColumns: `repeat(${visible.length}, minmax(0, 1fr))` }}
     >
@@ -90,32 +104,51 @@ export default function Columns({
           />
         );
         return (
-          <section key={lang} className="column" dir={meta.dir} lang={lang}>
+          // Physical, not inline: columns always sit en|he|ar left-to-right
+          // regardless of each column's own direction, so the seam belongs
+          // between every pair.
+          <section
+            key={lang}
+            className="column min-w-0 pt-[22px] px-[26px] pb-20 border-rule border-l first:border-l-0 max-cols:border-l-0 max-cols:border-t"
+            dir={meta.dir}
+            lang={lang}
+          >
             {chrome && (
-              <div className="column-head">
-                <span className="native">{meta.native}</span>
-                <span className="arrow" aria-hidden="true">
+              <div className="column-head flex items-baseline gap-2.5 pb-2.5 mb-4 border-b-2 border-ink font-mono text-[12px] text-ink-soft">
+                <span className="native font-body text-[17px] text-ink">{meta.native}</span>
+                <span className="arrow text-[13px] text-ink" aria-hidden="true">
                   {meta.dir === "rtl" ? "←" : "→"}
                 </span>
-                <a href={article.url} target="_blank" rel="noreferrer">
+                <a
+                  href={article.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-wiki-link no-underline hover:underline"
+                >
                   rev {article.revid}
                 </a>
               </div>
             )}
-            {chrome && <h1 className="article-title">{article.title}</h1>}
+            {chrome && (
+              <h1 className="article-title m-0 mb-3.5 pb-2 text-[26px] leading-tight font-wiki-heading font-normal border-b border-wiki-border text-wiki-text">
+                {article.title}
+              </h1>
+            )}
             {chrome && article.image && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                className="article-image"
+                className="article-image block w-full max-w-[300px] h-auto m-0 mb-4 p-1 bg-wiki-page border border-wiki-border rounded-[2px]"
                 src={article.image.src}
                 alt={article.image.alt ?? article.title}
                 loading="lazy"
               />
             )}
             {chrome && keyFacts && (
-              <details className="key-facts">
-                <summary>Key facts</summary>
-                <dl className="kf-body">
+              <details className="key-facts group mb-5 border border-wiki-border rounded-[2px] bg-wiki-shade">
+                <summary className="cursor-pointer py-2 px-3 font-mono text-[11px] tracking-[0.09em] uppercase text-ink-soft select-none group-open:border-b group-open:border-wiki-border">
+                  Key facts
+                </summary>
+                <dl className="kf-body m-0 pt-1.5 px-3 pb-2.5 text-[13.5px] text-wiki-text">
                   {keyFacts.text.split("\n").map((line, i) => {
                     // A claim can span the label and value of one row, so a row
                     // carrying one stays a single highlightable unit rather than
@@ -125,7 +158,10 @@ export default function Columns({
                     );
                     if (hasClaim) {
                       return (
-                        <div key={i} className="kf-row kf-row-full">
+                        <div
+                          key={i}
+                          className="kf-row kf-row-full block py-[5px] border-t border-wiki-rule first:border-t-0"
+                        >
                           {highlight(line)}
                         </div>
                       );
@@ -133,15 +169,21 @@ export default function Columns({
                     const sep = line.indexOf(": ");
                     if (sep === -1) {
                       return (
-                        <div key={i} className="kf-group">
+                        <div
+                          key={i}
+                          className="kf-group pt-2 pb-0.5 font-bold text-center text-ink-soft"
+                        >
                           {line}
                         </div>
                       );
                     }
                     return (
-                      <div key={i} className="kf-row">
-                        <dt className="kf-label">{line.slice(0, sep)}</dt>
-                        <dd className="kf-value">{line.slice(sep + 2)}</dd>
+                      <div
+                        key={i}
+                        className="kf-row grid grid-cols-[minmax(0,38%)_minmax(0,1fr)] gap-y-0.5 gap-x-3 py-[5px] border-t border-wiki-rule first:border-t-0"
+                      >
+                        <dt className="kf-label m-0 font-bold">{line.slice(0, sep)}</dt>
+                        <dd className="kf-value m-0">{line.slice(sep + 2)}</dd>
                       </div>
                     );
                   })}
@@ -151,7 +193,9 @@ export default function Columns({
             {body.map((section, i) => (
               <div key={`${section.heading}-${i}`}>
                 {section.heading !== LEAD_HEADING && (
-                  <h3 className="section-heading">{section.heading}</h3>
+                  <h3 className="section-heading mt-[26px] mb-2 pb-[5px] font-wiki-heading text-[21px] font-normal border-b border-wiki-border text-wiki-text">
+                    {section.heading}
+                  </h3>
                 )}
                 {highlight(section.text, section.links)}
               </div>

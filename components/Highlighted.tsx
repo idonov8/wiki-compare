@@ -63,7 +63,12 @@ export default function Highlighted({
   onLink?: (title: string, lang: Lang) => void;
 }) {
   const ranges: Range[] = ghost ? ghostRanges(text) : locate(text, lang, claims);
-  if (!ranges.length && !links.length) return <span className="body-text">{text}</span>;
+  if (!ranges.length && !links.length)
+    return (
+      <span className="body-text whitespace-pre-wrap font-wiki text-[14.5px] leading-[1.62] text-wiki-text">
+        {text}
+      </span>
+    );
 
   // Split at every claim and link boundary, then merge neighbouring atoms that
   // share the same claim and link so a claim with no link inside stays one mark.
@@ -88,7 +93,7 @@ export default function Highlighted({
       node = (
         <a
           href={comparePath(link.title, lang)}
-          className="wikilink"
+          className="wikilink text-wiki-link no-underline hover:underline"
           onClick={(e) => {
             // Let modifier/middle clicks open a new tab; take over the plain one.
             if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -103,8 +108,14 @@ export default function Highlighted({
     if (mark?.claim) {
       const found = mark.claim;
       node = (
+        // A filled band in the difference's colour, carried across line breaks
+        // with box-decoration-clone so a wrapped span reads as one mark. No
+        // inline padding: it is what would open a gap between the fragments a
+        // span splits into at an LTR/RTL boundary, so the fill stays continuous
+        // across direction changes. A darker inset shadow under the band keeps
+        // the type legible without relying on the fill colour alone.
         <mark
-          className="claim"
+          className="claim text-wiki-text bg-transparent rounded-[2px] py-[0.09em] box-decoration-clone cursor-help transition-[background-color,box-shadow] duration-[120ms] ease-[ease] data-[type=contradiction]:bg-mark-contradiction data-[type=contradiction]:inset-shadow-contradiction data-[type=unique]:bg-mark-unique data-[type=unique]:inset-shadow-unique data-[type=framing]:bg-mark-framing data-[type=framing]:inset-shadow-framing data-[active=true]:data-[type=contradiction]:bg-mark-contradiction-on data-[active=true]:data-[type=unique]:bg-mark-unique-on data-[active=true]:data-[type=framing]:bg-mark-framing-on"
           tabIndex={0}
           role="button"
           aria-describedby={activeId === found.id ? "claim-card" : undefined}
@@ -123,14 +134,24 @@ export default function Highlighted({
       // Same span machinery, so a link inside a drifting mark stays a link: the
       // article is meant to be read and followed while the model reads it too.
       const { seed } = mark;
+      const ghostType = GHOST_TYPES[seed % 3];
       node = (
+        // Not a finding and never mistakable for one: no rule under the band,
+        // no cursor and no hover, and it fades in and out on a staggered cycle
+        // (driven by the animate-ghost-drift keyframes) so the page reads as
+        // being worked over rather than as already marked up. `--ghost` feeds
+        // the keyframes' mid-cycle background colour; duration and delay vary
+        // per mark, so they're set here rather than in the shared utility.
         <mark
-          className="ghost"
-          data-type={GHOST_TYPES[seed % 3]}
-          style={{
-            animationDuration: `${4 + ((seed >> 3) % 45) / 10}s`,
-            animationDelay: `-${((seed >> 7) % 90) / 10}s`,
-          }}
+          className="ghost text-inherit bg-transparent rounded-[2px] py-[0.09em] box-decoration-clone animate-ghost-drift"
+          data-type={ghostType}
+          style={
+            {
+              "--ghost": `var(--color-ghost-${ghostType})`,
+              animationDuration: `${4 + ((seed >> 3) % 45) / 10}s`,
+              animationDelay: `-${((seed >> 7) % 90) / 10}s`,
+            } as React.CSSProperties
+          }
         >
           {node}
         </mark>
@@ -139,5 +160,9 @@ export default function Highlighted({
     nodes.push(<span key={from}>{node}</span>);
   }
 
-  return <span className="body-text">{nodes}</span>;
+  return (
+    <span className="body-text whitespace-pre-wrap font-wiki text-[14.5px] leading-[1.62] text-wiki-text">
+      {nodes}
+    </span>
+  );
 }
