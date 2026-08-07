@@ -157,6 +157,11 @@ CREATE INDEX IF NOT EXISTS "verification_identifier_idx" ON "verification" ("ide
 -- them to here would quietly rewrite the donation history every time somebody
 -- closed an account, and the count of people who tried to pay is the one number
 -- this table exists to keep. A dangling id is the correct outcome.
+--
+-- `coupon` is kept and no longer written. Coupons are redeemed on their own
+-- button now and land in coupon_redemptions; the column still holds the codes
+-- typed into the pay form back when the two were one action, and dropping it
+-- would delete that history to save a nullable column.
 CREATE TABLE IF NOT EXISTS donations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id TEXT NOT NULL,
@@ -165,6 +170,35 @@ CREATE TABLE IF NOT EXISTS donations (
   granted_cents INTEGER NOT NULL, mock BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- One row per coupon somebody has redeemed.
+--
+-- Which codes exist and what they are worth lives in lib/coupons.ts, not here:
+-- that is policy, and policy belongs somewhere a reviewer can see it change.
+-- This table holds the other half, the part that is a fact rather than a
+-- decision — who has already been given which code's credit.
+--
+-- The UNIQUE (user_id, code) is the guard itself, not a tidiness constraint.
+-- Redemption is an INSERT ... ON CONFLICT DO NOTHING against this index, so two
+-- tabs pressing Redeem on the same code at the same moment are serialised by
+-- Postgres on the index and exactly one of them comes back with a row. Asking
+-- "has this been redeemed?" in a SELECT first would leave a window between the
+-- question and the grant, which is the same race lib/credits.ts avoids on the
+-- balance and for the same reason.
+--
+-- Same TEXT user_id with no foreign key as the two ledgers below, for the same
+-- reason: this is append-only evidence of what was handed out, and a closed
+-- account should not quietly un-redeem its coupons.
+CREATE TABLE IF NOT EXISTS coupon_redemptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  code TEXT NOT NULL,
+  granted_cents INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, code)
+);
+
+CREATE INDEX IF NOT EXISTS coupon_redemptions_user_idx ON coupon_redemptions (user_id);
 
 -- The other side of the ledger: one row per comparison somebody's credit paid
 -- for. charged_cents is the flat article price and actual_cost_cents is what the
