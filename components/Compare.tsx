@@ -417,9 +417,9 @@ export default function Compare() {
   return (
     <>
       <header className="masthead border-b border-rule px-[24px] py-[20px] flex gap-[24px] items-baseline flex-wrap">
-        <div className="wordmark font-display text-[30px] leading-none tracking-[-0.01em]">
+        <a href="/" className="wordmark font-display text-[30px] leading-none tracking-[-0.01em]">
           wiki<span className="text-ink-soft">-</span>compare*
-        </div>
+        </a>
         <div className="search flex gap-2 flex-[1_1_320px]">
           <input
             className="flex-1 [font:inherit] px-[12px] py-[9px] bg-paper-raised border border-rule rounded-[2px] text-inherit placeholder:text-ink-soft"
