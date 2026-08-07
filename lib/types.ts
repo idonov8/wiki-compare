@@ -173,9 +173,30 @@ export interface DonateRequest {
   amountCents: number;
   maintenanceCents: number;
   monthly: boolean;
-  coupon?: string;
   /** Which surface sent them here, for the funnel. */
   from?: string;
+}
+
+/** What the Redeem button submits. Case and spacing are the server's problem. */
+export interface CouponRequest {
+  code: string;
+}
+
+/**
+ * A redeemed coupon.
+ *
+ * Deliberately not part of `DonateResponse`. A coupon is credit arriving, which
+ * is a complete thing on its own and has nothing to do with whether somebody
+ * then goes on to donate — the reason it has its own button is the reason it
+ * has its own response.
+ */
+export interface CouponResponse {
+  /** The normalised code, so the confirmation names it the way we stored it. */
+  code: string;
+  grantedCents: number;
+  /** The balance afterwards, so the page does not have to re-ask `/api/me`. */
+  creditCents: number;
+  message: string;
 }
 
 /**

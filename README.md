@@ -41,7 +41,7 @@ Not yet verified — needs `ANTHROPIC_API_KEY` and `DATABASE_URL`:
 ```bash
 npm install
 cp .env.example .env.local     # fill in DATABASE_URL and ANTHROPIC_API_KEY
-npm run db:init                # creates all nine tables
+npm run db:init                # creates all ten tables
 npm run dev
 ```
 
@@ -242,13 +242,22 @@ a `curl`. Balance changes go through one statement in `lib/credits.ts` with the 
 in the `WHERE` clause, rather than through the ORM, because a read-modify-write lets two tabs
 spend the same twenty cents.
 
-Payment is a mock. The pay button records the amount, the running-costs contribution, whether it
-was meant to repeat monthly and whether a coupon was typed, then admits it cannot take the money
-and grants $5 anyway. The row it writes is the entire point: the count of people who tried to give
-money to something that could not take it is the only evidence that any of this is worth building
-properly. The grant happens once per account; a second attempt is still recorded, and answered
-with a promise to email when payments work, which is a promise we can keep because signing in was
-a magic link.
+Payment is a mock. The pay button records the amount, the running-costs contribution and whether
+it was meant to repeat monthly, then admits it cannot take the money and grants $5 anyway. The row
+it writes is the entire point: the count of people who tried to give money to something that could
+not take it is the only evidence that any of this is worth building properly. The grant happens
+once per account; a second attempt is still recorded, and answered with a promise to email when
+payments work, which is a promise we can keep because signing in was a magic link.
+
+Coupons are not a mock, and are not part of that button. `WELCOME3` is $3 of real credit, redeemed
+by its own small Redeem button beside the field — the code is checked the moment it is typed
+rather than at the end of an order, so finding out whether a code is real no longer costs a
+donation you may not want to make, and a typo comes back as one line under the field instead of as
+a thank-you screen for something else. Which codes exist and what they are worth is a table in
+`lib/coupons.ts`, because that is policy and belongs somewhere a reviewer sees it change; who has
+redeemed what is `coupon_redemptions`, because that is a fact. A code pays out once per account,
+and the `UNIQUE (user_id, code)` it is inserted against is the guard rather than a `SELECT` before
+the grant — the same race, and the same answer, as the balance itself.
 
 ## Design notes
 
@@ -318,6 +327,8 @@ app/api/recent/route.ts    the recently cached list, for the landing page
 app/api/auth/[...all]/     Better Auth: sign-in, callback, session
 app/api/me/route.ts        balance, and what this account's donations have been read
 app/api/donate/route.ts    the mock payment, and the ledger row that is its real output
+app/api/coupon/route.ts    redeeming a code, for credit that is not a mock
+lib/coupons.ts             which codes exist and what each one is worth
 app/donate/page.tsx        the payment page that cannot take a payment
 lib/auth.ts                Better Auth setup; credits declared server-owned
 lib/credits.ts             debit, grant and the ledger, in single statements
@@ -329,12 +340,12 @@ lib/ghost.ts               where the drifting marks go while a comparison runs
 lib/deterministic.ts       zero-token coverage diff and section screening
 lib/compare.ts             heading alignment + claim diff
 lib/db.ts                  Neon cache layer
-db/schema.sql              all nine tables, ours and Better Auth's, every one idempotent
+db/schema.sql              all ten tables, ours and Better Auth's, every one idempotent
 components/Compare.tsx     search → choose → compare, toggles, hover card
 components/SignIn.tsx      the sign-in screen: Google, or a link by email
 components/PreviewGate.tsx the seam between what was read and what wasn't
 components/CreditBar.tsx   balance in the masthead, and the thank-you on hover
-components/Donate.tsx      amounts, running costs, monthly, coupon, and the reveal
+components/Donate.tsx      amounts, running costs, monthly, the Redeem button, and the reveal
 components/Columns.tsx     the articles side by side, with or without a comparison
 components/Highlighted.tsx span location and marking
 components/DiffNav.tsx     right-edge rail + jump-to-difference controls
