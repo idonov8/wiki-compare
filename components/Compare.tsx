@@ -416,19 +416,24 @@ export default function Compare() {
 
   return (
     <>
-      <header className="masthead">
-        <div className="wordmark">
-          wiki<span>-</span>compare*
+      <header className="masthead border-b border-rule px-[24px] py-[20px] flex gap-[24px] items-baseline flex-wrap">
+        <div className="wordmark font-display text-[30px] leading-none tracking-[-0.01em]">
+          wiki<span className="text-ink-soft">-</span>compare*
         </div>
-        <div className="search">
+        <div className="search flex gap-2 flex-[1_1_320px]">
           <input
+            className="flex-1 [font:inherit] px-[12px] py-[9px] bg-paper-raised border border-rule rounded-[2px] text-inherit placeholder:text-ink-soft"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && search()}
             placeholder="Article title, or paste a Wikipedia URL"
             aria-label="Article title"
           />
-          <button onClick={search} disabled={busy}>
+          <button
+            className="px-[18px] py-[9px] bg-ink text-paper-raised border border-ink disabled:opacity-[0.45] disabled:cursor-progress"
+            onClick={search}
+            disabled={busy}
+          >
             {busy ? "Working…" : "Search"}
           </button>
         </div>
@@ -436,12 +441,12 @@ export default function Compare() {
       </header>
 
       {(comparing || phase === "done") && hasColumns && (
-        <div className="controls">
-          <div className="toggles">
+        <div className="controls border-b border-rule px-[24px] py-[12px] flex gap-x-[28px] gap-y-[20px] items-center flex-wrap font-mono text-[12px]">
+          <div className="toggles flex gap-[6px]">
             {available.map((lang) => (
               <button
                 key={lang}
-                className="toggle"
+                className="toggle px-[11px] py-[5px] bg-transparent border border-rule font-mono text-[12px] text-ink-soft aria-pressed:bg-ink aria-pressed:border-ink aria-pressed:text-paper-raised"
                 aria-pressed={visible.includes(lang)}
                 onClick={() => toggle(lang)}
               >
@@ -449,12 +454,18 @@ export default function Compare() {
               </button>
             ))}
           </div>
-          <div className="legend">
-            <span><i className="swatch contradiction" /> contradiction</span>
-            <span><i className="swatch unique" /> only in one version</span>
-            <span><i className="swatch framing" /> different framing</span>
+          <div className="legend flex gap-[16px] text-ink-soft flex-wrap">
+            <span className="flex items-center gap-[6px]">
+              <i className="swatch contradiction inline-block w-[15px] h-[15px] rounded-[2px] bg-mark-contradiction inset-shadow-contradiction" /> contradiction
+            </span>
+            <span className="flex items-center gap-[6px]">
+              <i className="swatch unique inline-block w-[15px] h-[15px] rounded-[2px] bg-mark-unique inset-shadow-unique" /> only in one version
+            </span>
+            <span className="flex items-center gap-[6px]">
+              <i className="swatch framing inline-block w-[15px] h-[15px] rounded-[2px] bg-mark-framing inset-shadow-framing" /> different framing
+            </span>
           </div>
-          <div className="meta">
+          <div className="meta text-ink-soft ms-auto">
             {/* What it cost to process this article, whoever paid it and
                 whenever they did — see `costNote`. The badge beside it says
                 "cached" in its own right, so the sentence never repeats it. */}
@@ -470,7 +481,11 @@ export default function Compare() {
                 An exact-revision hit is cached too, but it describes the live
                 text, so badging it would cry wolf on the ordinary case. */}
             {badged && data?.cache && (
-              <span className="cached-badge" tabIndex={0} aria-describedby="cached-note">
+              <span
+                className="cached-badge group relative inline-flex items-center gap-[5px] ms-[9px] px-[7px] py-[2px] border border-rule bg-paper-raised font-mono text-[10px] tracking-[0.09em] uppercase text-ink-soft cursor-default before:content-[''] before:w-[5px] before:h-[5px] before:rounded-full before:bg-framing"
+                tabIndex={0}
+                aria-describedby="cached-note"
+              >
                 cached
                 {/* Not a tooltip any more, and not labelled as one: it contains
                     the button that keeps the promise its last sentence makes, so
@@ -481,10 +496,29 @@ export default function Compare() {
                     focus). Signed out, the button goes to the donate page rather
                     than to a 401 — it should never be a dead end for the reader
                     who believed the sentence above it. */}
-                <span className="cached-tip">
+                {/* The panel is a DOM child of the badge, so `group-hover` /
+                    `group-focus-within` on the badge keep it open while the
+                    pointer or focus is anywhere inside it — except for the 8px
+                    gap between the badge's bottom edge and the panel's top edge,
+                    where nothing is painted at all. Crossing that empty band on
+                    the way down drops the hover before the pointer ever reaches
+                    the button, so the `::before` bridge below paints 9px over
+                    the gap (one pixel of overlap with the badge, so there is no
+                    seam at either end). A Playwright test walks the mouse from
+                    badge to button in twelve steps specifically to catch this
+                    regressing. `focus-within`, not `focus-visible`, is what lets
+                    Tab reach the button — it is only focusable once the panel is
+                    visible. Visibility toggles rather than display so the panel
+                    can be measured and clicked mid-transition, and it takes
+                    pointer events only while open, so a click passes through to
+                    the strip underneath when it is closed. */}
+                <span className="cached-tip absolute z-50 top-[calc(100%_+_8px)] end-0 w-[300px] px-[13px] py-[11px] bg-paper-raised border border-ink rounded-[2px] shadow-offset font-body text-[13px] leading-[1.55] tracking-normal normal-case text-start text-ink opacity-0 invisible pointer-events-none transition-opacity duration-[120ms] ease-[ease] grid justify-items-start gap-[10px] group-hover:opacity-100 group-hover:visible group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:visible group-focus-within:pointer-events-auto before:content-[''] before:absolute before:inset-x-0 before:-top-[9px] before:h-[9px]">
                   <span id="cached-note">{cacheNote(data.cache)}</span>
+                  {/* Filled rather than underlined: it sits directly under a
+                      sentence, where a link would read as the end of that
+                      sentence instead of the answer to it. */}
                   <button
-                    className="cached-update"
+                    className="cached-update px-[11px] py-[5px] border border-ink rounded-[2px] bg-ink text-paper-raised font-mono text-[11px] tracking-[0.07em] uppercase hover:enabled:bg-ink-soft hover:enabled:border-ink-soft disabled:opacity-50 disabled:cursor-progress"
                     disabled={funding}
                     onClick={() => (me ? fund("refresh") : goDonate("stale-badge"))}
                   >
@@ -498,16 +532,26 @@ export default function Compare() {
       )}
 
       {error && (
-        <div className="state error">
-          <h2>That didn&apos;t work</h2>
+        <div className="state error text-ink-soft py-[64px] pe-[24px] ps-[16px] max-w-[58ch] border-s-[3px] border-contradiction">
+          <h2 className="font-display text-[27px] font-normal text-ink m-0 mb-[10px]">That didn&apos;t work</h2>
           <p>{error}</p>
         </div>
       )}
 
       {phase === "idle" && !error && (
-        <div className={`state${recent.length > 0 ? " state-grid" : ""}`}>
-          <div className="state-intro">
-            <h2>Same Article, different language - different information.</h2>
+        // Two-up landing layout: the intro sits beside the recently-cached list
+        // rather than above it, so a returning reader sees their history without
+        // scrolling past the pitch. Narrow viewports fall back to the original
+        // single column.
+        <div
+          className={`state text-ink-soft py-[64px] px-[24px] ${
+            recent.length > 0
+              ? "state-grid max-w-[1120px] grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-[64px] items-start max-cols:grid-cols-1 max-cols:gap-[40px] max-cols:max-w-[58ch]"
+              : "max-w-[58ch]"
+          }`}
+        >
+          <div className="state-intro min-w-0">
+            <h2 className="font-display text-[27px] font-normal text-ink m-0 mb-[10px]">Same Article, different language - different information.</h2>
             <p>
               Search for an article, or paste a Wikipedia URL. The different versions appear side by side and you'll get to see every place they contradict each other, cover something the others skip, or frame the
               same fact differently. <b>You'd be surprised how often it happens.</b>
@@ -518,24 +562,36 @@ export default function Compare() {
               suggestions are only worth the space while there is nothing here. */}
           {recent.length > 0 && (
             <div className="recent-container">
-              <h2>Recently cached articles:</h2>
+              <h2 className="font-display text-[27px] font-normal text-ink m-0 mb-[10px]">Recently cached articles:</h2>
               <p>View them freely & quickly.</p>
-              <ul className="recent">
+              {/* Ruled rows rather than chips: a chip row reads as a set of
+                  suggestions, and these are a history. Each row sets its own
+                  `dir`, so a Hebrew or Arabic title runs the right way inside a
+                  left-to-right list. */}
+              <ul className="recent list-none mt-[26px] mx-0 mb-0 p-0 border-t border-rule">
               {recent.map((item) => (
-                <li key={item.qid}>
+                <li key={item.qid} className="border-b border-rule">
                   <button
                     type="button"
+                    className="group flex items-baseline gap-[14px] w-full px-[8px] py-[9px] border-0 bg-none [font:inherit] text-wiki-link text-start hover:bg-paper-raised"
                     onClick={() => navigate(item.title, item.lang)}
                     aria-label={`Compare ${item.title}, cached ${relative(item.computedAt)}`}
                   >
+                    {/* `dir` on the row orders the title's own characters, not
+                        moves it: the list is a left-to-right piece of interface
+                        whichever script a title is in, and letting the title
+                        resolve to a logical `text-start` per row left the
+                        Hebrew and Arabic titles floating against the language
+                        column while the English ones sat at the margin — hence
+                        `text-left`, physically, regardless of `dir`. */}
                     <span
-                      className="recent-title"
+                      className="recent-title flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-left group-hover:underline"
                       dir={LANG_META[item.lang].dir}
                       lang={item.lang}
                     >
                       {item.title}
                     </span>
-                    <span className="recent-langs">
+                    <span className="recent-langs font-mono text-[11px] tracking-[0.04em] text-ink-soft shrink-0">
                       {item.langs.map((l) => l.toUpperCase()).join(" · ")}
                     </span>
                   </button>
@@ -548,24 +604,34 @@ export default function Compare() {
       )}
 
       {phase === "results" && (
-        <div className="results">
-          <h2>Which article did you mean?</h2>
-          <p className="results-note">
+        <div className="results px-[24px] pt-[40px] pb-[56px] max-w-[64ch]">
+          <h2 className="font-display text-[27px] font-normal m-0 mb-[6px]">Which article did you mean?</h2>
+          <p className="results-note text-ink-soft text-[14px] m-0 mb-[18px]">
             Results from {LANG_META[hits[0]?.lang as Lang]?.label ?? hits[0]?.lang} Wikipedia. The
             other languages are found through the article&apos;s Wikidata item.
           </p>
-          <ul>
+          <ul className="list-none m-0 p-0">
             {hits.map((hit) => (
-              <li key={`${hit.lang}:${hit.title}`}>
+              <li
+                key={`${hit.lang}:${hit.title}`}
+                className="flex items-baseline gap-[12px] border-t border-rule last:border-b last:border-rule"
+              >
                 <button
-                  className="hit"
+                  className="hit flex-1 text-start px-[4px] py-[12px] bg-transparent border-none hover:bg-paper-raised disabled:opacity-50 disabled:cursor-progress"
                   onClick={() => navigate(hit.title, hit.lang)}
                   disabled={busy}
                 >
-                  <span className="hit-title">{hit.title}</span>
-                  {hit.description && <span className="hit-desc">{hit.description}</span>}
+                  <span className="hit-title block text-[16px]">{hit.title}</span>
+                  {hit.description && (
+                    <span className="hit-desc block text-[13px] text-ink-soft">{hit.description}</span>
+                  )}
                 </button>
-                <a className="hit-link" href={hit.url} target="_blank" rel="noreferrer">
+                <a
+                  className="hit-link font-mono text-[11px] text-wiki-link no-underline whitespace-nowrap hover:underline"
+                  href={hit.url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   open on Wikipedia ↗
                 </a>
               </li>
@@ -629,16 +695,19 @@ export default function Compare() {
           {data.claims.length > 0 && <DiffNav signature={`${data.qid}:${visible.join("")}`} />}
 
           {data.coverage.length > 0 && (
-            <div className="coverage">
-              <h2>Covered in some versions, not others</h2>
-              <p>
+            <div className="coverage border-t border-rule p-[24px]">
+              <h2 className="font-display font-normal text-[24px] m-0 mb-[4px]">Covered in some versions, not others</h2>
+              <p className="text-ink-soft m-0 mb-[16px] max-w-[62ch] text-[14px]">
                 Linked concepts one version mentions and another never does. Computed by set
                 arithmetic over Wikidata identifiers, so no model reads a word of this.
               </p>
-              <div className="gaps">
+              <div className="gaps flex flex-wrap gap-[6px]">
                 {data.coverage.map((gap) => (
-                  <span key={gap.qid} className="gap">
-                    {gap.label} <b>{gap.presentIn.join("+")} only</b>
+                  <span
+                    key={gap.qid}
+                    className="gap font-mono text-[11px] px-[9px] py-[4px] border border-rule bg-paper-raised"
+                  >
+                    {gap.label} <b className="font-semibold text-ink-soft">{gap.presentIn.join("+")} only</b>
                   </span>
                 ))}
               </div>
@@ -649,17 +718,20 @@ export default function Compare() {
 
       {card && (
         <div
-          className="card"
+          className="card fixed z-50 max-w-[340px] px-[15px] py-[13px] bg-paper-raised border border-ink rounded-[2px] shadow-offset pointer-events-none [direction:ltr] text-start"
           id="claim-card"
           style={{ left: card.left, top: card.top, bottom: card.bottom }}
           role="tooltip"
         >
-          <span className="kind" data-type={card.claim.type}>
+          <span
+            className="kind font-mono text-[10px] tracking-[0.09em] uppercase block mb-[5px] data-[type=contradiction]:text-contradiction data-[type=unique]:text-unique data-[type=framing]:text-framing"
+            data-type={card.claim.type}
+          >
             {KIND_LABEL[card.claim.type]}
           </span>
-          <span className="summary">{card.claim.summary}</span>
-          <span className="explanation">{card.claim.explanation}</span>
-          <div className="also">
+          <span className="summary font-semibold block mb-[5px]">{card.claim.summary}</span>
+          <span className="explanation text-[14px] leading-[1.55] text-ink-soft">{card.claim.explanation}</span>
+          <div className="also font-mono text-[11px] text-ink-soft mt-[9px] pt-[8px] border-t border-rule">
             marked in {Object.keys(card.claim.spans).map((l) => l.toUpperCase()).join(", ")}
           </div>
         </div>
