@@ -8,7 +8,7 @@ import DiffNav from "./DiffNav";
 import Loading from "./Loading";
 import PreviewGate from "./PreviewGate";
 import { initAnalytics, track } from "@/lib/analytics";
-import { formatCost } from "@/lib/pricing";
+import { formatCost, storedCost } from "@/lib/pricing";
 import {
   CACHE_WINDOW_DAYS,
   LANGS,
@@ -56,34 +56,49 @@ function cacheNote(cache: CacheInfo): string {
  * A cache hit is not free and must never say so. Somebody paid to have this
  * article read, and everyone arriving after them reads it for nothing — that
  * exchange is the whole argument this site makes for donating, and printing
- * "free" at the end of it threw the argument away. The figure is the one priced
- * at the moment that run finished and stored alongside the answer, so it is what
- * it cost then rather than what it would cost at today's rates.
+ * "free" at the end of it threw the argument away.
  *
- * Rows written before costs were recorded carry no figure. Those get no cost
- * clause at all: `formatCost(0)` would print "$0.00", which is the same lie in
- * different words, and estimating one from the token counts would invent a
- * number nobody actually paid.
+ * Most stored comparisons predate costs being recorded, so most of the time the
+ * figure is `storedCost`'s estimate from the token totals rather than the price
+ * struck on the day. That is worth saying and worth marking: "about $0.18" reads
+ * as an estimate on sight, without a legend and without a reader having to know
+ * that a stored row can be missing a field. The title attribute carries why, and
+ * that the estimate errs high. Only a run with no usable totals at all says
+ * nothing — there, any number would be invented.
  */
 function costNote(data: ComparePayload): string | null {
-  const usd = data.usage.costUsd;
-  const cost = typeof usd === "number" && usd > 0 ? formatCost(usd) : null;
+  const cost = storedCost(data.usage);
+  const amount = cost
+    ? cost.approximate
+      ? // "about <$0.01" is nonsense; under a cent, the bound is the estimate.
+        cost.usd < 0.01
+        ? "under $0.01"
+        : `about ${formatCost(cost.usd)}`
+      : formatCost(cost.usd)
+    : null;
   // A preview is the one case where the scope matters more than the money: it
   // says what it is first, because the columns below it fade out.
-  if (data.scope?.kind === "preview") return cost ? `preview · ${cost}` : "preview";
-  if (!cost) return null;
+  if (data.scope?.kind === "preview") return amount ? `preview · ${amount}` : "preview";
+  if (!amount) return null;
   return data.fromCache
-    ? `${cost} was paid to process this article`
-    : `${cost} to process this article`;
+    ? `${amount} was paid to process this article`
+    : `${amount} to process this article`;
 }
 
 /** The token breakdown, which stays in the title attribute: two numbers nobody
- *  can price without a rate card do not belong in the strip itself. */
+ *  can price without a rate card do not belong in the strip itself. An estimated
+ *  figure explains itself here too — an approximation a reader cannot check the
+ *  provenance of is only a guess with a decimal point. */
 function tokenNote(data: ComparePayload): string {
   const counts =
     `${data.usage.inputTokens.toLocaleString()} tokens in, ` +
     `${data.usage.outputTokens.toLocaleString()} out`;
-  return data.fromCache ? `${counts}, on the run that processed this article` : counts;
+  const when = data.fromCache ? `${counts}, on the run that processed this article` : counts;
+  return storedCost(data.usage)?.approximate
+    ? `${when}. This run predates the per-model breakdown, so its tokens are ` +
+        `priced at the more expensive of the two models it used: the figure is ` +
+        `an upper bound on what was actually paid.`
+    : when;
 }
 
 const KIND_LABEL: Record<Claim["type"], string> = {

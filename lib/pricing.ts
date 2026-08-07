@@ -76,6 +76,45 @@ export function costApproximate(usage: Usage): boolean {
 }
 
 /**
+ * The model to price a run at when the run itself does not say.
+ *
+ * The default of `DIFF_MODEL` in lib/compare.ts, restated here because pricing a
+ * stored comparison is now something the browser does too — lib/compare.ts pulls
+ * in the SDK and the prompts, so it cannot be imported from a client component,
+ * which is the same reason `formatCost` lives in this file rather than beside
+ * the run that spends the tokens. Keep the two in step; if `DIFF_MODEL` moves to
+ * another family, this moves with it.
+ *
+ * Deliberately the diff model rather than the alignment one: nearly all of the
+ * tokens in a run are spent there, and it is the more expensive of the two, so a
+ * figure derived this way errs high. An estimate that overstates what somebody
+ * paid is one nobody can be shortchanged by.
+ */
+export const FALLBACK_PRICING_MODEL = "claude-sonnet-4-6";
+
+/**
+ * What a stored comparison cost, as a figure that knows how sure it is.
+ *
+ * Three cases, and the difference between them is the whole point:
+ *  - a run priced at the time it ran, stored as `costUsd`: exact, and reported
+ *    at the rates of the day it ran rather than today's.
+ *  - a run from before that was recorded, carrying only token totals: real data,
+ *    priced here at `FALLBACK_PRICING_MODEL` and flagged approximate. Refusing
+ *    to say anything about these would leave most of the library silent about
+ *    what it cost to build, which is the argument the site is making.
+ *  - a run with no usable totals at all: null. Nothing true can be said, so
+ *    nothing is said — an invented number would be worse than a gap.
+ */
+export function storedCost(usage: Usage): { usd: number; approximate: boolean } | null {
+  if (typeof usage.costUsd === "number" && usage.costUsd > 0) {
+    return { usd: usage.costUsd, approximate: false };
+  }
+  if (usage.inputTokens <= 0 && usage.outputTokens <= 0) return null;
+  const usd = costOfUsage(usage, FALLBACK_PRICING_MODEL);
+  return usd > 0 ? { usd, approximate: costApproximate(usage) } : null;
+}
+
+/**
  * The cost as it appears in the control strip.
  *
  * Anything under a cent reads as "<$0.01" rather than "$0.00": a run that spent

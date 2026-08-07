@@ -73,11 +73,23 @@ await page.route("**/api/recent", (route) =>
 // re-serving that one would put a live fetch behind a route callback that is
 // still in flight when the browser closes.
 //
-// The cost is injected here because the fixture has none, and what a cached
-// comparison cost somebody is now the thing the meta strip reports. Setting it
-// to null serves the other case: a row stored before costs were recorded, which
-// must report no figure rather than invent one.
-let storedCost: number | null = 0.1932;
+// The usage is injected here because the fixture spends nothing, and what a
+// cached comparison cost somebody is now the thing the meta strip reports. The
+// three shapes are the three a stored row can actually have:
+//
+//   priced  — a run priced when it ran. Reported exactly.
+//   legacy  — token totals and no `costUsd`, which is 13 of the 14 rows in the
+//             real database. Priced from the totals and marked an estimate.
+//   silent  — nothing usable. Says nothing about cost at all.
+type Stored = "priced" | "legacy" | "silent";
+let stored: Stored = "priced";
+const USAGE: Record<Stored, Record<string, number>> = {
+  // 14,203 in and 5,110 out at the diff model's $3/$15 per Mtok is $0.119259,
+  // so `legacy` must land on "about $0.12" and never on the exact figure below.
+  priced: { inputTokens: 14203, outputTokens: 5110, cachedInputTokens: 0, costUsd: 0.1932 },
+  legacy: { inputTokens: 14203, outputTokens: 5110, cachedInputTokens: 0 },
+  silent: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
+};
 await page.route(
   (url) =>
     url.pathname === "/api/compare" &&
@@ -85,9 +97,7 @@ await page.route(
   async (route) => {
     const response = await route.fetch();
     const json = await response.json();
-    const usage = { ...json.usage, inputTokens: 14203, outputTokens: 5110 };
-    if (storedCost === null) delete usage.costUsd;
-    else usage.costUsd = storedCost;
+    const usage = USAGE[stored];
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
@@ -153,6 +163,13 @@ const metaSpan = () =>
     title: el.getAttribute("title") ?? "",
   }));
 
+const reopen = async (as: Stored) => {
+  stored = as;
+  await page.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("mark.claim", { timeout: 30000 });
+  return metaSpan();
+};
+
 {
   const meta = await metaSpan();
   check(
@@ -166,26 +183,47 @@ const metaSpan = () =>
     "the token breakdown stays in the title attribute",
     meta.title,
   );
+  check(!/upper bound/.test(meta.title), "a priced run is not hedged as an estimate", meta.title);
 }
 
-// A row stored before costs were recorded knows what it found and not what it
-// cost. It has to say the first without claiming the second — "$0.00" would be
-// the same lie the word "free" was.
+// The common case, and the one that decides whether any of this was worth
+// saying: a row from before costs were recorded still has true token totals, so
+// it reports an estimate priced off them. It has to read as an estimate on
+// sight — a reader must be able to tell it from the exact figure above without
+// a legend — and the title has to admit why and which way it errs.
 {
-  storedCost = null;
-  await page.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
-  await page.waitForSelector("mark.claim", { timeout: 30000 });
-  const meta = await metaSpan();
+  const meta = await reopen("legacy");
   check(
-    /marked/.test(meta.text) && !/\$/.test(meta.text) && !/free/i.test(meta.text),
-    "a comparison with no recorded cost claims none",
+    /about \$0\.12 was paid to process this article/.test(meta.text),
+    "a comparison priced from its tokens says so as an estimate",
     meta.text,
   );
-  check(/tokens in,/.test(meta.title), "and still carries its token breakdown", meta.title);
-  storedCost = 0.1932;
-  await page.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
-  await page.waitForSelector("mark.claim", { timeout: 30000 });
+  check(
+    !/\$0\.19/.test(meta.text) && !/free/i.test(meta.text),
+    "and does not pass the estimate off as the exact figure",
+    meta.text,
+  );
+  check(
+    /predates the per-model breakdown/.test(meta.title) && /upper bound/.test(meta.title),
+    "the title says why it is approximate and that it errs high",
+    meta.title,
+  );
 }
+
+// The floor: a run with no usable totals knows what it found and not what it
+// cost. It says the first without claiming the second — "$0.00" would be the
+// same lie the word "free" was, and so would a figure derived from nothing.
+{
+  const meta = await reopen("silent");
+  check(
+    /marked/.test(meta.text) && !/\$/.test(meta.text) && !/free/i.test(meta.text),
+    "a comparison with no usable totals claims no cost at all",
+    meta.text,
+  );
+  check(!/about/.test(meta.text), "and offers no estimate either", meta.text);
+}
+
+await reopen("priced");
 
 // ---- cached badge -----------------------------------------------------------
 
