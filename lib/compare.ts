@@ -351,7 +351,12 @@ export async function runComparison(
   // A preview reads a prefix and a full run reads whatever diverges most; see
   // `previewGroups` for why the two cannot be the same selection with different
   // limits.
-  const selected = scope === "preview" ? previewGroups(groups) : screenGroups(groups, langs);
+  // The paragraph budget is measured against English when it is one of the
+  // versions — it is the column readers of this site are anchored to — and
+  // otherwise against whichever version came first.
+  const refLang = langs.includes("en") ? "en" : langs[0];
+  const selected =
+    scope === "preview" ? previewGroups(groups, refLang) : screenGroups(groups, langs);
   const raw = await diffGroups(selected, langs, usage);
   const { claims, report } = verifySpans(raw, articles);
 

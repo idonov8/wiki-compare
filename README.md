@@ -210,9 +210,10 @@ a funded comparison is written to the cache like any other, so the next person t
 article gets it for nothing, and never finds out it was bought.
 
 That makes the free tier affordable rather than merely generous. An uncached article is read as
-far as the lead, the key facts and the first two sections, and the columns fade out below that
-under a bar inviting somebody to fund the rest — about 7c of tokens spent per article, not per
-visitor, because the preview is cached and shared exactly like a full run. The boundary is a
+far as the lead, the key facts and about seven paragraphs of the English version — sections whole,
+since that is the smallest thing the fade can land on, and at most two of them — and the columns
+fade out below that under a bar inviting somebody to fund the rest. A few cents of tokens per
+article, not per visitor, because the preview is cached and shared exactly like a full run. The boundary is a
 prefix of the article rather than the most divergent sections of it: `screenGroups` picks the
 eight groups most likely to disagree and they are scattered through the page, which is right for
 a full run and useless for a fade, since a fade only reads as a boundary if everything above it
