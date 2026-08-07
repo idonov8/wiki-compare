@@ -512,14 +512,6 @@ export default function Compare() {
               Search for an article, or paste a Wikipedia URL. The different versions appear side by side and you'll get to see every place they contradict each other, cover something the others skip, or frame the
               same fact differently. <b>You'd be surprised how often it happens.</b>
             </p>
-            {/* The hand-picked suggestions are only worth the space while there
-                is no history to show beside the intro. */}
-            {recent.length === 0 && (
-              <p>
-                Try <code>Palestinian Legislative Council</code>, <code>Six-Day War</code> or{" "}
-                <code>Al-Aqsa Mosque</code>.
-              </p>
-            )}
           </div>
           {/* Already-compared articles, carrying no heading of their own: the
               rows are self-evidently a list of articles, and the hand-picked
