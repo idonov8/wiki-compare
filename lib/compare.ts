@@ -1,20 +1,28 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { ArticleSnapshot, Claim, Lang, Section } from "./types";
+import type {
+  ArticleSnapshot,
+  Claim,
+  ComparisonScope,
+  Lang,
+  ScopeKind,
+  Section,
+  TokenCount,
+  Usage,
+} from "./types";
 import { KEY_FACTS_HEADING, LANG_META, LEAD_HEADING } from "./types";
-import { screenGroups, type SectionGroup } from "./deterministic";
+import { previewGroups, screenGroups, type SectionGroup } from "./deterministic";
+import { costOfUsage, FALLBACK_PRICING_MODEL } from "./pricing";
 
 export const PROMPT_VERSION = "v1";
 
 const ALIGN_MODEL = process.env.ALIGN_MODEL || "claude-haiku-4-5-20251001";
-const DIFF_MODEL = process.env.DIFF_MODEL || "claude-sonnet-4-6";
+// The default is FALLBACK_PRICING_MODEL rather than a second copy of the same
+// string. The client prices rows that predate the per-model breakdown by
+// assuming they ran on this model, so if the default here ever moves and that
+// constant does not, every legacy row is silently priced at the wrong rate.
+const DIFF_MODEL = process.env.DIFF_MODEL || FALLBACK_PRICING_MODEL;
 const MAX_CHARS_PER_SECTION = 2500;
 const GROUPS_PER_CALL = 3;
-
-export interface Usage {
-  inputTokens: number;
-  outputTokens: number;
-  cachedInputTokens: number;
-}
 
 const client = () => new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -32,10 +40,33 @@ function parseJson<T>(raw: string): T {
   return JSON.parse(start > 0 ? body.slice(start) : body) as T;
 }
 
-function addUsage(total: Usage, message: Anthropic.Message): void {
-  total.inputTokens += message.usage.input_tokens;
-  total.outputTokens += message.usage.output_tokens;
-  total.cachedInputTokens += message.usage.cache_read_input_tokens ?? 0;
+const ZERO_TOKENS = (): TokenCount => ({ inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 });
+
+/**
+ * Both books at once: the flat totals, and the same tokens filed under the model
+ * that spent them.
+ *
+ * The totals used to be the only record, and they cannot be turned into money.
+ * Alignment runs on Haiku at $1/$5 per Mtok and the diff on Sonnet at $3/$15, so
+ * a single summed triple prices too high at one rate and too low at the other,
+ * with no way to tell from the number itself which way it is wrong. The totals
+ * stay because the log line and the stored rows already read them; `byModel` is
+ * what `costOfUsage` actually bills from.
+ */
+function addUsage(total: Usage, message: Anthropic.Message, model: string): void {
+  const input = message.usage.input_tokens;
+  const output = message.usage.output_tokens;
+  const cached = message.usage.cache_read_input_tokens ?? 0;
+
+  total.inputTokens += input;
+  total.outputTokens += output;
+  total.cachedInputTokens += cached;
+
+  const byModel = (total.byModel ??= {});
+  const part = (byModel[model] ??= ZERO_TOKENS());
+  part.inputTokens += input;
+  part.outputTokens += output;
+  part.cachedInputTokens += cached;
 }
 
 /**
@@ -44,8 +75,8 @@ function addUsage(total: Usage, message: Anthropic.Message): void {
  * regardless of how long the articles are.
  */
 async function alignHeadings(articles: ArticleSnapshot[], usage: Usage): Promise<SectionGroup[]> {
-  const leads: SectionGroup = { key: "lead", headings: {}, sections: {}, reasons: [] };
-  const keyFacts: SectionGroup = { key: "key-facts", headings: {}, sections: {}, reasons: [] };
+  const leads: SectionGroup = { key: "lead", headings: {}, sections: {}, reasons: [], order: -2 };
+  const keyFacts: SectionGroup = { key: "key-facts", headings: {}, sections: {}, reasons: [], order: -1 };
   const rest: Record<Lang, Section[]> = {} as Record<Lang, Section[]>;
 
   // The lead and the key-facts block are matched by their synthetic headings
@@ -89,7 +120,7 @@ async function alignHeadings(articles: ArticleSnapshot[], usage: Usage): Promise
       },
     ],
   });
-  addUsage(usage, message);
+  addUsage(usage, message, ALIGN_MODEL);
 
   let parsed: { groups?: Record<string, string | number>[] };
   try {
@@ -101,14 +132,20 @@ async function alignHeadings(articles: ArticleSnapshot[], usage: Usage): Promise
   const groups: SectionGroup[] = [leads, keyFacts].filter((g) => Object.keys(g.sections).length > 0);
   for (const raw of parsed.groups ?? []) {
     const key = String(raw.key ?? `group-${groups.length}`);
-    const group: SectionGroup = { key, headings: {}, sections: {}, reasons: [] };
+    // `order` starts at Infinity and is pulled down by each language that has
+    // this section, so it ends up at the earliest appearance. The indices are
+    // positions in `rest`, which drops the lead and the key-facts block, but
+    // those two carry fixed negative orders and so still sort ahead of every
+    // body group without any of this having to account for them.
+    const group: SectionGroup = { key, headings: {}, sections: {}, reasons: [], order: Infinity };
     for (const article of articles) {
       const index = raw[article.lang];
-      const section = typeof index === "number" ? rest[article.lang][index] : undefined;
-      if (section) {
-        group.headings[article.lang] = section.heading;
-        group.sections[article.lang] = section;
-      }
+      if (typeof index !== "number") continue;
+      const section = rest[article.lang][index];
+      if (!section) continue;
+      group.headings[article.lang] = section.heading;
+      group.sections[article.lang] = section;
+      group.order = Math.min(group.order, index);
     }
     if (Object.keys(group.sections).length) groups.push(group);
   }
@@ -172,7 +209,7 @@ async function diffGroups(groups: SectionGroup[], langs: Lang[], usage: Usage): 
           },
         ],
       });
-      addUsage(usage, message);
+      addUsage(usage, message, DIFF_MODEL);
 
       // A truncated response is unparseable JSON, and the catch below would
       // discard the whole batch — every claim from three sections — without a
@@ -266,26 +303,81 @@ function verifySpans(
   return { claims: verified, report };
 }
 
+/**
+ * Where the preview stopped, per language, as an index the client can slice at.
+ *
+ * The number counts sections as `Columns` lays them out — `article.sections` with
+ * the key-facts block removed, lead included — because slicing is all the client
+ * does with it, and an index measured against anything else would fade the wrong
+ * paragraph. It is computed from the `Section` objects themselves rather than
+ * from the indices the alignment model returned: those are positions in an array
+ * that drops the lead as well, so every one of them would have needed a correction
+ * that is off by one exactly when the article has no lead, which is the case
+ * nobody would have tested. Identity works because the groups hold the very
+ * objects the snapshot holds.
+ *
+ * Highest covered index plus one, not the count of covered sections: a group the
+ * model aligned across a gap can leave an unread section behind it, and that
+ * section is above the boundary and has to be shown. Erring the other way would
+ * fade out text the reader can see was compared.
+ */
+function processedThrough(
+  articles: ArticleSnapshot[],
+  selected: SectionGroup[],
+): Partial<Record<Lang, number>> {
+  const through: Partial<Record<Lang, number>> = {};
+  for (const article of articles) {
+    const body = article.sections.filter((s) => s.heading !== KEY_FACTS_HEADING);
+    let last = -1;
+    for (const group of selected) {
+      const section = group.sections[article.lang];
+      // The key-facts group is not in `body` at all and lands here as -1, which
+      // is what it should contribute: it sits above the columns, not in them.
+      if (section) last = Math.max(last, body.indexOf(section));
+    }
+    through[article.lang] = last + 1;
+  }
+  return through;
+}
+
 export async function runComparison(
   articles: ArticleSnapshot[],
-): Promise<{ claims: Claim[]; usage: Usage; spans: SpanReport }> {
+  scope: ScopeKind = "full",
+): Promise<{ claims: Claim[]; usage: Usage; spans: SpanReport; scope: ComparisonScope }> {
   const usage: Usage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
   const langs = articles.map((a) => a.lang);
 
   const groups = await alignHeadings(articles, usage);
-  const selected = screenGroups(groups, langs);
+  // A preview reads a prefix and a full run reads whatever diverges most; see
+  // `previewGroups` for why the two cannot be the same selection with different
+  // limits.
+  const selected = scope === "preview" ? previewGroups(groups) : screenGroups(groups, langs);
   const raw = await diffGroups(selected, langs, usage);
   const { claims, report } = verifySpans(raw, articles);
 
+  // Priced here, once, while the model ids that spent the tokens are still in
+  // hand. The figure is stored with the comparison and never recomputed, so a
+  // rate change tomorrow does not rewrite what a run cost today.
+  usage.costUsd = costOfUsage(usage, DIFF_MODEL);
+
   const pct = report.offered ? Math.round((report.matched / report.offered) * 100) : 100;
   console.log(
-    `[compare] groups=${selected.length}/${groups.length} (${selected.map((g) => g.key).join(", ")}) ` +
+    `[compare] scope=${scope} groups=${selected.length}/${groups.length} (${selected.map((g) => g.key).join(", ")}) ` +
       `claims=${raw.length}->${claims.length} spans=${report.matched}/${report.offered} (${pct}% matched) ` +
-      `tokens=${usage.inputTokens}in/${usage.outputTokens}out/${usage.cachedInputTokens}cached`,
+      `tokens=${usage.inputTokens}in/${usage.outputTokens}out/${usage.cachedInputTokens}cached ` +
+      `cost=$${usage.costUsd.toFixed(4)}`,
   );
   for (const miss of report.samples) {
     console.log(`[compare]   unmatched ${miss.lang}: ${JSON.stringify(miss.snippet)}`);
   }
 
-  return { claims, usage, spans: report };
+  return {
+    claims,
+    usage,
+    spans: report,
+    scope:
+      scope === "preview"
+        ? { kind: "preview", processedThrough: processedThrough(articles, selected) }
+        : { kind: "full" },
+  };
 }
