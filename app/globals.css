@@ -1348,13 +1348,619 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
    ========================================================================= */
 
 /* --- region: signin ------------------------------------------------------ */
+
+/* The sign-in screen — components/SignIn.tsx.
+   Distinct from `.signin` / `.signin-form` further up, which are the masthead's
+   one-line version and stay quiet on purpose. This one is the whole viewport's
+   business, so it takes the donate page's construction: one narrow column, no
+   card, nothing beside anything else. Someone who arrived here wanted to give
+   money and has been asked for an email address instead; the least the screen
+   can do is not look like a form to be processed by. */
+
+.signin-screen {
+  max-width: 380px;
+  margin: 0 auto;
+  padding: 76px 24px 96px;
+}
+
+.signin-screen h1 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 32px;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin: 0 0 12px;
+}
+
+.signin-screen-blurb {
+  margin: 0 0 30px;
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+
+/* Outlined while the ink is spent on the primary action below, same grammar as
+   `.toggle` and `.amount`: outline is a choice offered, solid ink is the choice
+   the page is making for you. The mark keeps its own colours — it is Google's,
+   and recolouring it to match the paper would be the one liberty a sign-in
+   button cannot take. */
+.signin-screen-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 18px;
+  background: var(--paper-raised);
+  border: 1px solid var(--ink);
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.signin-screen-google:hover:not(:disabled) {
+  background: var(--paper);
+}
+
+.signin-screen-google:disabled { opacity: 0.45; cursor: progress; }
+
+/* A rule that the word interrupts, rather than a word with two rules parked
+   beside it — the line is continuous underneath and the label sits in a gap it
+   makes in the paper. */
+.signin-screen-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0;
+  color: var(--ink-soft);
+}
+
+.signin-screen-or::before,
+.signin-screen-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
+.signin-screen-or span {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.signin-screen-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.signin-screen-form label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.signin-screen-form input {
+  font: inherit;
+  font-size: 15px;
+  padding: 12px 13px;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  color: inherit;
+}
+
+.signin-screen-form input::placeholder { color: var(--ink-soft); }
+
+.signin-screen-form input[aria-invalid="true"] { border-color: var(--contradiction); }
+
+.signin-screen-form input:disabled { opacity: 0.55; }
+
+.signin-screen-form button {
+  margin-top: 6px;
+  padding: 13px 22px;
+  background: var(--ink);
+  color: var(--paper-raised);
+  border: 1px solid var(--ink);
+  font-size: 15px;
+}
+
+.signin-screen-form button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* The offset shadow is the house signature for "this is the live thing on the
+   page", borrowed from `.credit-tip`. It is the only element here that lifts off
+   the paper, because at this point it is the only element that matters. */
+.signin-screen-sent {
+  padding: 18px 18px 16px;
+  background: var(--paper-raised);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 rgba(22, 24, 28, 0.14);
+}
+
+.signin-screen-sent strong {
+  display: block;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  /* Long addresses break rather than widen the card past its column. */
+  overflow-wrap: anywhere;
+}
+
+.signin-screen-sent p {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+.signin-screen-again {
+  margin-top: 12px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.signin-screen-again:hover { color: var(--ink); }
+
+/* Ruled in `--contradiction` on the leading edge rather than filled with it.
+   The message is often long — it carries the server's own words plus what to do
+   about them — and a block of red would make a wall of it. The rule marks it;
+   the text stays ink and stays readable. */
+.signin-screen-error {
+  margin: 20px 0 0;
+  padding: 10px 0 10px 13px;
+  border-inline-start: 2px solid var(--contradiction);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+@media (max-width: 560px) {
+  .signin-screen { padding: 48px 18px 72px; }
+  .signin-screen h1 { font-size: 27px; }
+}
+
 /* --- end region: signin -------------------------------------------------- */
 
 /* --- region: donate-page ------------------------------------------------- */
+
+/* ---- the donate page, as a checkout ----
+
+   The single reading column above was right when the page was one decision.
+   It is now two — sign in, then order — and the order step has to answer the
+   question every payment screen answers before the button is pressed: what am I
+   about to be charged. So the choices sit in one column and an itemised summary
+   sits beside them, on the same ink-on-paper palette as the rest of the site,
+   with the figures in the mono face they are set in everywhere else.
+
+   Nothing here is styled to look like somebody else's Stripe page. It is the
+   shape of a checkout — choices, itemisation, total, one button — at the type
+   sizes this site already uses, because money set in small casual type reads as
+   a site that is not serious about handling it. */
+
+/* Step one is `components/SignIn.tsx`, which brings its own page container, so
+   this page renders it bare. All that is left here is the beat before
+   `/api/me` answers, placed where the sign-in screen's heading will be so that
+   the arrival of either step does not move the page. */
+.donate-waiting {
+  max-width: 380px;
+  margin: 0 auto;
+  padding: 76px 24px 96px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+/* Step two. Wider than the reading column, because there are now two of them. */
+.donate.donate-checkout {
+  max-width: 940px;
+}
+
+.donate-head {
+  max-width: 62ch;
+  margin: 0 0 34px;
+}
+
+.donate-head p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+/* Choices left, summary right; the summary follows the form when there is only
+   one column, because on a phone the thing you scroll towards is the total. */
+.donate-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 328px;
+  gap: 44px;
+  align-items: start;
+}
+
+.donate-block + .donate-block { margin-top: 34px; }
+
+/* Section headings at caption size: they group the fields, they are not
+   competing with the page title or with the total. */
+.donate-block-title {
+  margin: 0 0 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.donate-checkout .donate-amounts { margin-bottom: 0; }
+
+/* The hint now lives inside the label, so the whole line is a click target for
+   the field beside it. */
+.donate-checkout .donate-field label { cursor: pointer; }
+
+/* One continuous ruled list per block: the monthly row loses its own bottom rule
+   and its trailing margin so the coupon row's top rule is the only line there. */
+.donate-checkout .donate-monthly {
+  margin: 0;
+  border-bottom: none;
+}
+
+.donate-checkout .donate-monthly input { position: relative; top: 2px; }
+
+/* ---- the summary ---- */
+
+.donate-summary {
+  position: sticky;
+  top: 24px;
+  padding: 20px 20px 22px;
+  background: var(--paper-raised);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 rgba(22, 24, 28, 0.12);
+}
+
+.summary-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+}
+
+.summary-head h2 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+/* Who the credit would land on. A caption, not a field. */
+.summary-who {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.summary-lines { margin: 0; }
+
+.summary-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.summary-line dt {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.summary-line dt small {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--body);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.summary-line dd {
+  flex: none;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.summary-line-quiet dd {
+  font-size: 12px;
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 12ch;
+}
+
+/* The line the whole screen exists to show. Ruled in ink rather than in
+   `--rule`, and the only figure on the page set above body size. */
+.summary-total {
+  margin-top: 2px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ink);
+}
+
+.summary-total dt { font-size: 15px; }
+
+.summary-total dt small {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+}
+
+.summary-total dd {
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.summary-per {
+  margin-inline-start: 3px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.donate-summary .donate-pay { margin-top: 18px; }
+
+.summary-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* Nothing went wrong with the world, only with this request, so it is set in the
+   same caption face as the note above it and marked by colour alone. */
+.donate-error {
+  margin: 10px 0 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--contradiction);
+}
+
+/* The summary stacks under the choices, and stops sticking — a box pinned to the
+   top of a short viewport would cover the fields it is summarising. */
+@media (max-width: 860px) {
+  .donate-layout {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+
+  .donate-summary {
+    position: static;
+  }
+}
+
+@media (max-width: 560px) {
+  .donate-waiting { padding: 48px 18px 72px; }
+  .donate-head { margin-bottom: 26px; }
+  .summary-total dd { font-size: 20px; }
+}
+
 /* --- end region: donate-page --------------------------------------------- */
 
 /* --- region: masthead-credit --------------------------------------------- */
+
+/* The whole of the top-right control. Signed out it is one small button;
+   signed in it is a 3px meter, a line of figures, and a panel that opens on
+   hover or focus. Both stay a size below the search box beside them — this
+   corner asks for money, and it should never be the loudest thing asking. */
+
+/* Signed out: the button that starts the sign-in → donate flow. Outlined
+   rather than filled so the filled Search button keeps the masthead's only
+   solid block of ink, and inverts on hover so it is unmistakably live. */
+.credit-cta {
+  flex: 0 0 auto;
+  padding: 7px 15px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  background: var(--paper-raised);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.credit-cta:hover {
+  background: var(--ink);
+  color: var(--paper-raised);
+}
+
+/* The resting figures: what is left, then what has gone out. The second half
+   is the meter's empty portion said in words, so the two agree by
+   construction. `.credit-balance span` is already the soft colour. */
+.credit-balance b { font-weight: 600; }
+
+/* The panel. Built like `.credit-tip` was — anchored under a control at the
+   top of the page, so it cannot be pushed off the bottom of the viewport —
+   but it holds a button, so it takes pointer events when it is open and it is
+   not announced as a tooltip. */
+.credit-detail {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 8px);
+  inset-inline-end: 0;
+  width: 300px;
+  padding: 11px 13px 12px;
+  background: var(--paper-raised);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 rgba(22, 24, 28, 0.14);
+  font-family: var(--body);
+  font-size: 13px;
+  line-height: 1.55;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: start;
+  color: var(--ink);
+  cursor: default;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+
+/* The trip from the figures down to the panel crosses 8px of nothing, and a
+   pointer over nothing is a pointer that has left `.credit` — the panel would
+   shut under the cursor on its way to the button. This bridges the gap. It is
+   part of the panel, so it is inert until the panel is open. */
+.credit-detail::before {
+  content: "";
+  position: absolute;
+  inset-inline: -1px;
+  top: -10px;
+  height: 10px;
+}
+
+/* `focus-within` and not `focus-visible`: the container itself is focusable,
+   so Tab opens the panel, and the next Tab reaches the button inside it —
+   which is only focusable because the panel is visible by then. */
+.credit:hover .credit-detail,
+.credit:focus-within .credit-detail {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.credit-detail-text {
+  margin: 0;
+}
+
+.credit-detail-text b { font-weight: 600; }
+
+.credit-detail-cta {
+  display: block;
+  margin-top: 11px;
+  padding: 6px 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  background: var(--ink);
+  color: var(--paper-raised);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  transition: opacity 0.12s ease;
+}
+
+.credit-detail-cta:hover { opacity: 0.82; }
+
+/* Narrow screens: the masthead wraps and `.credit` goes full width, so the
+   panel flips to the leading edge and stops overhanging the viewport. Matches
+   the breakpoint the columns collapse at. */
+@media (max-width: 860px) {
+  .credit-detail {
+    inset-inline-end: auto;
+    inset-inline-start: 0;
+    width: min(300px, calc(100vw - 48px));
+  }
+  /* Wrapped onto its own row, the button keeps the trailing edge rather than
+     stranding itself under the middle of the search field. */
+  .credit-cta { margin-inline-start: auto; }
+}
+
 /* --- end region: masthead-credit ----------------------------------------- */
 
 /* --- region: article-meta ------------------------------------------------ */
+
+/* ---- the cached panel ----
+
+   What opened on hover as a tooltip now holds the button that keeps the promise
+   its last sentence makes, which makes it a small popover rather than a tooltip.
+   Three rules are what make a control inside it actually clickable, and all
+   three are load-bearing:
+
+   - it stays open while the pointer is anywhere inside it. `:hover` on the badge
+     still matches while the pointer is over the panel, because the panel is a
+     descendant of the badge — so nothing extra is needed for that, only for the
+     8px of dead space the panel sits below the badge, which `::before` bridges.
+     Without the bridge the pointer crosses unhovered ground on its way down and
+     the panel closes before it can be reached.
+   - it stays open while anything inside it has focus, which is what lets Tab
+     reach the button. `:focus-within` rather than the `:focus-visible` this used
+     when nothing in it was focusable.
+   - it takes pointer events only while it is open, so a click lands on the
+     button when it is shown and passes through to the strip when it is not.
+
+   These override the base rules further up this file rather than editing them
+   in place. */
+
+.cached-badge:hover .cached-tip,
+.cached-badge:focus-within .cached-tip {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* Running text and a control under it, so the panel is a stack rather than a
+   paragraph; `justify-items` keeps the button its own width. */
+.cached-tip {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+
+/* The bridge. 9px against the panel's 8px offset, so it overlaps the badge by a
+   pixel and leaves no seam at either end. */
+.cached-tip::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: -9px;
+  height: 9px;
+}
+
+/* The badge is no longer only an explanation, so it drops the help cursor. */
+.cached-badge { cursor: default; }
+
+/* Filled rather than underlined: it sits directly under a sentence, where a
+   link would read as the end of that sentence instead of the answer to it. */
+.cached-update {
+  padding: 5px 11px;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  background: var(--ink);
+  color: var(--paper-raised);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.cached-update:hover:not(:disabled) {
+  background: var(--ink-soft);
+  border-color: var(--ink-soft);
+}
+
+.cached-update:disabled { opacity: 0.5; cursor: progress; }
+
 /* --- end region: article-meta -------------------------------------------- */
