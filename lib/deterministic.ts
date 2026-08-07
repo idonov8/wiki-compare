@@ -171,14 +171,31 @@ export function screenGroups(groups: SectionGroup[], langs: Lang[], limit = 8): 
     .map(({ score: _score, ...group }) => group);
 }
 
-/** How many ordinary sections a free preview reads, on top of the lead and the
- *  key facts. Two is enough to show real findings and cheap enough to give away
- *  on every uncached article. */
+/** How much of the article a free preview reads, counted in paragraphs of the
+ *  reference version — roughly the first screenful, lead included. A section is
+ *  the smallest thing the boundary can land on, so this is a budget rather than
+ *  a limit: the group that crosses it is read whole and the preview stops there. */
+export const PREVIEW_PARAGRAPHS = 7;
+
+/** A ceiling on top of the budget, for the article whose sections are each one
+ *  short paragraph: without it a preview of one of those would read seven
+ *  separate sections, which is a long way down the page however few words it is. */
 export const PREVIEW_SECTIONS = 2;
 
+/** Paragraphs in a group, as the reference version writes it — or, when that
+ *  version has no such section, the longest version that does, so a section
+ *  missing from the reference still costs what it is worth. `toText` leaves one
+ *  line per block, so lines are paragraphs. */
+function paragraphsIn(group: SectionGroup, refLang: Lang): number {
+  const count = (text: string) => text.split("\n").filter((l) => l.trim()).length;
+  const ref = group.sections[refLang];
+  if (ref) return count(ref.text);
+  return Math.max(0, ...Object.values(group.sections).map((s) => count(s.text)));
+}
+
 /**
- * The opening of the article: the lead, the key facts, and the first
- * PREVIEW_SECTIONS ordinary groups in document order.
+ * The opening of the article: the lead, the key facts, and as much of the body
+ * as fits in PREVIEW_PARAGRAPHS, in document order.
  *
  * Deliberately not `screenGroups` with a smaller limit, which is what this was
  * at first. `screenGroups` takes the highest-scoring groups anywhere in the
@@ -189,12 +206,25 @@ export const PREVIEW_SECTIONS = 2;
  * everything above it was actually read: it has to be a prefix. Divergence
  * scoring is still exactly right for the full run, which is free to jump around
  * because it ends up covering the whole article anyway.
+ *
+ * The budget is spent by the lead as well as the body, and the key facts are
+ * free: that block sits above the columns rather than in them, so nothing it
+ * costs would be visible as depth on the page. An article whose lead alone
+ * exhausts the budget is previewed on its lead — which is where the versions
+ * usually disagree most anyway.
  */
-export function previewGroups(groups: SectionGroup[]): SectionGroup[] {
+export function previewGroups(groups: SectionGroup[], refLang: Lang = "en"): SectionGroup[] {
   const ordered = [...groups].sort((a, b) => a.order - b.order);
   const opening = ordered.filter((g) => g.key === "lead" || g.key === "key-facts");
-  const body = ordered
-    .filter((g) => g.key !== "lead" && g.key !== "key-facts")
-    .slice(0, PREVIEW_SECTIONS);
+  const lead = opening.find((g) => g.key === "lead");
+
+  let spent = lead ? paragraphsIn(lead, refLang) : 0;
+  const body: SectionGroup[] = [];
+  for (const group of ordered) {
+    if (group.key === "lead" || group.key === "key-facts") continue;
+    if (spent >= PREVIEW_PARAGRAPHS || body.length >= PREVIEW_SECTIONS) break;
+    body.push(group);
+    spent += paragraphsIn(group, refLang);
+  }
   return [...opening, ...body];
 }

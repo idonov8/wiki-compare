@@ -5,6 +5,7 @@
  *   npm run check:deterministic
  */
 import {
+  PREVIEW_PARAGRAPHS,
   PREVIEW_SECTIONS,
   coverageGaps,
   extractNumbers,
@@ -142,8 +143,8 @@ console.log(`    previewed: ${previewKeys.join(", ")}`);
 check(previewKeys.includes("lead"), "the lead is always in the preview");
 check(previewKeys.includes("key-facts"), "key facts are always in the preview");
 check(
-  previewed.filter((g) => g.order >= 0).length === PREVIEW_SECTIONS,
-  `exactly ${PREVIEW_SECTIONS} ordinary sections are previewed`,
+  previewed.filter((g) => g.order >= 0).length <= PREVIEW_SECTIONS,
+  `at most ${PREVIEW_SECTIONS} ordinary sections are previewed`,
 );
 check(
   previewed.every((g, i) => i === 0 || g.order >= previewed[i - 1].order),
@@ -176,6 +177,35 @@ check(
 check(
   previewGroups(longArticle).filter((g) => g.order >= 0).every((g) => g.order < PREVIEW_SECTIONS),
   "the preview stops at the boundary rather than sampling past it",
+);
+
+// Sections are counted in paragraphs, not in sections: an article that says as
+// much in one section as another says in three has to be cut off at the same
+// depth, or the free preview is worth several times more on one than the other.
+const para = (n: number) => sec(Array.from({ length: n }, (_, i) => `line ${i}`).join("\n"));
+const wordy: SectionGroup[] = [
+  { key: "lead", headings: {}, sections: { en: para(3), he: para(3) }, reasons: [], order: -2 },
+  groups[1],
+  { key: "s0", headings: {}, sections: { en: para(6), he: para(6) }, reasons: [], order: 0 },
+  { key: "s1", headings: {}, sections: { en: para(6), he: para(6) }, reasons: [], order: 1 },
+];
+const wordyKeys = previewGroups(wordy).map((g) => g.key);
+console.log(`    previewed (long sections): ${wordyKeys.join(", ")}`);
+check(
+  wordyKeys.includes("s0") && !wordyKeys.includes("s1"),
+  `a section past the ${PREVIEW_PARAGRAPHS}-paragraph budget is not previewed`,
+);
+
+// The lead spends the budget too, so an article that opens at length is
+// previewed on its opening alone rather than on its opening plus two sections.
+const longLead: SectionGroup[] = [
+  { key: "lead", headings: {}, sections: { en: para(9), he: para(9) }, reasons: [], order: -2 },
+  groups[1],
+  { key: "s0", headings: {}, sections: { en: para(4), he: para(4) }, reasons: [], order: 0 },
+];
+check(
+  previewGroups(longLead).every((g) => g.order < 0),
+  "a lead that already exceeds the budget is the whole preview",
 );
 
 console.log("\nPricing");
