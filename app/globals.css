@@ -41,11 +41,6 @@
   --color-mark-unique-on: color-mix(in srgb, #2c6b58 52%, white);
   --color-mark-framing-on: color-mix(in srgb, #6b4e9e 52%, white);
 
-  /* The drifting marks shown while a comparison runs. */
-  --color-ghost-contradiction: color-mix(in srgb, #a8322b 17%, transparent);
-  --color-ghost-unique: color-mix(in srgb, #2c6b58 17%, transparent);
-  --color-ghost-framing: color-mix(in srgb, #6b4e9e 17%, transparent);
-
   --color-tile: color-mix(in srgb, #6b4e9e 18%, transparent);
 
   /* ---- the Wikipedia reading surface ----
@@ -253,6 +248,21 @@
       transform: rotate(360deg);
     }
   }
+}
+
+/* The colours the drifting marks fade up to while a comparison runs.
+
+   Deliberately NOT in `@theme`. No utility ever names these — each ghost picks
+   its colour by writing `--ghost` in an inline style, which is the only way to
+   carry a per-mark duration and delay alongside it. Tailwind emits a theme
+   variable only when a generated utility references it, so declared up there
+   these are tree-shaken out of the bundle and every ghost animates towards an
+   invalid colour, which is to say towards nothing visible at all. Declared
+   here they simply always ship. */
+:root {
+  --color-ghost-contradiction: color-mix(in srgb, #a8322b 17%, transparent);
+  --color-ghost-unique: color-mix(in srgb, #2c6b58 17%, transparent);
+  --color-ghost-framing: color-mix(in srgb, #6b4e9e 17%, transparent);
 }
 
 /* ============================================================================
