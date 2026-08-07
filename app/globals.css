@@ -1599,7 +1599,14 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
   color: var(--ink-soft);
 }
 
-.donate-checkout .donate-amounts { margin-bottom: 0; }
+/* Two by two rather than a flexed row: in a column this width the fourth tile
+   wraps on its own and stretches to the full measure, which reads as a bigger
+   offer than the three above it rather than as the last of four equals. */
+.donate-checkout .donate-amounts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 0;
+}
 
 /* The hint now lives inside the label, so the whole line is a click target for
    the field beside it. */
@@ -1613,6 +1620,15 @@ mark.ghost[data-type="framing"] { --ghost: color-mix(in srgb, var(--framing) 17%
 }
 
 .donate-checkout .donate-monthly input { position: relative; top: 2px; }
+
+/* The reveal now arrives on a page of its own rather than under the form it
+   replaced, so the rule it used to be separated by has nothing above it to
+   separate from. The sentence opens the page instead. */
+.donate-done .donate-reveal {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
 
 /* ---- the summary ---- */
 

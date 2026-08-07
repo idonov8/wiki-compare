@@ -79,7 +79,7 @@ export default function Donate() {
 
   if (result) {
     return (
-      <div className="donate">
+      <div className="donate donate-done">
         <p className="donate-reveal">{result.message}</p>
         {result.granted && (
           <p>
@@ -243,7 +243,7 @@ export default function Donate() {
             <div className="summary-line summary-total">
               <dt>
                 Total
-                {monthly && <small>every month until you cancel</small>}
+                {monthly && <small>billed every month</small>}
               </dt>
               <dd aria-live="polite">
                 {formatCents(totalCents)}
