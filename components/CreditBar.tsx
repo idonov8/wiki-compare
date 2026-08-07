@@ -1,6 +1,8 @@
 "use client";
 
 import { articlesFor, formatCents } from "@/lib/pricing";
+import { authClient } from "@/lib/auth-client";
+import { track } from "@/lib/analytics";
 import type { MeResponse } from "@/lib/types";
 
 /**
@@ -28,6 +30,24 @@ import type { MeResponse } from "@/lib/types";
  * to say how much of it there has been.
  */
 export default function CreditBar({ me, onDonate }: { me: MeResponse | null; onDonate: () => void }) {
+  /**
+   * Signs out and reloads. Better Auth's `signOut` clears the session cookie on
+   * the server; the reload re-runs `/api/me` so the masthead drops back to the
+   * signed-out Donate button without the parent having to thread a refresh
+   * callback down here. A failure is logged but not surfaced as UI: the panel is
+   * a popover that closes on the next pointer move, and an error toast here would
+   * race that and lose.
+   */
+  async function signOut(): Promise<void> {
+    track("logout_clicked");
+    const { error } = await authClient.signOut();
+    if (error) {
+      console.error("[CreditBar] sign out failed", error);
+      return;
+    }
+    window.location.reload();
+  }
+
   if (!me) {
     return (
       <button type="button" className="credit-cta" onClick={onDonate}>
@@ -54,8 +74,8 @@ export default function CreditBar({ me, onDonate }: { me: MeResponse | null; onD
       </span>
       <div className="credit-detail">
         <p className="credit-detail-text" id="credit-detail-text">
-          {formatCents(me.creditCents)} left — about {remaining} more{" "}
-          {remaining === 1 ? "article" : "articles"}.
+          {formatCents(me.creditCents)} / ~{remaining} {" "}
+          {remaining === 1 ? "article" : "articles"} left.
           {me.articlesProcessed > 0 ? (
             <>
               {" "}
@@ -69,12 +89,17 @@ export default function CreditBar({ me, onDonate }: { me: MeResponse | null; onD
               . Thank you for making this better for everyone.
             </>
           ) : (
-            <> Process an article and it stays readable for everyone after you.</>
+            <> Open an article to make it available for everyone.</>
           )}
         </p>
-        <button type="button" className="credit-detail-cta" onClick={onDonate}>
-          Donate
-        </button>
+        <div className="credit-detail-actions">
+          <button type="button" className="credit-detail-cta" onClick={onDonate}>
+            Donate
+          </button>
+          <button type="button" className="credit-detail-signout" onClick={signOut}>
+            Sign out
+          </button>
+        </div>
       </div>
     </div>
   );

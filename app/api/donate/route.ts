@@ -66,15 +66,37 @@ export async function POST(request: Request) {
     void capture("mock_grant_issued", { grantedCents }, user.id);
   }
 
-  const response: DonateResponse = {
-    granted: grantedCents > 0,
-    grantedCents,
-    creditCents,
-    message: grantedCents
-      ? `Oops, you caught us — we can't accept payments yet. But intention counts! ` +
-        `Here are ${formatCents(grantedCents)} of credit on us. Thank you so much.`
-      : `We'll send you an email once we are ready to accept payments. Soon, we promise.`,
-  };
+  // The copy is split into a reveal the client can lay out with hierarchy
+  // (kicker / headline / gift figure / body), while `message` stays the flat
+  // full sentence for logs and screen readers. The wording still lives here
+  // because only this side knows whether the account has been thanked before.
+  const response: DonateResponse = grantedCents
+    ? {
+        granted: true,
+        grantedCents,
+        creditCents,
+        message:
+          `Oops, you caught us, we can't accept payments yet. But intention counts! \n` +
+          `Here are ${formatCents(grantedCents)} of credit on us. Thank you so much.`,
+        reveal: {
+          kicker: "",
+          headline: "Oops, you caught us, we can’t accept payments yet.",
+          gift: formatCents(grantedCents),
+          body: "Intention counts! Have some credit in the meantime. Thank you so much.",
+        },
+      }
+    : {
+        granted: false,
+        grantedCents,
+        creditCents,
+        message: `You'll get an email once we are ready to accept payments. Soon, I promise.`,
+        reveal: {
+          kicker: "",
+          headline: "We’ll email you once payments are ready.",
+          gift: null,
+          body: "Soon, I promise. Thanks again :)",
+        },
+      };
   return NextResponse.json(response);
 }
 

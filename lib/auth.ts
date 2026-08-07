@@ -59,6 +59,17 @@ if (process.env.NODE_ENV !== "test") {
 
 export const auth = betterAuth({
   database: new Pool({ connectionString: process.env.DATABASE_URL }),
+  /**
+   * Better Auth's origin check rejects any request whose Origin header is not
+   * the configured baseURL (which BETTER_AUTH_URL pins to the production
+   * deployment). That is correct in production and wrong everywhere else: a
+   * developer on `http://localhost:3000` is told "Invalid origin" by every
+   * sign-in attempt, Google and magic-link alike, because localhost is not the
+   * production origin and was never trusted. Listing localhost here makes the
+   * check pass locally without weakening it in production, where this entry is
+   * simply never the origin of a real request.
+   */
+  trustedOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"],
   socialProviders: {
     // Spread rather than a `google: undefined` key: Better Auth treats the
     // presence of the key as the registration, so the provider has to be absent

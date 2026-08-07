@@ -29,6 +29,8 @@ export const EVENTS = [
   "stale_update_clicked",
   "login_requested",
   "login_completed",
+  /** The reader signed out from the masthead. */
+  "logout_clicked",
   "donate_page_viewed",
   /** The one that matters: somebody tried to pay. */
   "donate_attempted",

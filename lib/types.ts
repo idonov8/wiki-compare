@@ -186,11 +186,25 @@ export interface DonateRequest {
  * credit is not granted twice and the copy becomes a promise to come back to
  * them rather than a refusal.
  */
+export interface DonateReveal {
+  /** A mono eyebrow above the headline — sets the register (gift vs. promise). */
+  kicker: string;
+  /** The emotional anchor, set in the display face. */
+  headline: string;
+  /** The granted amount, formatted (e.g. "$5.00"), shown as a hero figure. */
+  gift: string | null;
+  /** The closing line — the thanks or the promise. */
+  body: string;
+}
+
 export interface DonateResponse {
   granted: boolean;
   grantedCents: number;
   creditCents: number;
+  /** The full sentence, kept flat for logs / screen readers / any fallback. */
   message: string;
+  /** The same copy, split so the reveal can be laid out with hierarchy. */
+  reveal: DonateReveal;
 }
 
 /** One row of the recently-cached list shown before any search. */
