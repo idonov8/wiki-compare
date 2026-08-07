@@ -159,24 +159,36 @@ export default function SignIn({
   }
 
   return (
-    <div className="signin-screen">
-      <h1>{heading}</h1>
-      <p className="signin-screen-blurb">{blurb}</p>
+    // One narrow column, no card, nothing beside anything else. Someone who
+    // arrived here wanted to give money and has been asked for an email address
+    // instead; the least the screen can do is not look like a form to be
+    // processed by.
+    <div className="signin-screen max-w-[380px] mx-auto pt-[76px] px-[24px] pb-[96px] max-tight:pt-[48px] max-tight:px-[18px] max-tight:pb-[72px]">
+      <h1 className="font-display font-normal text-[32px] leading-[1.15] tracking-[-0.01em] mb-[12px] max-tight:text-[27px]">
+        {heading}
+      </h1>
+      <p className="signin-screen-blurb mb-[30px] text-[14.5px] leading-[1.65] text-ink-soft">{blurb}</p>
 
       {status === "sent" ? (
         /* Deliberately replaces the form rather than sitting under it. The next
            move is in an inbox, not on this page, and leaving a filled-in field
            and a live button here only invites sending a second link that
            invalidates the first. */
-        <div className="signin-screen-sent">
-          <strong>Check {email.trim()}</strong>
-          <p>
+        // The offset shadow is the house signature for "this is the live thing
+        // on the page", borrowed from the masthead credit panel. It is the only
+        // element here that lifts off the paper, because at this point it is
+        // the only element that matters.
+        <div className="signin-screen-sent pt-[18px] px-[18px] pb-[16px] bg-paper-raised border border-ink rounded-[2px] shadow-offset">
+          <strong className="block font-mono text-[13px] font-semibold leading-[1.5] wrap-anywhere">
+            Check {email.trim()}
+          </strong>
+          <p className="mt-[8px] text-[13.5px] leading-[1.6] text-ink-soft">
             The link signs you in when you open it, and expires shortly after. It can take a
             minute to arrive.
           </p>
           <button
             type="button"
-            className="signin-screen-again"
+            className="signin-screen-again mt-[12px] p-0 border-0 bg-transparent font-mono text-[12px] text-ink-soft underline underline-offset-[3px] hover:text-ink"
             onClick={() => {
               setStatus("idle");
               setError(null);
@@ -189,23 +201,46 @@ export default function SignIn({
         <>
           {GOOGLE_ENABLED && (
             <>
+              {/* Outlined while the ink is spent on the primary action below,
+                  same grammar as the donate page's toggle and amount controls:
+                  outline is a choice offered, solid ink is the choice the page
+                  is making for you. */}
               <button
                 type="button"
-                className="signin-screen-google"
+                className="signin-screen-google flex items-center justify-center gap-[10px] w-full py-[12px] px-[18px] bg-paper-raised border border-ink text-[15px] text-ink enabled:hover:bg-paper disabled:opacity-[0.45] disabled:cursor-progress"
                 onClick={signInWithGoogle}
                 disabled={busy}
               >
+                {/* Google's own mark, kept in Google's own colours — recolouring
+                    it to match the paper would be the one liberty a sign-in
+                    button cannot take. */}
                 <GoogleMark />
                 {status === "leaving" ? "Opening Google…" : "Continue with Google"}
               </button>
-              <div className="signin-screen-or" role="separator">
-                <span>or</span>
+              {/* A rule that the word interrupts, rather than a word with two
+                  rules parked beside it: the `before`/`after` line is
+                  continuous underneath and the label sits in a gap it makes
+                  in the paper. */}
+              <div
+                className="signin-screen-or flex items-center gap-[12px] my-[22px] text-ink-soft before:content-[''] before:flex-1 before:h-px before:bg-rule after:content-[''] after:flex-1 after:h-px after:bg-rule"
+                role="separator"
+              >
+                <span className="font-mono text-[11px] tracking-[0.1em] uppercase">or</span>
               </div>
             </>
           )}
 
-          <form className="signin-screen-form" onSubmit={requestLink} noValidate>
-            <label htmlFor={fieldId}>Email address</label>
+          <form
+            className="signin-screen-form flex flex-col gap-[8px]"
+            onSubmit={requestLink}
+            noValidate
+          >
+            <label
+              htmlFor={fieldId}
+              className="font-mono text-[11px] tracking-[0.08em] uppercase text-ink-soft"
+            >
+              Email address
+            </label>
             <input
               id={fieldId}
               type="email"
@@ -219,8 +254,13 @@ export default function SignIn({
               onChange={(e) => setEmail(e.target.value)}
               disabled={busy}
               required
+              className="font-body text-[15px] py-[12px] px-[13px] bg-paper-raised border border-rule rounded-[2px] text-inherit placeholder:text-ink-soft aria-invalid:border-contradiction disabled:opacity-[0.55]"
             />
-            <button type="submit" disabled={busy || !email.trim()}>
+            <button
+              type="submit"
+              disabled={busy || !email.trim()}
+              className="mt-[6px] py-[13px] px-[22px] bg-ink text-paper-raised border border-ink text-[15px] disabled:opacity-[0.45] disabled:cursor-not-allowed"
+            >
               {status === "sending" ? "Sending…" : "Email me a link"}
             </button>
           </form>
@@ -232,7 +272,16 @@ export default function SignIn({
           because it appears in response to an action the reader just took and
           has to be announced, not waited for. */}
       {error && (
-        <p className="signin-screen-error" id={errorId} role="alert">
+        // Ruled in the contradiction colour on the leading edge rather than
+        // filled with it. The message is often long — it carries the server's
+        // own words plus what to do about them — and a block of red would make
+        // a wall of it. The rule marks it; the text stays ink and stays
+        // readable.
+        <p
+          className="signin-screen-error mt-[20px] py-[10px] ps-[13px] border-s-2 border-contradiction text-[13.5px] leading-[1.6] text-ink"
+          id={errorId}
+          role="alert"
+        >
           {error}
         </p>
       )}
