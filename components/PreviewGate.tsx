@@ -71,12 +71,12 @@ export default function PreviewGate({
       className="gate border-t border-b border-rule bg-paper-raised px-[24px] pt-[34px] pb-[32px] text-center max-tight:px-[18px] max-tight:pt-[26px] max-tight:pb-[24px]"
     >
       <h2 className="mb-[6px] font-display text-[27px] font-normal max-tight:text-[23px]">
-        The rest of this article hasn&apos;t been compared yet
+        The rest of this article hasn&apos;t been processed yet
       </h2>
       <p className="mx-auto mb-[18px] max-w-[56ch] text-[14px] text-ink-soft">
-        Everything above has been read in all three languages. Processing the rest costs about{" "}
-        {formatCents(PRICE_PER_ARTICLE_CENTS)} in tokens — and once it&apos;s done it stays done,
-        for everyone who opens this page after you.
+        Each article costs about{" "}{formatCents(PRICE_PER_ARTICLE_CENTS)} to process. 
+        <br />
+        Once it&apos;s done it becomes available for everyone.
       </p>
       {canFund ? (
         <button
