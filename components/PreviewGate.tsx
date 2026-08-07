@@ -34,29 +34,42 @@ export default function PreviewGate({
   const canFund = signedIn && affordable;
 
   return (
-    <div className="gate">
-      <h2>The rest of this article hasn&apos;t been compared yet</h2>
-      <p>
+    // Raised paper, ruled top and bottom, no shadow and no accent colour: this
+    // is the point where the article stops being compared, stated plainly,
+    // not a panel selling something.
+    <div className="gate border-t border-b border-rule bg-paper-raised px-[24px] pt-[34px] pb-[32px] text-center max-tight:px-[18px] max-tight:pt-[26px] max-tight:pb-[24px]">
+      <h2 className="mb-[6px] font-display text-[27px] font-normal max-tight:text-[23px]">
+        The rest of this article hasn&apos;t been compared yet
+      </h2>
+      <p className="mx-auto mb-[18px] max-w-[56ch] text-[14px] text-ink-soft">
         Everything above has been read in all three languages. Processing the rest costs about{" "}
         {formatCents(PRICE_PER_ARTICLE_CENTS)} in tokens — and once it&apos;s done it stays done,
         for everyone who opens this page after you.
       </p>
       {canFund ? (
-        <button className="gate-cta" onClick={onFund} disabled={busy}>
+        <button
+          className="gate-cta border border-ink bg-ink px-[22px] py-[10px] text-paper-raised disabled:cursor-progress disabled:opacity-45"
+          onClick={onFund}
+          disabled={busy}
+        >
           {busy ? "Reading the rest…" : "Process the rest of this article"}
         </button>
       ) : (
-        <button className="gate-cta" onClick={onDonate} disabled={busy}>
+        <button
+          className="gate-cta border border-ink bg-ink px-[22px] py-[10px] text-paper-raised disabled:cursor-progress disabled:opacity-45"
+          onClick={onDonate}
+          disabled={busy}
+        >
           {signedIn ? "Add credit to process this" : "Donate to process this"}
         </button>
       )}
       {signedIn && !affordable && (
-        <p className="gate-note">
+        <p className="gate-note mt-[12px] font-mono text-[11px] text-ink-soft">
           You have {formatCents(creditCents)} left — an article costs{" "}
           {formatCents(PRICE_PER_ARTICLE_CENTS)}.
         </p>
       )}
-      {error && <p className="gate-note gate-error">{error}</p>}
+      {error && <p className="gate-note gate-error mt-[12px] font-mono text-[11px] text-ink-soft">{error}</p>}
     </div>
   );
 }

@@ -108,9 +108,9 @@ export default function DiffNav({ signature }: { signature: string }) {
   const jumpTo = (el: HTMLElement) => {
     const y = el.getBoundingClientRect().top + window.scrollY - SCROLL_OFFSET;
     window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
-    el.classList.remove("diff-flash");
+    el.classList.remove("diff-flash", "animate-diff-flash");
     void el.offsetWidth; // restart the animation if the same mark is re-targeted
-    el.classList.add("diff-flash");
+    el.classList.add("diff-flash", "animate-diff-flash");
   };
 
   const step = (dir: 1 | -1) => {
@@ -136,13 +136,26 @@ export default function DiffNav({ signature }: { signature: string }) {
 
   return (
     <>
-      <div className="diffnav" aria-hidden="true">
-        <div className="diffnav-rail" onClick={onRailClick}>
-          <div className="diffnav-view" style={{ top: `${view.top}%`, height: `${view.height}%` }} />
+      {/* The strip itself stays click-through so it doesn't eat clicks on the
+          article underneath; the rail and the controls opt back in to
+          pointer events since those are the parts meant to be clicked. */}
+      <div
+        className="diffnav pointer-events-none fixed inset-y-0 right-0 z-40 flex w-[26px] items-stretch max-cols:w-[18px]"
+        aria-hidden="true"
+      >
+        <div
+          className="diffnav-rail pointer-events-auto relative mt-[8px] mr-[4px] mb-[64px] ml-[4px] flex-1 cursor-pointer rounded-[5px] bg-ink-wash"
+          onClick={onRailClick}
+        >
+          {/* The slice of the page currently on screen, so the rail doubles as a map of where the reader is. */}
+          <div
+            className="diffnav-view absolute right-0 left-0 min-h-[12px] rounded-[5px] border border-ink-view-edge bg-ink-view"
+            style={{ top: `${view.top}%`, height: `${view.height}%` }}
+          />
           {ticks.map((tick, i) => (
             <div
               key={i}
-              className="diffnav-tick"
+              className="diffnav-tick absolute -mt-[1.5px] h-[3px] right-[3px] left-[3px] rounded-[2px] transition-transform duration-100 ease-[ease] data-[type=contradiction]:bg-contradiction data-[type=unique]:bg-unique data-[type=framing]:bg-framing data-[current=true]:h-[4px] data-[current=true]:scale-x-[1.9]"
               data-type={tick.type}
               data-current={i === current}
               style={{ top: `${tick.pos * 100}%` }}
@@ -150,14 +163,28 @@ export default function DiffNav({ signature }: { signature: string }) {
           ))}
         </div>
       </div>
-      <div className="diffnav-controls" role="group" aria-label="Jump between differences">
-        <button onClick={() => step(-1)} aria-label="Previous difference" title="Previous difference">
+      <div
+        className="diffnav-controls pointer-events-auto fixed right-[34px] bottom-[22px] z-[41] flex items-center gap-0.5 rounded-[3px] border border-ink bg-paper-raised p-1 font-mono text-[12px] shadow-offset max-cols:right-[24px]"
+        role="group"
+        aria-label="Jump between differences"
+      >
+        <button
+          className="h-[26px] w-[26px] border-0 bg-transparent text-[15px] leading-none text-ink hover:bg-ink-wash-strong"
+          onClick={() => step(-1)}
+          aria-label="Previous difference"
+          title="Previous difference"
+        >
           ↑
         </button>
-        <span className="diffnav-count">
-          <b>{Math.min(current + 1, ticks.length)}</b> / {ticks.length}
+        <span className="diffnav-count px-2 whitespace-nowrap text-ink-soft tabular-nums">
+          <b className="font-semibold text-ink">{Math.min(current + 1, ticks.length)}</b> / {ticks.length}
         </span>
-        <button onClick={() => step(1)} aria-label="Next difference" title="Next difference">
+        <button
+          className="h-[26px] w-[26px] border-0 bg-transparent text-[15px] leading-none text-ink hover:bg-ink-wash-strong"
+          onClick={() => step(1)}
+          aria-label="Next difference"
+          title="Next difference"
+        >
           ↓
         </button>
       </div>

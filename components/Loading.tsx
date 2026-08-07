@@ -80,13 +80,19 @@ export default function Loading({ title }: { title: string }) {
   const stage = STAGES.filter(([at]) => elapsed >= at).length - 1;
 
   return (
-    <div className="loading" aria-live="off">
-      <svg className="globe" viewBox="0 0 320 300" aria-hidden="true">
+    // Bottom centre, over the articles rather than in place of them: the columns
+    // are already rendered and readable while this runs, so the panel is
+    // deliberately pointer-events-none and lets clicks through to them.
+    <div
+      className="loading fixed left-1/2 bottom-3 z-[45] flex max-w-[min(92vw,460px)] -translate-x-1/2 flex-col items-center gap-0.5 border border-ink rounded-sm bg-paper-veil px-[22px] pt-2 pb-3 pointer-events-none shadow-offset backdrop-blur-[2px]"
+      aria-live="off"
+    >
+      <svg className="globe h-auto w-[152px] max-w-[40vw] overflow-visible" viewBox="0 0 320 300" aria-hidden="true">
         {/* strands: each language flowing into the sphere */}
         {LANGS.map((lang, i) => (
           <path
             key={`strand-${lang}`}
-            className="strand"
+            className="strand fill-none stroke-ink-soft [stroke-width:1.4] [stroke-dasharray:2_7] animate-strand-flow"
             d={CHIPS[lang].strand}
             style={{ animationDelay: `${i * -0.5}s` }}
           />
@@ -94,17 +100,27 @@ export default function Loading({ title }: { title: string }) {
 
         {/* the sphere, left open at the upper right */}
         <g className="sphere">
-          <path className="ring" d="M 206.1 90.5 A 62 62 0 1 1 183.2 74.5" />
+          <path className="ring fill-none stroke-ink [stroke-width:1.6]" d="M 206.1 90.5 A 62 62 0 1 1 183.2 74.5" />
           {PARALLELS.map(([cy, rx, ry], i) => (
-            <ellipse key={`lat-${i}`} className="parallel" cx="160" cy={cy} rx={rx} ry={ry} />
+            <ellipse
+              key={`lat-${i}`}
+              className="parallel fill-none stroke-ink-soft [stroke-width:0.9] opacity-50"
+              cx="160"
+              cy={cy}
+              rx={rx}
+              ry={ry}
+            />
           ))}
           {/* The stylesheet animates rx, but the attribute still has to hold a
               staggered value: with motion turned off these are all that is
-              left, and four identical circles would not read as a globe. */}
+              left, and four identical circles would not read as a globe. The
+              sphere turns by squashing each meridian through zero width —
+              cheaper than projecting a real rotation, and at this size
+              indistinguishable from one. */}
           {[62, 46, 30, 14].map((rx, i) => (
             <ellipse
               key={`mer-${i}`}
-              className="meridian"
+              className="meridian fill-none stroke-ink-soft [stroke-width:0.9] opacity-50 animate-meridian-turn"
               cx="160"
               cy="132"
               rx={rx}
@@ -113,9 +129,13 @@ export default function Loading({ title }: { title: string }) {
             />
           ))}
           {GLYPHS.map(({ char, y, size, delay }) => (
+            // fill-box is load-bearing: an SVG element's transform-origin is the
+            // viewport origin by default, so the scale in the sweep pulled every
+            // glyph up and to the left towards (0,0) and dropped three scripts
+            // on top of each other.
             <text
               key={char}
-              className="glyph"
+              className="glyph fill-ink font-body [transform-box:fill-box] origin-center animate-glyph-sweep"
               x="160"
               y={y}
               fontSize={size}
@@ -130,7 +150,7 @@ export default function Loading({ title }: { title: string }) {
         {LANGS.map((lang, i) => (
           <circle
             key={`land-${lang}`}
-            className="landing"
+            className="landing fill-none stroke-ink [stroke-width:1.2] animate-landing-open"
             cx={LANDINGS[lang][0]}
             cy={LANDINGS[lang][1]}
             r="2"
@@ -140,16 +160,24 @@ export default function Loading({ title }: { title: string }) {
 
         {/* the last tile, dropping into the gap */}
         <path
-          className="tile"
+          className="tile fill-tile stroke-ink [stroke-width:1.6] [stroke-linejoin:round] animate-tile-settle"
           d="M 183.2 74.5 A 62 62 0 0 1 206.1 90.5 L 197.2 98.5 A 50 50 0 0 0 178.7 85.6 Z"
         />
 
         {LANGS.map((lang, i) => {
           const chip = CHIPS[lang];
           return (
-            <g key={lang} className="chip" style={{ animationDelay: `${i * -0.5}s` }}>
-              <rect x={chip.x} y={chip.y} width={chip.w} height="28" rx="2" />
+            <g key={lang} className="chip animate-chip-breathe" style={{ animationDelay: `${i * -0.5}s` }}>
+              <rect
+                className="fill-paper-raised stroke-ink [stroke-width:1.2]"
+                x={chip.x}
+                y={chip.y}
+                width={chip.w}
+                height="28"
+                rx="2"
+              />
               <text
+                className="fill-ink font-body"
                 x={chip.x + chip.w / 2}
                 y={chip.y + 19}
                 textAnchor="middle"
@@ -163,18 +191,18 @@ export default function Loading({ title }: { title: string }) {
         })}
       </svg>
 
-      <div className="loading-text">
-        <h2>{title}</h2>
-        <p className="stage" role="status" aria-live="polite">
+      <div className="loading-text max-w-[44ch] text-center">
+        <h2 className="mb-[2px] font-display text-[19px] font-normal">{title}</h2>
+        <p className="stage font-mono text-[12px] text-ink-soft" role="status" aria-live="polite">
           {STAGES[Math.min(stage, STAGES.length - 1)][1]}
           <span className="ellipsis" aria-hidden="true">
-            <i />
-            <i />
-            <i />
+            <i className="inline-block w-1 not-italic animate-ellipsis-fade">.</i>
+            <i className="inline-block w-1 not-italic animate-ellipsis-fade [animation-delay:0.5s]">.</i>
+            <i className="inline-block w-1 not-italic animate-ellipsis-fade [animation-delay:1s]">.</i>
           </span>
         </p>
         {elapsed > PATIENCE_MS && (
-          <p className="waited">
+          <p className="waited mt-[10px] font-mono text-[11px] text-ink-soft opacity-70">
             All three articles are being processed. <br />
             Can you find the differences first?
           </p>
