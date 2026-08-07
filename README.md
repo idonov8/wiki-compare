@@ -41,25 +41,55 @@ Not yet verified — needs `ANTHROPIC_API_KEY` and `DATABASE_URL`:
 ```bash
 npm install
 cp .env.example .env.local     # fill in DATABASE_URL and ANTHROPIC_API_KEY
-npm run db:init                # applies db/schema.sql to Neon
-npm run auth:migrate           # applies Better Auth's own tables to the same database
+npm run db:init                # creates all nine tables
 npm run dev
 ```
 
-Two migration commands, because two tools own tables here. `db:init` applies `db/schema.sql`:
-the caches, the labels, and the donation and spend ledgers. `auth:migrate` is Better Auth's
-CLI, which creates and migrates `user`, `session`, `account` and `verification` — including the
-two credit columns declared in `lib/auth.ts`. Those four tables are deliberately absent from
-`db/schema.sql`: two tools owning the same DDL is how migrations start disagreeing about what
-the schema is.
+One migration command, and it creates everything: the caches, the labels, the donation and
+spend ledgers, and Better Auth's `user`, `session`, `account` and `verification` — including
+the two credit columns declared in `lib/auth.ts`. Every statement is `IF NOT EXISTS`, so
+running it against a database that is already up to date is a no-op you can repeat freely.
+
+It used to be two commands, with the auth tables owned by Better Auth's CLI on the reasoning
+that two tools issuing DDL for one table is how two descriptions of it drift apart. The
+reasoning was sound and the result was not: nothing enforced the second command, skipping it
+left a database with five tables out of nine, and the app that came up on top of it failed
+every sign-in with a 500 from inside the adapter. Setup that can be half-completed eventually
+is. The DDL now lives in `db/schema.sql`, transcribed from `npx @better-auth/cli generate` —
+still the source of truth, so when the fields in `lib/auth.ts` change, re-run the generator
+and bring the diff across rather than hand-editing. `npm run auth:migrate` still works and is
+still compatible; it is simply no longer something you have to remember.
 
 `DATABASE_URL` is the **pooled** Neon connection string. `ANTHROPIC_API_KEY` is yours; it is only
 ever read server-side in `lib/compare.ts` and never reaches the browser. `BETTER_AUTH_SECRET`
-signs sessions. `RESEND_API_KEY` sends the sign-in links and is optional in development — without
-it the link is logged to the server console, which is all a local sign-in needs.
+signs sessions. `RESEND_API_KEY` sends the sign-in links and is optional outside production —
+without it the link is logged to the server console, which is all a local sign-in needs. That
+branch keys on `VERCEL_ENV`, not `NODE_ENV`: Vercel builds previews with `NODE_ENV=production`,
+so keying on `NODE_ENV` made every preview deployment throw on every sign-in attempt.
+
+### Signing in with Google
+
+Optional, and off unless configured. `lib/auth.ts` registers the provider only when both
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set, and `components/SignIn.tsx` shows the
+button only when `NEXT_PUBLIC_GOOGLE_ENABLED="true"`. Set all three together or none of them —
+lib/auth.ts compares them at startup and warns when they disagree, because a Google button
+that dead-ends and a configured provider nobody is offered are both silent failures.
+
+In Google Cloud Console: **APIs & Services → Credentials → Create OAuth client ID → Web
+application**. The authorised redirect URI must be exactly:
+
+```
+<origin>/api/auth/callback/google
+```
+
+so `http://localhost:3000/api/auth/callback/google` for local development, and the same path
+on each deployed origin. Google matches this string exactly — a trailing slash or the wrong
+port is the whole of most `redirect_uri_mismatch` errors. Preview deployments get a fresh
+hostname per branch, so either register the ones you use or let previews sign in by email link
+only, which they can always do.
 
 Deploying to Vercel: import the repo, set the variables in Project Settings → Environment
-Variables, and run both migrations once locally against the same database.
+Variables, and run `npm run db:init` once locally against the same database.
 
 ## Picking the article first
 
@@ -298,8 +328,9 @@ lib/ghost.ts               where the drifting marks go while a comparison runs
 lib/deterministic.ts       zero-token coverage diff and section screening
 lib/compare.ts             heading alignment + claim diff
 lib/db.ts                  Neon cache layer
-db/schema.sql              three tables: articles, comparisons, labels
+db/schema.sql              all nine tables, ours and Better Auth's, every one idempotent
 components/Compare.tsx     search → choose → compare, toggles, hover card
+components/SignIn.tsx      the sign-in screen: Google, or a link by email
 components/PreviewGate.tsx the seam between what was read and what wasn't
 components/CreditBar.tsx   balance in the masthead, and the thank-you on hover
 components/Donate.tsx      amounts, running costs, monthly, coupon, and the reveal
