@@ -254,10 +254,16 @@ Check button beside the field asks whether a code is real and still yours (`GET 
 which changes nothing), and the pay button is what actually redeems it (`POST /api/coupon`).
 Checking early is the point — finding out whether a code works no longer costs a donation you may
 not want to make, and a typo comes back as one line under the field instead of as a thank-you
-screen for something else — but committing still belongs on the button that commits. A checked
-code empties the order, since somebody who arrived with a code came for the code; the button then
-reads "Get $3.00 of credit", and pressing it redeems and returns to the reading. Type an amount
-back in and it does both.
+screen for something else — but committing still belongs on the button that commits.
+
+A checked code is a discount rather than a top-up beside the order, which is what makes the
+summary add up. It becomes the order and then pays for it: processing is set to the $3 the code
+covers, the running-costs line to nothing, and the coupon lands in the summary as −$3.00, so the
+total reads $0.00 and the estimate reads 15 articles. The button says "Get $3.00 of credit", and
+pressing it redeems and returns to the reading — with nothing to pay there is no payment to
+attempt, and an unpaid attempt in `donations` would dilute the one number that table exists to
+answer. Raise the amount and the $3 still comes off whatever you chose; the button charges the
+remainder and does both.
 
 The check is deliberately not authoritative. Between it and the redemption the same account can
 spend the code in another tab, so `UNIQUE (user_id, code)` and the `ON CONFLICT DO NOTHING` insert
