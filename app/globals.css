@@ -106,6 +106,7 @@
   --animate-reveal-in: reveal-in 0.5s ease both;
   --animate-reveal-spin: reveal-spin 0.8s linear infinite;
   --animate-lang-in: lang-in 0.24s ease-out;
+  --animate-bar-rise: bar-rise 0.42s cubic-bezier(0.2, 0.75, 0.2, 1) both;
 
   /* The jump-to-difference target announces itself with a brief ring. */
   @keyframes diff-flash {
@@ -268,6 +269,20 @@
     }
     to {
       opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* The length chart drawing itself, once, as an article arrives. `scaleY` off
+     a bottom origin rather than an animated height: the height is written
+     per-bar as an inline style, so there is nothing for a keyframe to
+     interpolate from. Staggered per bar in the markup, which is what makes it
+     read as a chart being plotted rather than three boxes appearing. */
+  @keyframes bar-rise {
+    from {
+      transform: scaleY(0);
+    }
+    to {
       transform: none;
     }
   }

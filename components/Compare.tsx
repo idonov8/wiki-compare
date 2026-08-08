@@ -6,6 +6,7 @@ import { comparePath } from "./Highlighted";
 import CreditBar from "./CreditBar";
 import DiffNav from "./DiffNav";
 import Landing from "./landing/Landing";
+import LangBars from "./LangBars";
 import LangSwitch from "./LangSwitch";
 import Legend from "./Legend";
 import Loading from "./Loading";
@@ -526,26 +527,27 @@ export default function Compare() {
 
       {(comparing || phase === "done") && hasColumns && (
         <div className="controls border-b border-rule px-[24px] py-[12px] max-tight:px-[18px] max-tight:py-[10px] flex gap-x-[28px] gap-y-[20px] max-cols:gap-x-[16px] max-cols:gap-y-[10px] items-center flex-wrap font-mono text-[12px]">
-          {/* Which editions sit beside each other, and only where more than one
-              can: below `cols` there is one column and the floating switch
-              decides which, so a second control saying the same thing in codes
-              would be two answers to one question. */}
-          {!narrow && (
-            <div className="toggles flex gap-[6px]">
-              {available.map((lang) => (
-                <button
-                  key={lang}
-                  className="toggle px-[11px] py-[5px] bg-transparent border border-rule font-mono text-[12px] text-ink-soft aria-pressed:bg-ink aria-pressed:border-ink aria-pressed:text-paper-raised"
-                  aria-pressed={visible.includes(lang)}
-                  onClick={() => toggle(lang)}
-                >
-                  {lang.toUpperCase()}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* How long each edition is, and which of them are on screen. The
+              same chart serves both layouts because "on screen" is one
+              sentence in both, but it is not the same question underneath: a
+              wide screen is choosing which editions sit beside each other and
+              can hold several at once, a narrow one is choosing the single
+              column it is reading. So the press does what that screen means by
+              it, and the floating switch stays the control under the thumb —
+              this is the copy at the top of the page, where a reader who has
+              just opened an article finds out that the version they are about
+              to read is a tenth of the length of the one they are not. */}
+          <LangBars
+            langs={available}
+            articles={articles}
+            onScreen={visible}
+            onPick={narrow ? readIn : toggle}
+          />
           <Legend />
-          <div className="meta text-ink-soft ms-auto max-cols:ms-0">
+          {/* A line of its own below `cols`, rather than whatever is left over
+              beside the legend: given the leftover, it squeezes the legend into
+              wrapping labels it has the room to set on one line each. */}
+          <div className="meta text-ink-soft ms-auto max-cols:ms-0 max-tight:basis-full">
             {/* What it cost to process this article, whoever paid it and
                 whenever they did — see `costNote`. The badge beside it says
                 "cached" in its own right, so the sentence never repeats it. */}
