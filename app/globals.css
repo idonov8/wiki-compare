@@ -64,6 +64,10 @@
 
   /* ---- faces ---- */
   --font-display: "Instrument Serif", Georgia, serif;
+  /* Playfair Display rides along on the same Google Fonts request as the body
+     serif but nothing was set in it — this is that font finally used, for the
+     one wordmark on the page rather than for running text. */
+  --font-wordmark: "Playfair Display", Georgia, serif;
   --font-body: "Noto Serif", "Noto Serif Hebrew", "Noto Naskh Arabic", Georgia, serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
   --font-wiki: "Noto Sans", "Noto Sans Hebrew", "Noto Sans Arabic", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;

@@ -10,6 +10,7 @@ import Legend from "./Legend";
 import Loading from "./Loading";
 import PreviewGate from "./PreviewGate";
 import SearchBox from "./SearchBox";
+import Wordmark from "./Wordmark";
 import { initAnalytics, track } from "@/lib/analytics";
 import { formatCost, storedCost } from "@/lib/pricing";
 import {
@@ -454,15 +455,7 @@ export default function Compare() {
           landing ? "sticky top-0" : ""
         }`}
       >
-        <a
-          href="/"
-          className="wordmark inline-flex items-baseline gap-[9px] font-display text-[30px] leading-none tracking-[-0.01em]"
-        >
-          wiki<span className="text-ink-soft">-</span>narratives*
-          <span className="beta-badge self-center rounded-[2px] border border-rule px-[6px] py-[2px] font-mono text-[10px] leading-none tracking-[0.09em] uppercase text-ink-soft">
-            beta
-          </span>
-        </a>
+        <Wordmark />
         {/* On the landing page this appears only once the hero's own field has
             scrolled away — see `docked`. Everywhere else it is the only search
             there is, so it is always here. */}
