@@ -76,7 +76,10 @@ export default function Loading({ title }: { title: string }) {
     // are already rendered and readable while this runs, so the panel is
     // deliberately pointer-events-none and lets clicks through to them.
     <div
-      className="loading fixed left-1/2 bottom-3 z-[45] flex max-w-[min(92vw,460px)] -translate-x-1/2 flex-col items-center gap-0.5 border border-ink rounded-sm bg-paper-veil px-[22px] pt-2 pb-3 pointer-events-none shadow-offset backdrop-blur-[2px]"
+      // Sits above the floating language switch below `cols`: the switch is
+      // live while a comparison runs — the articles are already readable and
+      // already swipeable — so this panel gives it the bottom of the screen.
+      className="loading fixed left-1/2 bottom-3 max-cols:bottom-[76px] z-[45] flex max-w-[min(92vw,460px)] -translate-x-1/2 flex-col items-center gap-0.5 border border-ink rounded-sm bg-paper-veil px-[22px] pt-2 pb-3 pointer-events-none shadow-offset backdrop-blur-[2px]"
       aria-live="off"
     >
       <svg className="globe h-auto w-[152px] max-w-[40vw] overflow-visible" viewBox="0 0 320 300" aria-hidden="true">

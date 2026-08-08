@@ -109,7 +109,10 @@ export default function Columns({
           // between every pair.
           <section
             key={lang}
-            className="column min-w-0 pt-[22px] px-[26px] pb-20 border-rule border-l first:border-l-0 max-cols:border-l-0 max-cols:border-t"
+            // The deeper bottom padding below `cols` is for the floating
+            // language switch: it sits over this corner, and the article's last
+            // paragraph must not end up underneath it.
+            className="column min-w-0 pt-[22px] px-[26px] pb-20 max-cols:pb-[110px] max-tight:px-[17px] border-rule border-l first:border-l-0 max-cols:border-l-0 max-cols:border-t max-cols:first:border-t-0"
             dir={meta.dir}
             lang={lang}
           >
