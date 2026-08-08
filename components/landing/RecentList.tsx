@@ -50,7 +50,7 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                     Loading recent article title
                   </span>
                   <span
-                    className="shrink-0 animate-chip-breathe rounded-[2px] bg-ink-wash-strong font-mono text-[11px] tracking-[0.04em] text-transparent max-tight:hidden"
+                    className="shrink-0 animate-chip-breathe rounded-[2px] bg-ink-wash-strong font-mono text-[11px] tracking-[0.04em] text-transparent"
                     style={{ animationDelay: `${i * -0.3}s` }}
                   >
                     3 hours ago
@@ -82,7 +82,7 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                   {/* What's cached, not what a click will cost: a preview reads
                       free and a full run was already paid for, so the badge just
                       names which one is sitting in the cache right now. */}
-                  <span className="shrink-0 font-mono text-[11px] tracking-[0.04em] text-ink-soft max-tight:hidden">
+                  <span className="shrink-0 font-mono text-[11px] tracking-[0.04em] text-ink-soft">
                     {relative(item.computedAt)}
                   </span>
                   <span
