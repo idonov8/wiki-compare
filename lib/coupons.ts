@@ -1,17 +1,12 @@
 /**
  * The codes, and what each one is worth.
  *
- * A plain table rather than a database row, because a coupon here is a piece of
- * copy — it goes out in a tweet or at the end of a talk — and the thing that
- * decides whether it is real should be reviewable in a diff. A `coupons` table
- * would mean the set of live codes is invisible to everyone who reads the code
- * and editable by anyone who reaches the database, which is the wrong shape for
- * something whose whole job is to hand out money. What *is* in the database is
- * the other half: who has redeemed what, which is a fact about people rather
- * than a decision about policy.
+ * A table in the source rather than rows in the database: which codes hand out
+ * money is a decision, and a decision should be reviewable in a diff rather
+ * than editable by anyone who reaches the database. Who has redeemed what is
+ * the fact half, and lives in coupon_redemptions.
  *
- * No driver and no secrets in this file, so the browser can import it too — the
- * same reason lib/pricing.ts is pure arithmetic.
+ * Pure, like lib/pricing.ts, so the browser can import it too.
  */
 
 /** Code → cents of credit. Keys are upper case; see `normalizeCoupon`. */
@@ -20,14 +15,9 @@ export const COUPONS: Record<string, number> = {
 };
 
 /**
- * The form a code takes for lookup and for storage.
- *
- * Case-folded and trimmed because a code is something a person read off a
- * screen and typed back in, often with a phone keyboard that capitalised the
- * first letter for them. Rejecting `Welcome3` would be rejecting the right code
- * for being typed the way people type. Storing the normalised form as well as
- * matching on it keeps the redemption ledger from holding four spellings of one
- * coupon.
+ * The form a code takes for lookup and for storage. Case-folded because a code
+ * is read off a screen and typed back in, often by a keyboard that capitalises
+ * for you; normalised on the way into the ledger so it holds one spelling.
  */
 export function normalizeCoupon(input: string): string {
   return input.trim().toUpperCase();

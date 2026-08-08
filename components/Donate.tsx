@@ -16,17 +16,10 @@ function suggestedMaintenance(amountCents: number): number {
 /**
  * The JSON body, or an error that says what actually happened.
  *
- * `await res.json()` assumes a body and assumes it parses, and neither holds
- * for the failure that matters: a route that throws before it can answer sends
- * 500 with zero bytes, and `json()` on zero bytes raises "Unexpected end of
- * JSON input". That is a parser describing the shape of nothing, shown to
- * somebody who typed a coupon code — it names neither the request that failed
- * nor the status it failed with, and it sends whoever is debugging it looking
- * for a JSON bug that does not exist.
- *
- * So the body is read as text first, and an empty or unparseable one becomes a
- * sentence with the status code in it. The status is the part worth surfacing:
- * it says the server was reached and refused, which is most of the diagnosis.
+ * A route that throws answers 500 with zero bytes, and `res.json()` on zero
+ * bytes raises "Unexpected end of JSON input" — a parser describing the shape
+ * of nothing, shown to somebody who typed a coupon code. Read as text first, so
+ * an empty or unparseable body reports the status instead.
  */
 async function readJson(res: Response): Promise<Record<string, unknown>> {
   const text = await res.text();
@@ -40,7 +33,7 @@ async function readJson(res: Response): Promise<Record<string, unknown>> {
   }
 }
 
-/** The `error` a route reports, if it reported one in the shape routes use. */
+/** The `error` a route reported, if it reported one. */
 function errorFrom(json: Record<string, unknown>, fallback: string): string {
   return typeof json.error === "string" && json.error ? json.error : fallback;
 }
@@ -81,9 +74,7 @@ export default function Donate() {
   const [maintenance, setMaintenance] = useState(String(suggestedMaintenance(500) / 100));
   const [monthly, setMonthly] = useState(false);
   const [coupon, setCoupon] = useState("");
-  // Checking, refused with a reason, or checked out and waiting for the pay
-  // button. There is no fourth state for "redeemed": the moment that happens
-  // this page is on its way to the main site.
+  // No state for "redeemed": the moment that happens, this page is leaving.
   const [checking, setChecking] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [applied, setApplied] = useState<CouponCheck | null>(null);
@@ -124,13 +115,8 @@ export default function Donate() {
   const articles = articlesFor(amountCents);
 
   /**
-   * Checks the typed code. Takes nothing, grants nothing.
-   *
-   * Answering "is this real, and is it mine to use" is worth doing the moment
-   * the code is typed — that is the question a coupon field raises, and making
-   * somebody commit to a donation to have it answered was the whole complaint.
-   * Applying it is still the pay button's job, so this stops one step short of
-   * that and clears the order out of its way instead.
+   * Checks the typed code. Takes nothing, grants nothing — redeeming is the pay
+   * button's job, so this stops short of it and clears the order out of the way.
    */
   async function applyCoupon(): Promise<void> {
     const code = coupon.trim();
@@ -144,12 +130,9 @@ export default function Donate() {
       if (!res.ok) throw new Error(errorFrom(json, "That code didn't check out."));
       const good = json as unknown as CouponCheck;
       setApplied(good);
-      // Echo back the code as the server reads it, so a lower-case entry
-      // becomes the canonical one under the line that names it.
       setCoupon(good.code);
-      // Somebody who arrived with a code came for the code. Emptying the order
-      // leaves one button doing one thing, and an amount is two keystrokes away
-      // for anyone who means to give as well.
+      // Somebody who arrived with a code came for the code, so the order is
+      // emptied and one button is left doing one thing.
       setAmount(0);
       setCustom("");
       setMaintenance("0");
@@ -395,19 +378,14 @@ export default function Donate() {
               </span>
             </label>
 
-            {/* A coupon used to be a field the pay button carried along, which
-                meant the only way to find out whether a code was real was to
-                commit to a donation — and a typo came back attached to a
-                thank-you screen for something else. The small button beside
-                the field answers that question on the spot now. It stops
-                there: the credit itself still arrives on the pay button, which
-                is where committing to something belongs. */}
+            {/* The small button answers "is this code real" on the spot, so
+                nobody has to commit to a donation to find out. It stops there:
+                the credit still arrives on the pay button. */}
             <div className="donate-field donate-coupon flex items-baseline gap-[14px] py-[14px] border-t border-rule max-tight:flex-wrap max-tight:gap-[6px_14px]">
               <label htmlFor="coupon" className="flex-[1_1_auto] min-w-0 text-[14px] cursor-pointer">
                 Coupon code
-                {/* One line, three things it can say. `role="status"` so the
-                    answer to a press is announced rather than only shown, and
-                    colour is never the only carrier — the words change too. */}
+                {/* One line, three things it can say. `role="status"` so a
+                    press is announced; the words change, not just the colour. */}
                 <small
                   role="status"
                   className={`block text-[12.5px] leading-[1.5] ${
@@ -419,9 +397,8 @@ export default function Donate() {
                     : (couponError ?? "If somebody gave you one. Check it before you decide.")}
                 </small>
               </label>
-              {/* Field and button travel together: on a phone the pair wraps
-                  to its own line and the field takes the slack, so the button
-                  never ends up under the code it belongs to. */}
+              {/* Field and button wrap together, so on a phone the button
+                  never lands under the code it belongs to. */}
               <div className="donate-coupon-entry flex-none flex items-center gap-[8px] max-tight:flex-[1_1_100%]">
                 <input
                   id="coupon"
@@ -437,9 +414,7 @@ export default function Donate() {
                     // replaced, so it stops being true as it is typed over.
                     if (couponError) setCouponError(null);
                   }}
-                  // Not inside a form — the pay button is the page's submit —
-                  // so Enter is wired up by hand. A code field where Enter does
-                  // nothing feels broken however visible the button is.
+                  // Not inside a form, so Enter is wired up by hand.
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
@@ -448,10 +423,8 @@ export default function Donate() {
                   }}
                   className="flex-[0_0_118px] w-[118px] font-mono text-[14px] py-[8px] px-[10px] bg-paper-raised border border-rule rounded-[2px] text-inherit text-end uppercase placeholder:normal-case placeholder:text-ink-soft disabled:opacity-[0.6] max-tight:flex-1 max-tight:w-auto max-tight:text-start"
                 />
-                {/* Outlined, not filled: the one solid block of ink on this
-                    page is the pay button, and a second one here would ask to
-                    be pressed first — which is now precisely wrong, because
-                    this one does not finish anything. */}
+                {/* Outlined, not filled: the pay button keeps the page's only
+                    block of ink, since this one finishes nothing. */}
                 <button
                   type="button"
                   className="donate-redeem flex-none py-[8px] px-[13px] font-mono text-[12px] tracking-[0.04em] bg-transparent text-ink border border-ink rounded-[2px] transition-[background,color] duration-[120ms] ease-[ease] hover:not-disabled:bg-ink hover:not-disabled:text-paper-raised disabled:opacity-[0.4] disabled:cursor-default"
@@ -507,11 +480,8 @@ export default function Donate() {
               </dd>
             </div>
 
-            {/* A checked coupon is credit about to arrive, so it is listed as
-                what it will add rather than folded into the total: the total is
-                what this order costs, and a coupon costs nothing. An unchecked
-                code appears nowhere — there is nothing to report about a code
-                nobody has pressed Check on. */}
+            {/* Listed as what it will add, not folded into the total: the
+                total is what this order costs, and a coupon costs nothing. */}
             {applied && (
               <div className="summary-line summary-line-quiet flex items-baseline justify-between gap-[16px] py-[12px] border-t border-rule">
                 <dt className="flex-[1_1_auto] min-w-0 text-[14px] leading-[1.4]">
@@ -550,18 +520,14 @@ export default function Donate() {
 
           <button
             className="donate-pay mt-[18px] block w-full py-[14px] px-[22px] bg-ink text-paper-raised border border-ink text-[16px] disabled:opacity-[0.45] disabled:cursor-progress"
-            // A checked coupon is something to press this for, even with
-            // nothing to pay — it is the only thing standing between the
-            // reader and the credit at that point.
+            // A checked coupon is worth pressing this for, with nothing to pay.
             disabled={busy || (amountCents <= 0 && !applied)}
             onClick={async () => {
               setBusy(true);
               setError(null);
               try {
-                // The coupon first, because it is the part that is real. If it
-                // fails there is nothing to celebrate and the reader stays on
-                // the form with the reason, rather than being shown a reveal
-                // for a donation while the credit they came for went missing.
+                // The coupon first, because it is the part that is real: if it
+                // fails, no reveal should be celebrating something else.
                 if (applied) {
                   const res = await fetch("/api/coupon", {
                     method: "POST",
@@ -572,10 +538,8 @@ export default function Donate() {
                   if (!res.ok) throw new Error(errorFrom(json, "That code didn't go through."));
                 }
 
-                // Nothing was offered, so there is no attempt to record and no
-                // reveal to show: the credit is on the account and the reason
-                // for being on this page is over. Straight back to the reading,
-                // where the masthead picks the new balance up on its next load.
+                // Nothing offered, so nothing to record and nothing to reveal.
+                // Back to the reading; the masthead reloads the balance there.
                 if (amountCents <= 0) {
                   window.location.href = "/";
                   return;
@@ -584,13 +548,10 @@ export default function Donate() {
                 const res = await fetch("/api/donate", {
                   method: "POST",
                   headers: { "content-type": "application/json" },
-                  // No coupon here. This button redeems one directly, above,
-                  // and the ledger row is about what somebody offered to pay.
+                  // No coupon here: this button redeems one directly, above.
                   body: JSON.stringify({ amountCents, maintenanceCents, monthly, from }),
                 });
-                // Same read as the coupon above it: this button had the same
-                // bug waiting, and a bodyless 500 here would have reported
-                // itself as a JSON parse error too.
+                // Same read as above: a bodyless 500 here had the same bug.
                 const json = await readJson(res);
                 if (!res.ok) throw new Error(errorFrom(json, "That didn't go through."));
                 setResult(json as unknown as DonateResponse);
@@ -602,9 +563,7 @@ export default function Donate() {
               }
             }}
           >
-            {/* "Pay $0.00" is not a thing to ask anybody to press. With a
-                coupon checked and nothing offered, the button says what it
-                will actually do. */}
+            {/* "Pay $0.00" is not a thing to ask anybody to press. */}
             {busy
               ? "One moment…"
               : applied && totalCents === 0

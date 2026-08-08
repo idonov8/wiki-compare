@@ -182,30 +182,17 @@ export interface CouponRequest {
   code: string;
 }
 
-/**
- * A code that checked out: what it is, and what it would be worth.
- *
- * The answer to the Apply button, which asks and does not act. No balance in
- * it, because nothing has moved yet — the credit arrives on the pay button.
- */
+/** A code that checked out. No balance in it: nothing has moved yet. */
 export interface CouponCheck {
   code: string;
   cents: number;
 }
 
-/**
- * A redeemed coupon.
- *
- * Deliberately not part of `DonateResponse`. A coupon is credit arriving, which
- * is a complete thing on its own and has nothing to do with whether somebody
- * then goes on to donate — the reason it has its own button is the reason it
- * has its own response.
- */
+/** A redeemed coupon. Separate from `DonateResponse`: a donation may not follow. */
 export interface CouponResponse {
-  /** The normalised code, so the confirmation names it the way we stored it. */
   code: string;
   grantedCents: number;
-  /** The balance afterwards, so the page does not have to re-ask `/api/me`. */
+  /** The balance afterwards, so the page need not re-ask `/api/me`. */
   creditCents: number;
   message: string;
 }
