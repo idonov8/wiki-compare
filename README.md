@@ -249,15 +249,22 @@ not take it is the only evidence that any of this is worth building properly. Th
 once per account; a second attempt is still recorded, and answered with a promise to email when
 payments work, which is a promise we can keep because signing in was a magic link.
 
-Coupons are not a mock, and are not part of that button. `WELCOME3` is $3 of real credit, redeemed
-by its own small Redeem button beside the field — the code is checked the moment it is typed
-rather than at the end of an order, so finding out whether a code is real no longer costs a
-donation you may not want to make, and a typo comes back as one line under the field instead of as
-a thank-you screen for something else. Which codes exist and what they are worth is a table in
-`lib/coupons.ts`, because that is policy and belongs somewhere a reviewer sees it change; who has
-redeemed what is `coupon_redemptions`, because that is a fact. A code pays out once per account,
-and the `UNIQUE (user_id, code)` it is inserted against is the guard rather than a `SELECT` before
-the grant — the same race, and the same answer, as the balance itself.
+Coupons are not a mock. `WELCOME3` is $3 of real credit, and it arrives in two steps: the small
+Check button beside the field asks whether a code is real and still yours (`GET /api/coupon`,
+which changes nothing), and the pay button is what actually redeems it (`POST /api/coupon`).
+Checking early is the point — finding out whether a code works no longer costs a donation you may
+not want to make, and a typo comes back as one line under the field instead of as a thank-you
+screen for something else — but committing still belongs on the button that commits. A checked
+code empties the order, since somebody who arrived with a code came for the code; the button then
+reads "Get $3.00 of credit", and pressing it redeems and returns to the reading. Type an amount
+back in and it does both.
+
+The check is deliberately not authoritative. Between it and the redemption the same account can
+spend the code in another tab, so `UNIQUE (user_id, code)` and the `ON CONFLICT DO NOTHING` insert
+stay the only thing that decides — the same race, and the same answer, as the balance itself.
+Which codes exist and what they are worth is a table in `lib/coupons.ts`, because that is policy
+and belongs somewhere a reviewer sees it change; who has redeemed what is `coupon_redemptions`,
+because that is a fact.
 
 ## Design notes
 

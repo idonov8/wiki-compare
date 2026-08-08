@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import SignIn from "@/components/SignIn";
 import { initAnalytics, track } from "@/lib/analytics";
 import { articlesFor, formatCents } from "@/lib/pricing";
-import type { CouponResponse, DonateResponse, MeResponse } from "@/lib/types";
+import type { CouponCheck, DonateResponse, MeResponse } from "@/lib/types";
 
 const PRESETS = [100, 300, 500, 1000];
 
@@ -81,12 +81,12 @@ export default function Donate() {
   const [maintenance, setMaintenance] = useState(String(suggestedMaintenance(500) / 100));
   const [monthly, setMonthly] = useState(false);
   const [coupon, setCoupon] = useState("");
-  // The coupon has its own three states because it is its own action: in
-  // flight, refused with a reason, or redeemed for a known amount. None of them
-  // has anything to do with whether the donation below it goes through.
-  const [redeeming, setRedeeming] = useState(false);
+  // Checking, refused with a reason, or checked out and waiting for the pay
+  // button. There is no fourth state for "redeemed": the moment that happens
+  // this page is on its way to the main site.
+  const [checking, setChecking] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
-  const [redeemed, setRedeemed] = useState<CouponResponse | null>(null);
+  const [applied, setApplied] = useState<CouponCheck | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DonateResponse | null>(null);
@@ -124,40 +124,39 @@ export default function Donate() {
   const articles = articlesFor(amountCents);
 
   /**
-   * Redeems the typed code, on its own, right now.
+   * Checks the typed code. Takes nothing, grants nothing.
    *
-   * The whole reason this is a function rather than a field on the payment
-   * body: a coupon is credit arriving, not a discount on something else, so
-   * there is nothing about it that needs to wait for a donation to be decided.
-   * A code is either real and yours, or it isn't, and both answers are worth
-   * having the moment the code is typed rather than at the end of a form.
+   * Answering "is this real, and is it mine to use" is worth doing the moment
+   * the code is typed — that is the question a coupon field raises, and making
+   * somebody commit to a donation to have it answered was the whole complaint.
+   * Applying it is still the pay button's job, so this stops one step short of
+   * that and clears the order out of its way instead.
    */
-  async function redeem(): Promise<void> {
+  async function applyCoupon(): Promise<void> {
     const code = coupon.trim();
-    if (!code || redeeming || redeemed) return;
-    setRedeeming(true);
+    if (!code || checking || applied) return;
+    setChecking(true);
     setCouponError(null);
     void track("coupon_submitted", { from });
     try {
-      const res = await fetch("/api/coupon", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
+      const res = await fetch(`/api/coupon?code=${encodeURIComponent(code)}`);
       const json = await readJson(res);
-      if (!res.ok) throw new Error(errorFrom(json, "That code didn't go through."));
-      const added = json as unknown as CouponResponse;
-      setRedeemed(added);
-      // Echo back the code as the server stored it, so a lower-case entry
-      // becomes the canonical one under the confirmation that names it.
-      setCoupon(added.code);
-      // This credit is real, unlike the payment below it, so the account this
-      // page is showing has to reflect it without waiting for a reload.
-      setMe((current) => (current ? { ...current, creditCents: added.creditCents } : current));
+      if (!res.ok) throw new Error(errorFrom(json, "That code didn't check out."));
+      const good = json as unknown as CouponCheck;
+      setApplied(good);
+      // Echo back the code as the server reads it, so a lower-case entry
+      // becomes the canonical one under the line that names it.
+      setCoupon(good.code);
+      // Somebody who arrived with a code came for the code. Emptying the order
+      // leaves one button doing one thing, and an amount is two keystrokes away
+      // for anyone who means to give as well.
+      setAmount(0);
+      setCustom("");
+      setMaintenance("0");
     } catch (e) {
-      setCouponError(e instanceof Error ? e.message : "That code didn't go through.");
+      setCouponError(e instanceof Error ? e.message : "That code didn't check out.");
     } finally {
-      setRedeeming(false);
+      setChecking(false);
     }
   }
 
@@ -396,12 +395,13 @@ export default function Donate() {
               </span>
             </label>
 
-            {/* The one row on this page that is not part of the order. A
-                coupon used to be a field the pay button carried along, which
+            {/* A coupon used to be a field the pay button carried along, which
                 meant the only way to find out whether a code was real was to
                 commit to a donation — and a typo came back attached to a
-                thank-you screen for something else. It has its own small
-                button now, next to the field, and answers on the spot. */}
+                thank-you screen for something else. The small button beside
+                the field answers that question on the spot now. It stops
+                there: the credit itself still arrives on the pay button, which
+                is where committing to something belongs. */}
             <div className="donate-field donate-coupon flex items-baseline gap-[14px] py-[14px] border-t border-rule max-tight:flex-wrap max-tight:gap-[6px_14px]">
               <label htmlFor="coupon" className="flex-[1_1_auto] min-w-0 text-[14px] cursor-pointer">
                 Coupon code
@@ -414,9 +414,9 @@ export default function Donate() {
                     couponError ? "text-contradiction" : "text-ink-soft"
                   }`}
                 >
-                  {redeemed
-                    ? `${formatCents(redeemed.grantedCents)} added — your balance is ${formatCents(redeemed.creditCents)}.`
-                    : (couponError ?? "If somebody gave you one. Redeem it now, on its own.")}
+                  {applied
+                    ? `${formatCents(applied.cents)} of credit, added when you press Pay.`
+                    : (couponError ?? "If somebody gave you one. Check it before you decide.")}
                 </small>
               </label>
               {/* Field and button travel together: on a phone the pair wraps
@@ -427,7 +427,7 @@ export default function Donate() {
                   id="coupon"
                   value={coupon}
                   placeholder="Optional"
-                  disabled={!!redeemed}
+                  disabled={!!applied}
                   autoCapitalize="characters"
                   autoCorrect="off"
                   spellCheck={false}
@@ -443,21 +443,22 @@ export default function Donate() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      void redeem();
+                      void applyCoupon();
                     }
                   }}
                   className="flex-[0_0_118px] w-[118px] font-mono text-[14px] py-[8px] px-[10px] bg-paper-raised border border-rule rounded-[2px] text-inherit text-end uppercase placeholder:normal-case placeholder:text-ink-soft disabled:opacity-[0.6] max-tight:flex-1 max-tight:w-auto max-tight:text-start"
                 />
                 {/* Outlined, not filled: the one solid block of ink on this
                     page is the pay button, and a second one here would ask to
-                    be pressed first. */}
+                    be pressed first — which is now precisely wrong, because
+                    this one does not finish anything. */}
                 <button
                   type="button"
                   className="donate-redeem flex-none py-[8px] px-[13px] font-mono text-[12px] tracking-[0.04em] bg-transparent text-ink border border-ink rounded-[2px] transition-[background,color] duration-[120ms] ease-[ease] hover:not-disabled:bg-ink hover:not-disabled:text-paper-raised disabled:opacity-[0.4] disabled:cursor-default"
-                  disabled={redeeming || !!redeemed || !coupon.trim()}
-                  onClick={() => void redeem()}
+                  disabled={checking || !!applied || !coupon.trim()}
+                  onClick={() => void applyCoupon()}
                 >
-                  {redeemed ? "Added" : redeeming ? "One moment…" : "Redeem"}
+                  {applied ? "Checked" : checking ? "One moment…" : "Check"}
                 </button>
               </div>
             </div>
@@ -506,21 +507,21 @@ export default function Donate() {
               </dd>
             </div>
 
-            {/* A redeemed coupon appears here as something that has already
-                happened, and pointedly does not touch the total below it: the
-                credit is on the account whether or not this order is ever
-                placed. An unredeemed code appears nowhere — there is nothing
-                to report about a code nobody has pressed Redeem on. */}
-            {redeemed && (
+            {/* A checked coupon is credit about to arrive, so it is listed as
+                what it will add rather than folded into the total: the total is
+                what this order costs, and a coupon costs nothing. An unchecked
+                code appears nowhere — there is nothing to report about a code
+                nobody has pressed Check on. */}
+            {applied && (
               <div className="summary-line summary-line-quiet flex items-baseline justify-between gap-[16px] py-[12px] border-t border-rule">
                 <dt className="flex-[1_1_auto] min-w-0 text-[14px] leading-[1.4]">
-                  Coupon {redeemed.code}
+                  Coupon {applied.code}
                   <small className="block mt-[3px] font-body text-[12px] leading-[1.45] text-ink-soft">
-                    already on your balance — not part of this total
+                    credit, added when you press Pay
                   </small>
                 </dt>
                 <dd className="flex-none m-0 font-mono text-[15px] whitespace-nowrap">
-                  +{formatCents(redeemed.grantedCents)}
+                  +{formatCents(applied.cents)}
                 </dd>
               </div>
             )}
@@ -549,17 +550,42 @@ export default function Donate() {
 
           <button
             className="donate-pay mt-[18px] block w-full py-[14px] px-[22px] bg-ink text-paper-raised border border-ink text-[16px] disabled:opacity-[0.45] disabled:cursor-progress"
-            disabled={busy || amountCents <= 0}
+            // A checked coupon is something to press this for, even with
+            // nothing to pay — it is the only thing standing between the
+            // reader and the credit at that point.
+            disabled={busy || (amountCents <= 0 && !applied)}
             onClick={async () => {
               setBusy(true);
               setError(null);
               try {
+                // The coupon first, because it is the part that is real. If it
+                // fails there is nothing to celebrate and the reader stays on
+                // the form with the reason, rather than being shown a reveal
+                // for a donation while the credit they came for went missing.
+                if (applied) {
+                  const res = await fetch("/api/coupon", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ code: applied.code }),
+                  });
+                  const json = await readJson(res);
+                  if (!res.ok) throw new Error(errorFrom(json, "That code didn't go through."));
+                }
+
+                // Nothing was offered, so there is no attempt to record and no
+                // reveal to show: the credit is on the account and the reason
+                // for being on this page is over. Straight back to the reading,
+                // where the masthead picks the new balance up on its next load.
+                if (amountCents <= 0) {
+                  window.location.href = "/";
+                  return;
+                }
+
                 const res = await fetch("/api/donate", {
                   method: "POST",
                   headers: { "content-type": "application/json" },
-                  // No coupon here any more. Redeeming is its own button and
-                  // its own request, and has already happened by the time this
-                  // one is sent.
+                  // No coupon here. This button redeems one directly, above,
+                  // and the ledger row is about what somebody offered to pay.
                   body: JSON.stringify({ amountCents, maintenanceCents, monthly, from }),
                 });
                 // Same read as the coupon above it: this button had the same
@@ -576,13 +602,22 @@ export default function Donate() {
               }
             }}
           >
-            {busy ? "One moment…" : `Pay ${formatCents(totalCents)}${monthly ? " a month" : ""}`}
+            {/* "Pay $0.00" is not a thing to ask anybody to press. With a
+                coupon checked and nothing offered, the button says what it
+                will actually do. */}
+            {busy
+              ? "One moment…"
+              : applied && totalCents === 0
+                ? `Get ${formatCents(applied.cents)} of credit`
+                : `Pay ${formatCents(totalCents)}${monthly ? " a month" : ""}`}
           </button>
 
           <p className="summary-note mt-[10px] text-[12px] leading-[1.5] text-ink-soft">
             {articles > 0
               ? `${articles} articles of processing, readable by everyone who opens them afterwards.`
-              : "Enter an amount to fund some processing."}
+              : applied
+                ? `${articlesFor(applied.cents)} articles, on us. Add an amount above to fund more.`
+                : "Enter an amount to fund some processing."}
           </p>
 
           {error && (
