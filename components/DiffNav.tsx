@@ -143,8 +143,13 @@ export default function DiffNav({ signature }: { signature: string }) {
         className="diffnav pointer-events-none fixed inset-y-0 right-0 z-40 flex w-[26px] items-stretch max-cols:w-[18px]"
         aria-hidden="true"
       >
+        {/* Click-through below `cols`, where the rail is a picture of where the
+            differences are and nothing else. There it runs down the edge a
+            thumb swipes from and the edge a right-to-left column's text ends
+            at, and a scrubber that swallowed those would cost more than
+            scrubbing is worth on a screen this size. */}
         <div
-          className="diffnav-rail pointer-events-auto relative mt-[8px] mr-[4px] mb-[64px] ml-[4px] flex-1 cursor-pointer rounded-[5px] bg-ink-wash"
+          className="diffnav-rail pointer-events-auto max-cols:pointer-events-none relative mt-[8px] mr-[4px] mb-[64px] ml-[4px] flex-1 cursor-pointer rounded-[5px] bg-ink-wash"
           onClick={onRailClick}
         >
           {/* The slice of the page currently on screen, so the rail doubles as a map of where the reader is. */}
@@ -164,7 +169,9 @@ export default function DiffNav({ signature }: { signature: string }) {
         </div>
       </div>
       <div
-        className="diffnav-controls pointer-events-auto fixed right-[34px] bottom-[22px] z-[41] flex items-center gap-0.5 rounded-[3px] border border-ink bg-paper-raised p-1 font-mono text-[12px] shadow-offset max-cols:right-[24px]"
+        // Lifted clear of the floating language switch below `cols`, which owns
+        // the bottom of the viewport there.
+        className="diffnav-controls pointer-events-auto fixed right-[34px] bottom-[22px] z-[41] flex items-center gap-0.5 rounded-[3px] border border-ink bg-paper-raised p-1 font-mono text-[12px] shadow-offset max-cols:right-[14px] max-cols:bottom-[76px]"
         role="group"
         aria-label="Jump between differences"
       >

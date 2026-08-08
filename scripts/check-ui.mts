@@ -493,6 +493,112 @@ await page.keyboard.press("Escape");
 await page.waitForTimeout(150);
 check(!(await page.$(".card")), "Escape dismisses the card");
 
+// ---- one language at a time, on a phone ------------------------------------
+
+// Below the `cols` breakpoint the three columns cannot sit side by side, so the
+// page shows one and the reader moves between them two ways: the floating
+// switch, and a swipe over the article. The assertion worth having is that those
+// two are one state — a swipe that moved the column without moving the switch
+// would leave the control lying about what is on screen.
+{
+  const phone = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  const small = await phone.newPage();
+  small.on("pageerror", (e) => pageErrors.push(e.message));
+  await small.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
+  await small.waitForSelector("mark.claim", { timeout: 30000 });
+
+  const columns = () =>
+    small.$$eval("section.column", (els) => els.map((el) => el.getAttribute("lang") ?? "?"));
+  const pressed = () =>
+    small.$eval(".langswitch [aria-pressed=true]", (el) => el.getAttribute("lang") ?? "?");
+
+  check((await columns()).length === 1, "one column at a time on a narrow screen",
+    (await columns()).join(", "));
+  check(
+    (await small.$$(".langswitch-option")).length === 3,
+    "the floating switch offers every language the article has",
+  );
+  check((await columns())[0] === (await pressed()), "and marks the one on screen",
+    `${(await columns())[0]} vs ${await pressed()}`);
+  check(
+    (await small.$$(".toggles")).length === 0,
+    "the column toggles are gone, since there is one column",
+  );
+
+  // Pressing a language brings it up.
+  await small.click('.langswitch-option[lang="ar"]');
+  await small.waitForTimeout(350);
+  check((await columns())[0] === "ar", "pressing a language on the switch opens it",
+    (await columns()).join(", "));
+
+  // And so does a flick across the article — landing on the neighbouring
+  // language, with the switch following it rather than being left behind. The
+  // gesture is dispatched rather than driven through `page.touchscreen`, which
+  // only taps. Nothing inside these callbacks is factored into a helper: they
+  // are compiled into the page by esbuild, whose `keepNames` wraps a named
+  // function expression in a `__name` that does not exist in the browser.
+  const swipe = (dx: number, dy: number) =>
+    small.evaluate(([deltaX, deltaY]) => {
+      const target = document.querySelector("section.column")!;
+      const from = new Touch({ identifier: 1, target, clientX: 200, clientY: 600 });
+      const to = new Touch({
+        identifier: 1,
+        target,
+        clientX: 200 + deltaX,
+        clientY: 600 + deltaY,
+      });
+      target.dispatchEvent(
+        new TouchEvent("touchstart", { bubbles: true, touches: [from], changedTouches: [from] }),
+      );
+      target.dispatchEvent(
+        new TouchEvent("touchmove", { bubbles: true, touches: [to], changedTouches: [to] }),
+      );
+      target.dispatchEvent(
+        new TouchEvent("touchend", { bubbles: true, touches: [], changedTouches: [to] }),
+      );
+    }, [dx, dy]);
+
+  await swipe(160, 0); // rightwards: pull the previous language back in
+  await small.waitForTimeout(350);
+  check((await columns())[0] === "he", "swiping across the article changes language",
+    (await columns()).join(", "));
+  check((await pressed()) === "he", "and the floating switch follows the swipe",
+    await pressed());
+
+  // A drag mostly down the page is a scroll, whatever sideways drift it picked
+  // up on the way — mistaking one for the other would make the article
+  // unreadable one-handed.
+  await swipe(60, -400);
+  await small.waitForTimeout(350);
+  check((await columns())[0] === "he", "a scroll with sideways drift is not a swipe",
+    (await columns()).join(", "));
+
+  // The two floating controls and the last line of the article all want the
+  // bottom of the screen, and the switch is what has to stay reachable.
+  const overlap = await small.evaluate(() => {
+    const a = document.querySelector(".langswitch")?.getBoundingClientRect();
+    const b = document.querySelector(".diffnav-controls")?.getBoundingClientRect();
+    if (!a || !b) return null;
+    return !(a.right < b.left || b.right < a.left || a.bottom < b.top || b.bottom < a.top);
+  });
+  check(overlap === false, "the switch and the difference stepper do not overlap");
+
+  const clear = await small.evaluate(() => {
+    const el = document.querySelector(".langswitch")!;
+    const r = el.getBoundingClientRect();
+    // Whatever is painted at the switch's own centre has to be the switch.
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return el.contains(hit);
+  });
+  check(clear, "and nothing is covering the switch");
+
+  await phone.close();
+}
+
 check(pageErrors.length === 0, "no uncaught page errors", pageErrors.join("; "));
 
 // A stub still mid-flight when the browser goes away throws from its callback,
