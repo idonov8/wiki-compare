@@ -32,7 +32,7 @@ export default function Legend({ describe = false }: { describe?: boolean }) {
   }
 
   return (
-    <div className="legend flex gap-[16px] text-ink-soft flex-wrap">
+    <div className="legend flex gap-[16px] max-cols:gap-x-[12px] max-cols:gap-y-[6px] text-ink-soft flex-wrap">
       {KINDS.map(([key, swatch, label]) => (
         <span key={key} className="flex items-center gap-[6px]">
           <i className={`swatch ${key} inline-block w-[15px] h-[15px] rounded-[2px] ${swatch}`} /> {label}

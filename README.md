@@ -14,7 +14,8 @@ Verified:
 
 - Parsing, against live `action=parse` output in all three languages (`npm run check:parser`).
 - The zero-token coverage and screening pass (`npm run check:deterministic`).
-- Rendering, including that highlights do not break at a direction boundary (`npm run check:ui`).
+- Rendering, including that highlights do not break at a direction boundary, and that the
+  one-language-at-a-time phone layout keeps its switch and its swipe in step (`npm run check:ui`).
 
 Not yet verified — needs `ANTHROPIC_API_KEY` and `DATABASE_URL`:
 
@@ -285,9 +286,32 @@ own idiom — a sans body, a serif heading with a rule under it, blue links, the
 top — with one matching family per script (Noto Sans / Noto Serif and their Hebrew and Arabic
 cuts) so the columns read as siblings rather than three unrelated documents.
 
+Below the width where three columns stop fitting side by side, the comparison becomes one
+language at a time. It used to stack the three, which turned a comparison into three articles
+read one after another — by the time the Arabic version of a passage was on screen the English
+one was thousands of pixels above it, and comparing them meant remembering rather than looking.
+So a phone shows one column, and moves between them two ways: a floating pill at the bottom of
+the viewport naming each edition in its own script, and a horizontal swipe across the article.
+They are one state, not two — `LangSwitch` renders the language the swipe moves, so the control
+can never disagree with what is on screen — and the incoming column slides in from the side it
+was pulled in from, so a flick moves something visible rather than swapping the page. Scroll
+position is deliberately kept across the change: the reader was part-way down an article and is
+still part-way down the same article, in another language.
+
+The switch floats rather than joining the toggles in the controls strip because the strip is at
+the top of a page that is read from the middle of it — the wish to see this passage in another
+language arrives while reading that passage, and the control has to be under the thumb at that
+moment. The strip's `EN`/`HE`/`AR` toggles are dropped there entirely: they answer which
+editions to set beside each other, which is not a question a screen showing one column has.
+`useSwipe` reads the gesture without preventing anything, and takes only drags that are clearly
+flatter than they are long — a page of Wikipedia is read by dragging it up and down, and a
+gesture that stole a scroll halfway through would cost far more than the swipe is worth.
+
 A fixed rail down the right edge (`components/DiffNav.tsx`) plots every mark against the length of
 the page and tracks the slice currently on screen, so the differences are visible at a glance while
-scrolling; the arrow control steps through them in reading order. It reads only marks that have
+scrolling; the arrow control steps through them in reading order — lifted clear of the language
+switch on a narrow screen, where the rail itself also stops taking clicks, since it runs down
+the edge a thumb swipes from. It reads only marks that have
 client rects, so a difference folded inside the collapsed Key facts block is skipped until the
 block is opened, and a `toggle` listener re-plots the rail when it is.
 
@@ -362,6 +386,9 @@ components/Donate.tsx      amounts, running costs, monthly, the Redeem button, a
 components/Columns.tsx     the articles side by side, with or without a comparison
 components/Highlighted.tsx span location and marking
 components/DiffNav.tsx     right-edge rail + jump-to-difference controls
+components/LangSwitch.tsx  the floating language pill, where one column is all that fits
+components/useSwipe.ts     the flick across the article that moves the same state
+components/useNarrow.ts    whether three columns fit, as the `cols` breakpoint in JS
 app/api/search/route.ts    candidate articles for a query, or a pasted URL
 app/api/articles/route.ts  the articles alone, ahead of the comparison
 fixtures/                  recorded API responses + loader

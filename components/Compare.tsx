@@ -6,10 +6,13 @@ import { comparePath } from "./Highlighted";
 import CreditBar from "./CreditBar";
 import DiffNav from "./DiffNav";
 import Landing from "./landing/Landing";
+import LangSwitch from "./LangSwitch";
 import Legend from "./Legend";
 import Loading from "./Loading";
 import PreviewGate from "./PreviewGate";
 import SearchBox from "./SearchBox";
+import { useNarrow } from "./useNarrow";
+import { useSwipe } from "./useSwipe";
 import { initAnalytics, track } from "@/lib/analytics";
 import { formatCost, storedCost } from "@/lib/pricing";
 import {
@@ -125,11 +128,15 @@ interface Hit {
   url: string;
 }
 
-/** Keep in sync with `.card { max-width }` in globals.css. */
+/** The card's widest, which it takes unless the viewport is narrower. */
 const CARD_WIDTH = 340;
 const CARD_MARGIN = 8;
 /** Enough room to place the card below a mark without it running off-screen. */
 const CARD_CLEARANCE = 190;
+
+/** How far the incoming column slides in from when the language changes. Enough
+ *  to read as the article having moved sideways, not as a new page. */
+const SLIDE_PX = 26;
 
 /**
  * A comparison costs tokens and about a minute, and every second of it is
@@ -151,6 +158,15 @@ export default function Compare() {
   const [articles, setArticles] = useState<Record<string, ArticleSnapshot>>({});
   const [data, setData] = useState<ComparePayload | null>(null);
   const [shown, setShown] = useState<Lang[]>([...LANGS]);
+  /** The one language on screen where three columns do not fit. Kept apart from
+   *  `shown` rather than folded into it: the two are different questions — which
+   *  editions to set beside each other, and which one to be reading — and a
+   *  phone rotated into landscape should find the desktop answer where it left
+   *  it. */
+  const [active, setActive] = useState<Lang>("en");
+  /** Which way the last language change moved, so the incoming column enters
+   *  from the side the reader pulled it in from. */
+  const [enterFrom, setEnterFrom] = useState(0);
   const [card, setCard] = useState<CardState | null>(null);
   const [recent, setRecent] = useState<RecentArticle[]>([]);
   /** True until the first `/api/recent` response lands, so the ledger can
@@ -335,7 +351,13 @@ export default function Compare() {
     () => LANGS.filter((l) => articles[l]),
     [articles],
   );
-  const visible = shown.filter((l) => available.includes(l));
+  const narrow = useNarrow();
+  /** The language being read on a narrow screen. `active` survives opening
+   *  another article — following a link out of the Arabic column should land in
+   *  Arabic — so it can name an edition this subject doesn't have, and the first
+   *  one it does have is the fallback. */
+  const solo = available.includes(active) ? active : available[0];
+  const visible = narrow ? (solo ? [solo] : []) : shown.filter((l) => available.includes(l));
   const badged = !!data?.cache && data.cache.edited.length > 0;
   const preview = data?.scope?.kind === "preview";
 
@@ -403,6 +425,26 @@ export default function Compare() {
     return () => window.removeEventListener("keydown", onKey);
   }, [card]);
 
+  /** The single move behind both the floating switch and the swipe, which is
+   *  what keeps them saying the same thing. The card goes with the column that
+   *  raised it: its mark is about to be unmounted, and a tooltip outliving the
+   *  text it points at is worse than no tooltip. */
+  const readIn = (lang: Lang) => {
+    if (!solo || lang === solo) return;
+    setEnterFrom(available.indexOf(lang) > available.indexOf(solo) ? 1 : -1);
+    setActive(lang);
+    setCard(null);
+  };
+
+  // Clamped rather than wrapped: with the switch on screen showing where in the
+  // three you are, a flick off the end that reappeared at the other end would
+  // read as having lost your place.
+  const swipe = useSwipe((direction) => {
+    if (!solo) return;
+    const next = available[available.indexOf(solo) + direction];
+    if (next) readIn(next);
+  });
+
   const toggle = (lang: Lang) =>
     setShown((current) =>
       current.includes(lang)
@@ -417,10 +459,14 @@ export default function Compare() {
 
     // Clamp both edges. Clamping only the right edge pushed the card off-screen
     // for a mark near the left of the viewport, which the rightmost column makes
-    // likelier once it is the only one shown.
+    // likelier once it is the only one shown. The width is the card's own only
+    // while the viewport can hold it — on a phone the card is as wide as the
+    // screen allows, and clamping against 340 there pinned every card to the
+    // left margin.
+    const width = Math.min(CARD_WIDTH, window.innerWidth - CARD_MARGIN * 2);
     const left = Math.max(
       CARD_MARGIN,
-      Math.min(rect.left, window.innerWidth - CARD_WIDTH - CARD_MARGIN),
+      Math.min(rect.left, window.innerWidth - width - CARD_MARGIN),
     );
 
     // Anchoring by `bottom` when flipping is what makes the flip real: setting
@@ -450,11 +496,14 @@ export default function Compare() {
           that spot: the mark arrives already covered, and the hover card it is
           supposed to open never opens. `npm run check:ui` catches this. */}
       <header
-        className={`masthead z-40 border-b border-rule bg-paper px-[24px] py-[20px] flex gap-[24px] items-baseline flex-wrap max-tight:px-[18px] ${
+        className={`masthead z-40 border-b border-rule bg-paper px-[24px] py-[20px] flex gap-[24px] items-baseline flex-wrap max-tight:px-[18px] max-tight:py-[14px] max-tight:gap-[14px] ${
           landing ? "sticky top-0" : ""
         }`}
       >
-        <a href="/" className="wordmark font-display text-[30px] leading-none tracking-[-0.01em]">
+        <a
+          href="/"
+          className="wordmark font-display text-[30px] max-tight:text-[26px] leading-none tracking-[-0.01em]"
+        >
           wiki<span className="text-ink-soft">-</span>compare*
         </a>
         {/* On the landing page this appears only once the hero's own field has
@@ -463,7 +512,11 @@ export default function Compare() {
         {mastheadSearch && (
           <SearchBox
             variant="bar"
-            className="animate-reveal-in flex-[1_1_320px]"
+            // Last and full width on a phone, so the masthead is the wordmark
+            // and the credit meter on one line with the field under them,
+            // rather than the field taking a line and leaving the meter alone
+            // on a third.
+            className="animate-reveal-in flex-[1_1_320px] max-tight:order-last max-tight:basis-full"
             value={query}
             onChange={setQuery}
             onSubmit={search}
@@ -476,21 +529,27 @@ export default function Compare() {
       </header>
 
       {(comparing || phase === "done") && hasColumns && (
-        <div className="controls border-b border-rule px-[24px] py-[12px] flex gap-x-[28px] gap-y-[20px] items-center flex-wrap font-mono text-[12px]">
-          <div className="toggles flex gap-[6px]">
-            {available.map((lang) => (
-              <button
-                key={lang}
-                className="toggle px-[11px] py-[5px] bg-transparent border border-rule font-mono text-[12px] text-ink-soft aria-pressed:bg-ink aria-pressed:border-ink aria-pressed:text-paper-raised"
-                aria-pressed={visible.includes(lang)}
-                onClick={() => toggle(lang)}
-              >
-                {lang.toUpperCase()}
-              </button>
-            ))}
-          </div>
+        <div className="controls border-b border-rule px-[24px] py-[12px] max-tight:px-[18px] max-tight:py-[10px] flex gap-x-[28px] gap-y-[20px] max-cols:gap-x-[16px] max-cols:gap-y-[10px] items-center flex-wrap font-mono text-[12px]">
+          {/* Which editions sit beside each other, and only where more than one
+              can: below `cols` there is one column and the floating switch
+              decides which, so a second control saying the same thing in codes
+              would be two answers to one question. */}
+          {!narrow && (
+            <div className="toggles flex gap-[6px]">
+              {available.map((lang) => (
+                <button
+                  key={lang}
+                  className="toggle px-[11px] py-[5px] bg-transparent border border-rule font-mono text-[12px] text-ink-soft aria-pressed:bg-ink aria-pressed:border-ink aria-pressed:text-paper-raised"
+                  aria-pressed={visible.includes(lang)}
+                  onClick={() => toggle(lang)}
+                >
+                  {lang.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          )}
           <Legend />
-          <div className="meta text-ink-soft ms-auto">
+          <div className="meta text-ink-soft ms-auto max-cols:ms-0">
             {/* What it cost to process this article, whoever paid it and
                 whenever they did — see `costNote`. The badge beside it says
                 "cached" in its own right, so the sentence never repeats it. */}
@@ -537,7 +596,7 @@ export default function Compare() {
                     can be measured and clicked mid-transition, and it takes
                     pointer events only while open, so a click passes through to
                     the strip underneath when it is closed. */}
-                <span className="cached-tip absolute z-50 top-[calc(100%_+_8px)] end-0 w-[300px] px-[13px] py-[11px] bg-paper-raised border border-ink rounded-[2px] shadow-offset font-body text-[13px] leading-[1.55] tracking-normal normal-case text-start text-ink opacity-0 invisible pointer-events-none transition-opacity duration-[120ms] ease-[ease] grid justify-items-start gap-[10px] group-hover:opacity-100 group-hover:visible group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:visible group-focus-within:pointer-events-auto before:content-[''] before:absolute before:inset-x-0 before:-top-[9px] before:h-[9px]">
+                <span className="cached-tip absolute z-50 top-[calc(100%_+_8px)] end-0 w-[min(300px,calc(100vw_-_36px))] px-[13px] py-[11px] bg-paper-raised border border-ink rounded-[2px] shadow-offset font-body text-[13px] leading-[1.55] tracking-normal normal-case text-start text-ink opacity-0 invisible pointer-events-none transition-opacity duration-[120ms] ease-[ease] grid justify-items-start gap-[10px] group-hover:opacity-100 group-hover:visible group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:visible group-focus-within:pointer-events-auto before:content-[''] before:absolute before:inset-x-0 before:-top-[9px] before:h-[9px]">
                   <span id="cached-note">{cacheNote(data.cache)}</span>
                   {/* Filled rather than underlined: it sits directly under a
                       sentence, where a link would read as the end of that
@@ -621,50 +680,69 @@ export default function Compare() {
 
       {/* A funded comparison is one grid. A preview is three pieces: what was
           read, the seam, and what wasn't — so the boundary lands as a single
-          rule across all three columns instead of three fades at three heights. */}
-      {hasColumns && (comparing || phase === "done") && !preview && (
-        <Columns
-          articles={articles}
-          visible={visible}
-          claims={data?.claims ?? []}
-          ghost={comparing}
-          activeId={card?.claim.id ?? null}
-          onEnter={onEnter}
-          onLeave={() => setCard(null)}
-          onLink={navigate}
-        />
+          rule across all three columns instead of three fades at three heights.
+
+          Both are held in the surface a swipe is made over. Keying it on the
+          language remounts the article when that changes, which is what replays
+          the slide: the column arrives from the side it was pulled in from, so a
+          flick moves something visible rather than swapping the page under the
+          reader. Scroll position is deliberately left alone — the reader was
+          part-way down an article and is still part-way down the same article,
+          in another language. */}
+      {hasColumns && (comparing || phase === "done") && (
+        <div
+          key={narrow ? solo : "columns"}
+          className={narrow ? "animate-lang-in" : undefined}
+          style={narrow ? ({ "--lang-from": `${enterFrom * SLIDE_PX}px` } as React.CSSProperties) : undefined}
+          {...(narrow ? swipe : null)}
+        >
+          {preview && data ? (
+            <>
+              <Columns
+                articles={articles}
+                visible={visible}
+                claims={data.claims}
+                activeId={card?.claim.id ?? null}
+                processedThrough={data.scope?.processedThrough}
+                part="head"
+                onEnter={onEnter}
+                onLeave={() => setCard(null)}
+                onLink={navigate}
+              />
+              <PreviewGate
+                busy={funding}
+                signedIn={!!me}
+                creditCents={me?.creditCents ?? 0}
+                error={fundError}
+                onFund={() => fund("full")}
+                onDonate={() => goDonate("preview-gate")}
+              />
+              <Columns
+                articles={articles}
+                visible={visible}
+                claims={data.claims}
+                processedThrough={data.scope?.processedThrough}
+                part="tail"
+                onLink={navigate}
+              />
+            </>
+          ) : (
+            <Columns
+              articles={articles}
+              visible={visible}
+              claims={data?.claims ?? []}
+              ghost={comparing}
+              activeId={card?.claim.id ?? null}
+              onEnter={onEnter}
+              onLeave={() => setCard(null)}
+              onLink={navigate}
+            />
+          )}
+        </div>
       )}
 
-      {hasColumns && phase === "done" && preview && data && (
-        <>
-          <Columns
-            articles={articles}
-            visible={visible}
-            claims={data.claims}
-            activeId={card?.claim.id ?? null}
-            processedThrough={data.scope?.processedThrough}
-            part="head"
-            onEnter={onEnter}
-            onLeave={() => setCard(null)}
-            onLink={navigate}
-          />
-          <PreviewGate
-            busy={funding}
-            signedIn={!!me}
-            creditCents={me?.creditCents ?? 0}
-            error={fundError}
-            onFund={() => fund("full")}
-            onDonate={() => goDonate("preview-gate")}
-          />
-          <Columns
-            articles={articles}
-            visible={visible}
-            claims={data.claims}
-            processedThrough={data.scope?.processedThrough}
-            part="tail"
-            onLink={navigate}
-          />
-        </>
+      {narrow && solo && hasColumns && (comparing || phase === "done") && (
+        <LangSwitch langs={available} active={solo} onChange={readIn} />
       )}
 
       {comparing && <Loading title={target?.title ?? ""} />}
@@ -674,7 +752,12 @@ export default function Compare() {
           {data.claims.length > 0 && <DiffNav signature={`${data.qid}:${visible.join("")}`} />}
 
           {data.coverage.length > 0 && (
-            <div className="coverage border-t border-rule p-[24px]">
+            <div
+              // Extra room under it below `cols`: the floating language switch
+              // is over this corner of the page, and the last row of concepts
+              // must not end up behind it.
+              className="coverage border-t border-rule p-[24px] max-cols:pb-[96px] max-tight:px-[18px]"
+            >
               <h2 className="font-display font-normal text-[24px] m-0 mb-[4px]">Covered in some versions, not others</h2>
               <p className="text-ink-soft m-0 mb-[16px] max-w-[62ch] text-[14px]">
                 Linked concepts one version mentions and another never does. Computed by set
@@ -697,7 +780,7 @@ export default function Compare() {
 
       {card && (
         <div
-          className="card fixed z-50 max-w-[340px] px-[15px] py-[13px] bg-paper-raised border border-ink rounded-[2px] shadow-offset pointer-events-none [direction:ltr] text-start"
+          className="card fixed z-50 max-w-[min(340px,calc(100vw_-_16px))] px-[15px] py-[13px] bg-paper-raised border border-ink rounded-[2px] shadow-offset pointer-events-none [direction:ltr] text-start"
           id="claim-card"
           style={{ left: card.left, top: card.top, bottom: card.bottom }}
           role="tooltip"
