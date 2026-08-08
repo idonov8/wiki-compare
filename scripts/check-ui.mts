@@ -228,6 +228,82 @@ const reopen = async (as: Stored) => {
 
 await reopen("priced");
 
+// ---- how long each edition is ----------------------------------------------
+
+// The strip's `EN`/`HE`/`AR` boxes are a bar chart now: how much text each
+// edition carries, sorted longest first, filled for the columns on screen and
+// hollow for the ones that are not. Chart and control are one object, so both
+// halves are worth asserting — that the bars are ordered by the thing they
+// claim to plot, and that pressing one still lays a column out or takes it
+// away. A bar sorted by anything else, or one that stopped answering the
+// press, would be decoration sitting where a control used to be.
+const bars = () =>
+  page.$$eval(".toggle", (els) =>
+    els.map((el) => ({
+      label: el.getAttribute("aria-label") ?? "",
+      on: el.getAttribute("aria-pressed") === "true",
+      height: el.querySelector<HTMLElement>(".langbar")!.getBoundingClientRect().height,
+    })),
+  );
+const laidOut = () =>
+  page.$$eval("section.column", (els) => els.map((el) => el.getAttribute("lang") ?? "?"));
+
+{
+  // The bars plot themselves on arrival, staggered, off a `scaleY` — so a rect
+  // measured too early is a frame of the animation rather than the height the
+  // bar is claiming. Everything below reads heights, so wait the whole sequence
+  // out first: 0.42s of rise behind 0.14s of stagger, plus room to settle.
+  await page.waitForTimeout(800);
+
+  const plotted = await bars();
+  check(plotted.length === 3, "every edition the article has gets a bar", String(plotted.length));
+  check(
+    plotted.every((bar, i) => i === 0 || bar.height <= plotted[i - 1].height + 0.5),
+    "the bars are sorted longest first",
+    plotted.map((bar) => Math.round(bar.height)).join(" ≥ "),
+  );
+  // The bars carry the comparison; the figure carries the number. A reader on
+  // a screen reader gets neither unless the button says so itself.
+  check(
+    plotted.every((bar) => /, [\d,]+ words$/.test(bar.label)),
+    "and each one says its own count in its label",
+    plotted[0]?.label,
+  );
+  check(plotted.every((bar) => bar.on), "every column is on screen to begin with");
+
+  // Pressing the shortest edition takes its column away — and its bar stays,
+  // hollow, at the height it always had, since how long the version you just
+  // hid is remains the reason to bring it back.
+  const shortest = (await bars())[2];
+  await (await page.$$(".toggle"))[2].click();
+  await page.waitForTimeout(200);
+  const after = await bars();
+  check(
+    (await laidOut()).length === 2,
+    "pressing a bar takes its column off the page",
+    (await laidOut()).join(", "),
+  );
+  check(
+    !after[2].on && after[2].height === shortest.height,
+    "and its bar stays, hollow, at the height it always had",
+    `${Math.round(after[2].height)} vs ${Math.round(shortest.height)}`,
+  );
+
+  // The last column standing cannot switch itself off: a comparison with
+  // nothing in it is not a state the strip is allowed to reach.
+  await (await page.$$(".toggle"))[1].click();
+  await page.waitForTimeout(200);
+  await (await page.$$(".toggle"))[0].click();
+  await page.waitForTimeout(200);
+  check(
+    (await laidOut()).length === 1,
+    "the last column on screen refuses to switch itself off",
+    (await laidOut()).join(", "),
+  );
+
+  await reopen("priced");
+}
+
 // ---- cached badge -----------------------------------------------------------
 
 check(!!(await page.$(".cached-badge")), "a cached comparison served past an edit is badged");
@@ -524,16 +600,45 @@ check(!(await page.$(".card")), "Escape dismisses the card");
   );
   check((await columns())[0] === (await pressed()), "and marks the one on screen",
     `${(await columns())[0]} vs ${await pressed()}`);
+  // The length chart stays, because how long the two editions you are not
+  // reading are is a question a one-column screen very much has — it is the
+  // only place that screen can be told. What it means by a filled bar narrows
+  // to fit: a wide screen sets several editions beside each other, a phone
+  // reads one, and "on screen" is still the sentence either way. So exactly one
+  // bar is filled here, and it is the column being read.
+  const charted = () =>
+    small.$eval(".toggles [aria-pressed=true]", (el) => el.textContent?.slice(-2) ?? "?");
   check(
-    (await small.$$(".toggles")).length === 0,
-    "the column toggles are gone, since there is one column",
+    (await small.$$(".toggle")).length === 3,
+    "the length chart still plots all three editions on a phone",
+  );
+  check(
+    (await small.$$(".toggles [aria-pressed=true]")).length === 1,
+    "with one bar filled, since one column is what a phone shows",
+  );
+  check(
+    (await charted()).toLowerCase() === (await columns())[0],
+    "and it is the column on screen",
+    `${await charted()} vs ${(await columns())[0]}`,
   );
 
-  // Pressing a language brings it up.
+  // Pressing a language brings it up — from the pill under the thumb, or from
+  // the chart at the top of the page, which are the same state written twice
+  // more.
   await small.click('.langswitch-option[lang="ar"]');
   await small.waitForTimeout(350);
   check((await columns())[0] === "ar", "pressing a language on the switch opens it",
     (await columns()).join(", "));
+  check((await charted()).toLowerCase() === "ar", "and the chart follows it", await charted());
+
+  await small.click('.toggle[aria-label^="Hebrew"]');
+  await small.waitForTimeout(350);
+  check((await columns())[0] === "he", "pressing a bar in the chart opens that language",
+    (await columns()).join(", "));
+  check((await pressed()) === "he", "and the pill follows it", await pressed());
+
+  await small.click('.langswitch-option[lang="ar"]');
+  await small.waitForTimeout(350);
 
   // And so does a flick across the article — landing on the neighbouring
   // language, with the switch following it rather than being left behind. The

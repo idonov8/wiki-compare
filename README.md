@@ -286,6 +286,17 @@ own idiom — a sans body, a serif heading with a rule under it, blue links, the
 top — with one matching family per script (Noto Sans / Noto Serif and their Hebrew and Arabic
 cuts) so the columns read as siblings rather than three unrelated documents.
 
+The controls strip opens with a bar chart of how long each edition is (`components/LangBars.tsx`),
+sorted longest first. It replaced three plain `EN`/`HE`/`AR` boxes that said only whether a column
+was showing — which left the single most useful fact about a set of Wikipedia articles nowhere on
+the page. They are unevenly written, routinely by five or ten times, and that unevenness is the
+thing this site exists to point at. Chart and control are one object rather than a chart set
+beside one: a bar filled with ink means that edition is on screen, a hollow bar of the same height
+means it exists and is not, and pressing either changes which. A hidden edition keeps its bar,
+because how long the version you are not reading is remains the only reason to bring it back. The
+count is words rather than characters — Hebrew and Arabic drop the vowels English writes out, which
+understates them by about a third before any real difference in coverage is measured.
+
 Below the width where three columns stop fitting side by side, the comparison becomes one
 language at a time. It used to stack the three, which turned a comparison into three articles
 read one after another — by the time the Arabic version of a passage was on screen the English
@@ -298,11 +309,14 @@ was pulled in from, so a flick moves something visible rather than swapping the 
 position is deliberately kept across the change: the reader was part-way down an article and is
 still part-way down the same article, in another language.
 
-The switch floats rather than joining the toggles in the controls strip because the strip is at
+The switch floats rather than joining the strip's own language control because the strip is at
 the top of a page that is read from the middle of it — the wish to see this passage in another
 language arrives while reading that passage, and the control has to be under the thumb at that
-moment. The strip's `EN`/`HE`/`AR` toggles are dropped there entirely: they answer which
-editions to set beside each other, which is not a question a screen showing one column has.
+moment. The chart stays at the top of the page there rather than being dropped, because how long
+the two editions you are not reading are is a question only it can answer on a screen showing one
+column — what a filled bar means simply narrows to fit, from "these editions sit beside each
+other" to "this is the one being read". Pressing a bar there moves the same state the pill and the
+swipe move, so all three can never disagree.
 `useSwipe` reads the gesture without preventing anything, and takes only drags that are clearly
 flatter than they are long — a page of Wikipedia is read by dragging it up and down, and a
 gesture that stole a scroll halfway through would cost far more than the swipe is worth.
@@ -378,7 +392,7 @@ lib/deterministic.ts       zero-token coverage diff and section screening
 lib/compare.ts             heading alignment + claim diff
 lib/db.ts                  Neon cache layer
 db/schema.sql              all ten tables, ours and Better Auth's, every one idempotent
-components/Compare.tsx     search → choose → compare, toggles, hover card
+components/Compare.tsx     search → choose → compare, hover card
 components/SignIn.tsx      the sign-in screen: Google, or a link by email
 components/PreviewGate.tsx the seam between what was read and what wasn't
 components/CreditBar.tsx   balance in the masthead, and the thank-you on hover
@@ -387,6 +401,7 @@ components/Columns.tsx     the articles side by side, with or without a comparis
 components/Highlighted.tsx span location and marking
 components/DiffNav.tsx     right-edge rail + jump-to-difference controls
 components/LangSwitch.tsx  the floating language pill, where one column is all that fits
+components/LangBars.tsx    how long each edition is, and which of them are on screen
 components/useSwipe.ts     the flick across the article that moves the same state
 components/useNarrow.ts    whether three columns fit, as the `cols` breakpoint in JS
 app/api/search/route.ts    candidate articles for a query, or a pasted URL
