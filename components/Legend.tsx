@@ -37,13 +37,14 @@ export default function Legend({ describe = false }: { describe?: boolean }) {
     // the strip down a third one, all while the space to the chart's right sits
     // empty — which is exactly where a key to the chart wants to be anyway.
     //
-    // `flex-1 basis-0 min-w-0` rather than letting the strip wrap it there: a
-    // legend that drops below the chart the moment it stops fitting costs a
-    // line of height on the narrowest screens, which are the ones that can
-    // least afford one. Given the leftover width instead it takes what there
-    // is, wrapping its own longest label on the smallest phones and staying
-    // beside the chart at every width.
-    <div className="legend flex flex-wrap gap-[16px] max-cols:gap-x-[12px] max-cols:gap-y-[6px] text-ink-soft max-tight:min-w-0 max-tight:flex-1 max-tight:basis-0 max-tight:flex-col max-tight:flex-nowrap max-tight:gap-y-[8px]">
+    // `basis-0` rather than letting the strip wrap it there: a legend that
+    // drops below the chart the moment it stops fitting costs a line of height
+    // on the narrowest screens, which are the ones that can least afford one.
+    // Sized from zero it never pushes itself onto a line of its own, and
+    // `min-w-fit` then claims back exactly the width its longest label needs —
+    // so the leftover goes to the chart, which is the half of the strip that
+    // can actually use it, and neither of them wraps down to 320px.
+    <div className="legend flex flex-wrap gap-[16px] max-cols:gap-x-[12px] max-cols:gap-y-[6px] text-ink-soft max-tight:min-w-fit max-tight:flex-1 max-tight:basis-0 max-tight:flex-col max-tight:flex-nowrap max-tight:gap-y-[8px]">
       {KINDS.map(([key, swatch, label]) => (
         <span key={key} className="flex items-center gap-[6px]">
           <i className={`swatch ${key} inline-block w-[15px] h-[15px] rounded-[2px] ${swatch}`} /> {label}
