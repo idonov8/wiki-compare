@@ -48,12 +48,8 @@ export default function Hero({ query, setQuery, onSearch, onPick, busy, sentinel
           goes, in the site's own three colours for disagreement, so the
           shape reads as somewhere with a great many tellings in it before a
           word of the headline is read. */}
-      <div className="animate-reveal-in flex justify-center pt-[max(2vh,12px)]" style={{ animationDelay: "10ms" }}>
-        <GlobeMark />
-      </div>
-
-      <div className="animate-reveal-in mt-[max(1.5vh,10px)]" style={{ animationDelay: "40ms" }}>
-        <LanguageRail />
+      <div className="animate-reveal-in pt-[max(2vh,12px)]" style={{ animationDelay: "10ms" }}>
+        <GlobeWithLanguages />
       </div>
 
       <Section
@@ -111,48 +107,67 @@ const NATIVE_SIZE: Record<Lang, string> = {
 };
 
 /**
- * The three Wikipedias, named under the globe in their own scripts.
+ * One language: its name in its own script, its Wikipedia subdomain beneath.
  *
- * `Loading` says the same thing with boxed chips and strands feeding into the
- * sphere, and earns that by having a wait to fill. Nothing is in progress here,
- * so these are left as type: the name, its subdomain beneath it in the utility
- * face, a hairline between. The globe directly above is where this page spends
- * its boldness, and a second moving thing under it would be two things
- * competing rather than one carrying.
- *
- * The codes are not decoration — `en`, `he` and `ar` are the Wikipedias these
- * come from, which is the most literal statement of what the page does.
+ * The subdomain is not decoration. `en`, `he` and `ar` are the three
+ * Wikipedias a comparison is actually pulled from, which makes it the most
+ * literal statement of what this page does — the same slot the language
+ * portal at wikipedia.org fills with each edition's article count.
  */
-function LanguageRail() {
+function LanguageMark({ lang, align }: { lang: Lang; align: string }) {
   return (
-    <ul
-      className="mx-auto flex list-none items-stretch justify-center p-0"
-      aria-label="The Wikipedias compared"
-    >
-      {LANGS.map((lang, i) => (
-        <li
-          key={lang}
-          className={`flex flex-col items-center gap-[2px] px-[clamp(15px,4.5vw,34px)] ${
-            i > 0 ? "border-s border-ink-wash-strong" : ""
-          }`}
-        >
-          <span
-            lang={lang}
-            dir={LANG_META[lang].dir}
-            // A fixed line box rather than a multiple of the font size: the
-            // three are set at two different sizes, and a relative leading gave
-            // each column a different height, so the codes under them stepped
-            // down the row instead of sitting on one line.
-            className={`font-body leading-[30px] text-ink ${NATIVE_SIZE[lang]}`}
-          >
-            {LANG_META[lang].native}
-          </span>
-          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-soft">
-            {lang}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div className={`flex flex-col gap-[1px] ${align}`}>
+      <span
+        lang={lang}
+        dir={LANG_META[lang].dir}
+        // A fixed line box rather than a multiple of the font size: the three
+        // are set at two different sizes, and a relative leading gave each one
+        // a different height, so the codes under them stepped out of line.
+        className={`font-body leading-[26px] text-ink ${NATIVE_SIZE[lang]}`}
+      >
+        {LANG_META[lang].native}
+      </span>
+      <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-soft">
+        {lang}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The globe with the three Wikipedias set around it, after the language portal
+ * at wikipedia.org: the sphere in the middle, the editions ringed around it
+ * rather than listed under it.
+ *
+ * A grid rather than absolute polar positioning. The ring only has three points
+ * on it, and three points placed by `left`/`top` percentages have to be re-tuned
+ * every time the type or the globe changes size — a grid puts them beside and
+ * below by construction and cannot drift or collide. English and Hebrew are
+ * centred against the sphere's middle and Arabic sits under it, which is the
+ * same triangle `Loading` arranges its chips in.
+ *
+ * The inner edges align towards the globe — English ends at it, Hebrew starts
+ * at it — so the three read as facing the sphere rather than as a column of
+ * left-aligned labels that happens to have a picture in it.
+ *
+ * They are left as type. `Loading` earns its chips and strands by having a wait
+ * to fill; nothing is in progress here, and a second moving thing this close to
+ * the globe would be two things competing rather than one carrying.
+ */
+function GlobeWithLanguages() {
+  return (
+    <div className="mx-auto grid w-fit grid-cols-[auto_auto_auto] items-center justify-center gap-x-[clamp(10px,2.6vw,26px)]">
+      <LanguageMark lang="en" align="items-end text-end" />
+      <div className="flex justify-center">
+        <GlobeMark />
+      </div>
+      <LanguageMark lang="he" align="items-start text-start" />
+      {/* Same measure as the column gap, so the three sit at an equal distance
+          from the sphere rather than the one underneath tucking in closer. */}
+      <div className="col-span-3 flex justify-center pt-[clamp(10px,2.6vw,26px)]">
+        <LanguageMark lang="ar" align="items-center text-center" />
+      </div>
+    </div>
   );
 }
 
@@ -319,7 +334,7 @@ function GlobeMark() {
 
   return (
     <svg
-      className="pointer-events-none h-auto w-[clamp(220px,38vw,360px)]"
+      className="pointer-events-none h-auto w-[clamp(170px,33vw,336px)]"
       viewBox="92 64 136 136"
       aria-hidden="true"
     >
