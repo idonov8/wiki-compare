@@ -153,6 +153,12 @@ export default function Compare() {
   const [shown, setShown] = useState<Lang[]>([...LANGS]);
   const [card, setCard] = useState<CardState | null>(null);
   const [recent, setRecent] = useState<RecentArticle[]>([]);
+  /** True until the first `/api/recent` response lands, so the ledger can
+   *  show a skeleton instead of popping in from nothing once it does. Never
+   *  reset back to true on later refetches — a returning visitor still has
+   *  the last list on screen, and re-skeletoning it would just trade one
+   *  jump for another. */
+  const [recentLoading, setRecentLoading] = useState(true);
   const [me, setMe] = useState<MeResponse | null>(null);
   const [funding, setFunding] = useState(false);
   const [fundError, setFundError] = useState<string | null>(null);
@@ -279,8 +285,18 @@ export default function Compare() {
     const abort = new AbortController();
     fetch("/api/recent", { signal: abort.signal })
       .then((res) => res.json())
-      .then((json) => setRecent(json.items ?? []))
-      .catch(() => {});
+      .then((json) => {
+        setRecent(json.items ?? []);
+        setRecentLoading(false);
+      })
+      // Not a `.finally`: an aborted request (StrictMode's mount-cleanup-mount
+      // in dev, or a phase change mid-flight) lands here too, and clearing
+      // the skeleton on the abort would drop back to nothing while the
+      // effect's real re-fetch is still in flight — the same pop-in this
+      // skeleton exists to avoid.
+      .catch(() => {
+        if (!abort.signal.aborted) setRecentLoading(false);
+      });
     return () => abort.abort();
   }, [phase]);
 
@@ -559,6 +575,7 @@ export default function Compare() {
           onOpen={navigate}
           busy={busy}
           recent={recent}
+          recentLoading={recentLoading}
           relative={relative}
           onDonate={() => goDonate("landing_footer")}
           onDocked={setDocked}
