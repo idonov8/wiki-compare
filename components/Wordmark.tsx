@@ -6,25 +6,41 @@
  * comparison, in the site's own colour vocabulary rather than a borrowed one.
  * At rest the bars sit close and tilted, like a folded ribbon; on hover or
  * keyboard focus they fan out level, the way the columns themselves fan out
- * into three tellings of one article. `beta` stays a plain tag beside it —
- * the strand is the one thing here allowed to be loud.
+ * into three tellings of one article.
+ *
+ * `beta` rides low on the baseline, the way a trademark mark sits off a
+ * wordmark rather than floating centred beside it. Its own hover throws the
+ * same three colours through it in one diagonal pass — the strand's palette,
+ * reused rather than a generic shine, so the two live marks read as one idea.
  */
 export default function Wordmark() {
   return (
     <a
       href="/"
       aria-label="Wiki Narratives — beta"
-      className="wordmark group inline-flex items-center gap-[11px] no-underline"
+      className="wordmark group inline-flex items-end gap-[10px] no-underline"
     >
       <span className="wordmark-type font-wordmark text-[29px] leading-none tracking-[-0.01em] text-ink italic">
         wiki
         <Strand />
         narratives
       </span>
-      <span className="beta-badge self-center rounded-[2px] border border-rule bg-paper-raised px-[6px] py-[2px] font-mono text-[10px] leading-none tracking-[0.09em] text-ink-soft uppercase">
-        beta
-      </span>
+      <BetaBadge />
     </a>
+  );
+}
+
+function BetaBadge() {
+  return (
+    <span
+      className="beta-badge group/beta relative mb-[3px] inline-block overflow-hidden rounded-[2px] border border-rule bg-paper-raised px-[6px] py-[2px] font-mono text-[10px] leading-none tracking-[0.09em] text-ink-soft uppercase transition-transform duration-150 ease-out hover:-translate-y-[1px] hover:-rotate-[3deg] hover:border-ink hover:text-ink group-focus-visible:-translate-y-[1px] group-focus-visible:-rotate-[3deg] group-focus-visible:border-ink group-focus-visible:text-ink"
+    >
+      beta
+      <i
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-[-2px] left-0 w-[60%] -translate-x-[170%] skew-x-[-18deg] bg-gradient-to-r from-framing via-contradiction to-unique opacity-0 transition-[transform,opacity] duration-500 ease-out group-hover/beta:translate-x-[230%] group-hover/beta:opacity-80 group-focus-visible:translate-x-[230%] group-focus-visible:opacity-80"
+      />
+    </span>
   );
 }
 
