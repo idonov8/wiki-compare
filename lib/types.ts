@@ -177,9 +177,20 @@ export interface DonateRequest {
   from?: string;
 }
 
-/** What the Redeem button submits. Case and spacing are the server's problem. */
+/** What the pay button submits to redeem. Case and spacing are the server's problem. */
 export interface CouponRequest {
   code: string;
+}
+
+/**
+ * A code that checked out: what it is, and what it would be worth.
+ *
+ * The answer to the Apply button, which asks and does not act. No balance in
+ * it, because nothing has moved yet — the credit arrives on the pay button.
+ */
+export interface CouponCheck {
+  code: string;
+  cents: number;
 }
 
 /**

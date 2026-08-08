@@ -106,6 +106,22 @@ export async function claimCoupon(userId: string, code: string, cents: number): 
   return rows.length > 0;
 }
 
+/**
+ * Whether this account has already had this code.
+ *
+ * Only ever asked to answer the Apply button, never to guard the grant: by the
+ * time a "no" here reaches the pay button the other tab may have redeemed it,
+ * and `claimCoupon` is what actually decides. Kept apart from that on purpose —
+ * a question that cannot be trusted to gate anything is safer as its own
+ * function than as an early return inside the one that can.
+ */
+export async function hasRedeemed(userId: string, code: string): Promise<boolean> {
+  const rows = await sql()`
+    SELECT 1 FROM coupon_redemptions WHERE user_id = ${userId} AND code = ${code} LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
 export interface DonationRecord {
   userId: string;
   amountCents: number;
