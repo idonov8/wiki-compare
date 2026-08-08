@@ -13,7 +13,7 @@ import {
   meridianPath,
   normaliseLon,
 } from "../globe";
-import { LANGS, LANG_META } from "@/lib/types";
+import { LANGS, LANG_META, type Lang } from "@/lib/types";
 
 /**
  * Articles worth opening from a standing start.
@@ -50,6 +50,10 @@ export default function Hero({ query, setQuery, onSearch, onPick, busy, sentinel
           word of the headline is read. */}
       <div className="animate-reveal-in flex justify-center pt-[max(2vh,12px)]" style={{ animationDelay: "10ms" }}>
         <GlobeMark />
+      </div>
+
+      <div className="animate-reveal-in mt-[max(1.5vh,10px)]" style={{ animationDelay: "40ms" }}>
+        <LanguageRail />
       </div>
 
       <Section
@@ -92,6 +96,66 @@ export default function Hero({ query, setQuery, onSearch, onPick, busy, sentinel
   );
 }
 
+/**
+ * How much bigger Hebrew and Arabic are set than the Latin.
+ *
+ * Noto Serif Hebrew and Noto Naskh Arabic both run visibly smaller than Noto
+ * Serif at the same pixel size. Matching the numbers rather than the apparent
+ * size is how two of the three languages end up looking like the junior ones,
+ * which is the opposite of what this page is about.
+ */
+const NATIVE_SIZE: Record<Lang, string> = {
+  en: "text-[clamp(15px,1.9vw,18px)]",
+  he: "text-[clamp(17px,2.2vw,21px)]",
+  ar: "text-[clamp(17px,2.2vw,21px)]",
+};
+
+/**
+ * The three Wikipedias, named under the globe in their own scripts.
+ *
+ * `Loading` says the same thing with boxed chips and strands feeding into the
+ * sphere, and earns that by having a wait to fill. Nothing is in progress here,
+ * so these are left as type: the name, its subdomain beneath it in the utility
+ * face, a hairline between. The globe directly above is where this page spends
+ * its boldness, and a second moving thing under it would be two things
+ * competing rather than one carrying.
+ *
+ * The codes are not decoration — `en`, `he` and `ar` are the Wikipedias these
+ * come from, which is the most literal statement of what the page does.
+ */
+function LanguageRail() {
+  return (
+    <ul
+      className="mx-auto flex list-none items-stretch justify-center p-0"
+      aria-label="The Wikipedias compared"
+    >
+      {LANGS.map((lang, i) => (
+        <li
+          key={lang}
+          className={`flex flex-col items-center gap-[2px] px-[clamp(15px,4.5vw,34px)] ${
+            i > 0 ? "border-s border-ink-wash-strong" : ""
+          }`}
+        >
+          <span
+            lang={lang}
+            dir={LANG_META[lang].dir}
+            // A fixed line box rather than a multiple of the font size: the
+            // three are set at two different sizes, and a relative leading gave
+            // each column a different height, so the codes under them stepped
+            // down the row instead of sitting on one line.
+            className={`font-body leading-[30px] text-ink ${NATIVE_SIZE[lang]}`}
+          >
+            {LANG_META[lang].native}
+          </span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-soft">
+            {lang}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** How long the sphere takes to come back round, and the angle it is caught at
  *  before it starts — 0° puts a meridian exactly edge-on, which is a thin frame
  *  to be stuck on if motion is off.
@@ -116,59 +180,81 @@ const HALF_LUNE = 22.5;
  *  nothing at all. A plain sine spends most of its time part-way up, which put
  *  a wash of half-there colour over the whole sphere; the gate throws away
  *  everything below `CELL_GATE` so a cell is properly absent, arrives, and
- *  goes again — three or four showing out of twenty-four rather than all of
- *  them faintly. */
+ *  goes again. Set so that a handful of the forty-eight are showing at once —
+ *  it is the count on screen that matters, so it rose when every square of the
+ *  grid became a candidate rather than half of them. */
 const CELL_FILL = 0.34;
-const CELL_GATE = 0.5;
+const CELL_GATE = 0.85;
+
+/** A stable [0,1) from an integer. Deterministic on purpose: this renders on
+ *  the server too, and `Math.random()` here would mean the markup React
+ *  hydrates against never matches the one it was sent. */
+function scatter(n: number): number {
+  let h = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+const FILLS = [
+  "var(--color-contradiction)",
+  "var(--color-unique)",
+  "var(--color-framing)",
+];
 
 /**
- * The cells that take a colour: four in each of the six bands, stepped two
- * lunes along at a time so they spiral round the sphere rather than stacking
- * into a column, and so no band lights where the one above it did.
+ * The three colours dealt out sixteen each, then shuffled.
  *
- * `period` and `phase` are deliberately all different and mostly coprime: what
- * should read is that the globe keeps offering up somewhere new, not that three
- * fixed patches are blinking. Fixed rather than random because this renders on
- * the server too, and a `Math.random()` here would mean the markup React
- * hydrates against never matches the one it sent.
- *
- * The periods are scaled with `SPIN_SECONDS` rather than set independently. A
- * cell that comes and goes faster than the surface it is painted on reads as
- * blinking rather than as turning, so slowing the sphere without slowing these
- * would have made the fades more distracting, not less.
+ * Taking `FILLS[hash % 3]` per cell looked like the obvious thing and gave
+ * 7/20/21 — a hash is uniform in the limit and forty-eight is not the limit,
+ * and one of the three kinds of difference being a third as common as another
+ * is visible. Dealing a balanced hand and shuffling it keeps the counts exact.
+ * Shuffled rather than laid down in order because `k % 3` over a grid eight
+ * wide is itself a diagonal stripe, which is the mistake this file already
+ * made once.
  */
-const CELLS: {
-  band: number;
-  lon: number;
-  fill: string;
-  period: number;
-  phase: number;
-}[] = [
-  { band: 0, lon: 22.5, fill: "var(--color-contradiction)", period: 45, phase: 0.00 },
-  { band: 0, lon: 112.5, fill: "var(--color-unique)", period: 59, phase: 0.38 },
-  { band: 0, lon: -157.5, fill: "var(--color-framing)", period: 75, phase: 0.76 },
-  { band: 0, lon: -67.5, fill: "var(--color-contradiction)", period: 49, phase: 0.15 },
-  { band: 1, lon: 67.5, fill: "var(--color-unique)", period: 67, phase: 0.53 },
-  { band: 1, lon: 157.5, fill: "var(--color-framing)", period: 57, phase: 0.91 },
-  { band: 1, lon: -112.5, fill: "var(--color-contradiction)", period: 81, phase: 0.29 },
-  { band: 1, lon: -22.5, fill: "var(--color-unique)", period: 37, phase: 0.67 },
-  { band: 2, lon: 112.5, fill: "var(--color-framing)", period: 71, phase: 0.06 },
-  { band: 2, lon: -157.5, fill: "var(--color-contradiction)", period: 55, phase: 0.44 },
-  { band: 2, lon: -67.5, fill: "var(--color-unique)", period: 85, phase: 0.82 },
-  { band: 2, lon: 22.5, fill: "var(--color-framing)", period: 41, phase: 0.20 },
-  { band: 3, lon: 157.5, fill: "var(--color-contradiction)", period: 63, phase: 0.58 },
-  { band: 3, lon: -112.5, fill: "var(--color-unique)", period: 47, phase: 0.96 },
-  { band: 3, lon: -22.5, fill: "var(--color-framing)", period: 79, phase: 0.35 },
-  { band: 3, lon: 67.5, fill: "var(--color-contradiction)", period: 65, phase: 0.73 },
-  { band: 4, lon: -157.5, fill: "var(--color-unique)", period: 83, phase: 0.11 },
-  { band: 4, lon: -67.5, fill: "var(--color-framing)", period: 51, phase: 0.49 },
-  { band: 4, lon: 22.5, fill: "var(--color-contradiction)", period: 73, phase: 0.87 },
-  { band: 4, lon: 112.5, fill: "var(--color-unique)", period: 39, phase: 0.26 },
-  { band: 5, lon: -112.5, fill: "var(--color-framing)", period: 89, phase: 0.64 },
-  { band: 5, lon: -22.5, fill: "var(--color-contradiction)", period: 93, phase: 0.02 },
-  { band: 5, lon: 67.5, fill: "var(--color-unique)", period: 35, phase: 0.40 },
-  { band: 5, lon: 157.5, fill: "var(--color-framing)", period: 91, phase: 0.78 },
-];
+const CELL_FILLS = (() => {
+  const deck = Array.from({ length: 48 }, (_, i) => FILLS[i % FILLS.length]);
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(scatter(i) * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+})();
+
+/**
+ * Every cell of the grid is a candidate: six bands by eight lunes.
+ *
+ * This used to pick twenty-four of the forty-eight on a stride — slot =
+ * band + 2·j — which is a lattice, and a lattice is the one thing the eye is
+ * unfailingly good at. It locked slot parity to band parity, so half the grid
+ * could never light at all and a cell's neighbour in the band below was always
+ * exactly one lune over: any two showing at once stepped diagonally, and the
+ * whole thing read as a pattern rather than as weather. Every square can light
+ * now, and the only thing that varies is when.
+ *
+ * The clocks come from a hash of the position for the same reason. Anything
+ * that walks the grid in order — a golden-ratio stride over the index, which is
+ * what was here before — leaves a gradient across it, and a gradient in phase
+ * is a wave rolling over the sphere. A hash gives neighbours unrelated clocks.
+ *
+ * Periods sit between 35s and 95s, either side of the 68s turn and none of them
+ * a multiple of it. A cell that comes and goes faster than the surface it is
+ * painted on reads as blinking rather than as turning.
+ */
+const CELLS = BANDS.flatMap((_, band) =>
+  Array.from({ length: 8 }, (_, slot) => {
+    const k = band * 8 + slot;
+    return {
+      band,
+      lon: HALF_LUNE + 45 * slot,
+      fill: CELL_FILLS[k],
+      period: 35 + scatter(3 * k + 2) * 60,
+      phase: scatter(3 * k + 3),
+    };
+  }),
+);
 
 /** How far round the sphere has turned, `t` seconds in. */
 const spinAt = (t: number) => SPIN_START + (t * 360) / SPIN_SECONDS;
