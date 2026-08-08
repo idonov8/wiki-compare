@@ -16,9 +16,10 @@ interface Props {
   loading: boolean;
 }
 
-/** Rows to skeleton while the real list is in flight. Arbitrary, but enough
- *  to read as a ledger rather than a spinner. */
-const SKELETON_ROWS = [0, 1, 2, 3, 4];
+/** Rows to skeleton while the real list is in flight. Matches the cap the
+ *  API queries for (`recentComparisons(12)`), so a full ledger settles into
+ *  place rather than trimming down to it. */
+const SKELETON_ROWS = Array.from({ length: 12 }, (_, i) => i);
 
 /**
  * Articles somebody has already paid to have read.
