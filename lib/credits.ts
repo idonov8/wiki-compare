@@ -84,17 +84,12 @@ export async function hasHadMockGrant(userId: string): Promise<boolean> {
 /**
  * Claims a coupon for an account. True if this account had not already had it.
  *
- * The unique index on (user_id, code) does the deciding, in the same way the
- * WHERE clause does it in `debit`: two tabs pressing Redeem on one code both
- * attempt the insert, Postgres serialises them on the index, and the loser
- * conflicts and gets nothing back. A SELECT asking "already redeemed?" before
- * the grant would leave a window between the answer and the money in which the
- * other tab does the same thing, and the code would pay out twice.
+ * The unique index decides, the way the WHERE clause decides in `debit`: two
+ * tabs both attempt the insert, and the loser conflicts and gets nothing back.
  *
- * Claimed before granted, deliberately. If the process dies between the two
- * statements the account is short the credit, which somebody can tell us about
- * and we can fix; the other order would leave a granted-but-unclaimed code that
- * pays out again on the next press, which nobody reports.
+ * Claimed before granted, deliberately. Dying between the two leaves the
+ * account short, which somebody reports; the other order leaves a code that
+ * pays out twice, which nobody does.
  */
 export async function claimCoupon(userId: string, code: string, cents: number): Promise<boolean> {
   const rows = await sql()`
@@ -107,13 +102,9 @@ export async function claimCoupon(userId: string, code: string, cents: number): 
 }
 
 /**
- * Whether this account has already had this code.
- *
- * Only ever asked to answer the Apply button, never to guard the grant: by the
- * time a "no" here reaches the pay button the other tab may have redeemed it,
- * and `claimCoupon` is what actually decides. Kept apart from that on purpose —
- * a question that cannot be trusted to gate anything is safer as its own
- * function than as an early return inside the one that can.
+ * Whether this account has already had this code. Answers the Check button and
+ * guards nothing: by the time it reaches the pay button another tab may have
+ * spent the code, so `claimCoupon` is what actually decides.
  */
 export async function hasRedeemed(userId: string, code: string): Promise<boolean> {
   const rows = await sql()`

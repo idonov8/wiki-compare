@@ -35,8 +35,7 @@ export const EVENTS = [
   /** The one that matters: somebody tried to pay. */
   "donate_attempted",
   "mock_grant_issued",
-  /** The Redeem button was pressed, and then what came of it: real credit, or
-   *  a code that was not one of ours. The three together are what say whether a
+  /** A code was submitted, and what came of it. Together they say whether a
    *  code is reaching people or only collecting typos. */
   "coupon_submitted",
   "coupon_redeemed",

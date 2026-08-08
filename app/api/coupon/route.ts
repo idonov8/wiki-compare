@@ -9,41 +9,20 @@ import { capture } from "@/lib/analytics";
 export const runtime = "nodejs";
 
 /**
- * Coupons, in two halves: asking, and doing.
+ * GET checks a code and changes nothing; POST redeems it. The split is so a
+ * reader can find out whether a code is real without committing to a donation.
  *
- * GET checks a code and changes nothing. POST redeems it. The split is the
- * point — a code used to be a field the pay button carried along, so the only
- * way to find out whether one was real was to commit to a donation you might
- * not want to make, and a typo came back attached to a thank-you screen for
- * something else. Now the small button beside the field asks, and the pay
- * button is still the thing that commits, which is where a commitment belongs.
- *
- * The check is deliberately not authoritative, and does not try to be. Between
- * a GET saying yes and a POST acting on it, the same account can redeem the
- * same code in another tab — so the unique index the POST inserts against
- * stays the only thing that decides, and the GET is what it looks like: a
- * question, answered honestly at the time it was asked.
+ * The check is deliberately not authoritative: between a GET saying yes and a
+ * POST acting on it, the same account can spend the code in another tab, so the
+ * unique index the POST inserts against stays the only thing that decides.
  */
 export async function GET(request: Request) {
-  const user = await getSessionUser(request.headers);
-  if (!user) {
-    return NextResponse.json({ error: "Sign in to use a coupon." }, { status: 401 });
-  }
-
-  const code = normalizeCoupon(new URL(request.url).searchParams.get("code")?.slice(0, 64) ?? "");
-  if (!code) return NextResponse.json({ error: "Type a code first." }, { status: 400 });
-
-  const cents = couponValue(code);
-  if (cents === null) {
-    // Worth capturing rather than only refusing. A code we don't know is either
-    // a typo or somebody quoting one we retired, and which of those it is only
-    // shows up in the aggregate.
-    void capture("coupon_rejected", { code }, user.id);
-    return NextResponse.json({ error: `${code} isn't a code we know.` }, { status: 404 });
-  }
+  const asked = await resolve(request.headers, new URL(request.url).searchParams.get("code"));
+  if (asked instanceof NextResponse) return asked;
+  const { userId, code, cents } = asked;
 
   try {
-    if (await hasRedeemed(user.id, code)) {
+    if (await hasRedeemed(userId, code)) {
       return NextResponse.json({ error: `You've already redeemed ${code}.` }, { status: 409 });
     }
   } catch (error) {
@@ -54,18 +33,8 @@ export async function GET(request: Request) {
   return NextResponse.json(response);
 }
 
-/**
- * Redeeming, which happens on the pay button and nowhere else.
- *
- * The credit is real, unlike the payment beside it: nothing about a coupon is
- * pretending, so the balance moves and the meter in the masthead moves with it.
- */
+/** Redeeming, from the pay button. Unlike the payment beside it, real. */
 export async function POST(request: Request) {
-  const user = await getSessionUser(request.headers);
-  if (!user) {
-    return NextResponse.json({ error: "Sign in to redeem a coupon." }, { status: 401 });
-  }
-
   let body: CouponRequest;
   try {
     body = await request.json();
@@ -73,33 +42,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Expected a JSON body." }, { status: 400 });
   }
 
-  // Bounded before it is looked up, let alone stored: the code is a short token
-  // from a text field, and a lookup key has no business being a kilobyte long.
-  const code = normalizeCoupon(typeof body.code === "string" ? body.code.slice(0, 64) : "");
-  if (!code) {
-    return NextResponse.json({ error: "Type a code first." }, { status: 400 });
-  }
-
-  const cents = couponValue(code);
-  if (cents === null) {
-    void capture("coupon_rejected", { code }, user.id);
-    return NextResponse.json({ error: `${code} isn't a code we know.` }, { status: 404 });
-  }
+  const asked = await resolve(request.headers, body.code);
+  if (asked instanceof NextResponse) return asked;
+  const { userId, code, cents } = asked;
 
   let creditCents: number;
   try {
-    // Second press of a code that worked. Not scolded, just told — the credit
-    // is already on the account it was meant for, which is not a failure of
-    // anything.
-    if (!(await claimCoupon(user.id, code, cents))) {
+    if (!(await claimCoupon(userId, code, cents))) {
       return NextResponse.json({ error: `You've already redeemed ${code}.` }, { status: 409 });
     }
-    creditCents = await grant(user.id, cents);
+    creditCents = await grant(userId, cents);
   } catch (error) {
     return dbFailure(error, "That code couldn't be redeemed just now. Please try again.");
   }
 
-  void capture("coupon_redeemed", { code, grantedCents: cents }, user.id);
+  void capture("coupon_redeemed", { code, grantedCents: cents }, userId);
 
   const response: CouponResponse = {
     code,
@@ -111,16 +68,40 @@ export async function POST(request: Request) {
 }
 
 /**
- * A database failure, as JSON.
+ * Everything both verbs need before they can differ, or the refusal to send
+ * instead. Shared so the two cannot drift apart on wording or status.
+ */
+async function resolve(
+  headers: Headers,
+  raw: unknown,
+): Promise<{ userId: string; code: string; cents: number } | NextResponse> {
+  const user = await getSessionUser(headers);
+  if (!user) {
+    return NextResponse.json({ error: "Sign in to use a coupon." }, { status: 401 });
+  }
+
+  const code = normalizeCoupon(typeof raw === "string" ? raw.slice(0, 64) : "");
+  if (!code) {
+    return NextResponse.json({ error: "Type a code first." }, { status: 400 });
+  }
+
+  const cents = couponValue(code);
+  if (cents === null) {
+    // Captured, not just refused: typos and retired codes only separate in bulk.
+    void capture("coupon_rejected", { code }, user.id);
+    return NextResponse.json({ error: `${code} isn't a code we know.` }, { status: 404 });
+  }
+
+  return { userId: user.id, code, cents };
+}
+
+/**
+ * A database failure, as JSON. A route that throws answers 500 with no body,
+ * and `res.json()` on no body is "Unexpected end of JSON input" — a parser
+ * complaining about the shape of nothing, in place of the reason.
  *
- * A route that throws answers 500 with no body at all, and `res.json()` on no
- * body is "Unexpected end of JSON input" — a parser complaining about the shape
- * of nothing, in place of the reason. Every other way out of this file is JSON,
- * so this one is too, whatever went wrong behind it.
- *
- * 42P01 is undefined_table, which here means one thing: db/schema.sql has moved
- * on and this database has not. It gets its own sentence because it is a setup
- * step somebody skipped rather than a fault, and the fix is one command.
+ * 42P01 is undefined_table: db/schema.sql has moved on and this database has
+ * not. A skipped setup step rather than a fault, so it says so.
  */
 function dbFailure(error: unknown, fallback: string) {
   console.error("[coupon] database call failed:", error);
