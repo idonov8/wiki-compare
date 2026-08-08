@@ -93,9 +93,6 @@
   --animate-diff-flash: diff-flash 1.3s ease-out;
   --animate-ghost-drift: ghost-drift 4s ease-in-out infinite;
   --animate-meridian-turn: meridian-turn 12s linear infinite;
-  /* Same turn, unhurried: the landing globe sits rather than loads, so it
-     spins at a pace that reads as idle rather than busy. */
-  --animate-meridian-turn-slow: meridian-turn 26s linear infinite;
   --animate-glyph-sweep: glyph-sweep 9s linear infinite;
   --animate-tile-settle: tile-settle 4.5s ease-in-out infinite;
   --animate-strand-flow: strand-flow 1.8s linear infinite;
@@ -104,7 +101,6 @@
   --animate-ellipsis-fade: ellipsis-fade 1.5s steps(1, end) infinite;
   --animate-reveal-in: reveal-in 0.5s ease both;
   --animate-reveal-spin: reveal-spin 0.8s linear infinite;
-  --animate-cell-fade: cell-fade 7s ease-in-out infinite;
 
   /* The jump-to-difference target announces itself with a brief ring. */
   @keyframes diff-flash {
@@ -250,19 +246,6 @@
   @keyframes reveal-spin {
     to {
       transform: rotate(360deg);
-    }
-  }
-
-  /* The landing globe's three cells, coming and going on their own clock —
-     each instance overrides duration and delay so the three never breathe
-     in step. */
-  @keyframes cell-fade {
-    0%,
-    100% {
-      opacity: 0;
-    }
-    50% {
-      opacity: 1;
     }
   }
 }
