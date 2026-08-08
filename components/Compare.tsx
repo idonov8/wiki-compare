@@ -13,6 +13,7 @@ import PreviewGate from "./PreviewGate";
 import SearchBox from "./SearchBox";
 import { useNarrow } from "./useNarrow";
 import { useSwipe } from "./useSwipe";
+import Wordmark from "./Wordmark";
 import { initAnalytics, track } from "@/lib/analytics";
 import { formatCost, storedCost } from "@/lib/pricing";
 import {
@@ -496,16 +497,11 @@ export default function Compare() {
           that spot: the mark arrives already covered, and the hover card it is
           supposed to open never opens. `npm run check:ui` catches this. */}
       <header
-        className={`masthead z-40 border-b border-rule bg-paper px-[24px] py-[20px] flex gap-[24px] items-baseline flex-wrap max-tight:px-[18px] max-tight:py-[14px] max-tight:gap-[14px] ${
+        className={`masthead z-40 border-b border-rule bg-paper px-[24px] py-[20px] flex gap-[24px] items-center flex-wrap max-tight:px-[18px] max-tight:py-[14px] max-tight:gap-[14px] ${
           landing ? "sticky top-0" : ""
         }`}
       >
-        <a
-          href="/"
-          className="wordmark font-display text-[30px] max-tight:text-[26px] leading-none tracking-[-0.01em]"
-        >
-          wiki<span className="text-ink-soft">-</span>compare*
-        </a>
+        <Wordmark />
         {/* On the landing page this appears only once the hero's own field has
             scrolled away — see `docked`. Everywhere else it is the only search
             there is, so it is always here. */}
