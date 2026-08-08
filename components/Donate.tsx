@@ -13,6 +13,38 @@ function suggestedMaintenance(amountCents: number): number {
   return Math.round((amountCents * 0.15) / 25) * 25;
 }
 
+/**
+ * The JSON body, or an error that says what actually happened.
+ *
+ * `await res.json()` assumes a body and assumes it parses, and neither holds
+ * for the failure that matters: a route that throws before it can answer sends
+ * 500 with zero bytes, and `json()` on zero bytes raises "Unexpected end of
+ * JSON input". That is a parser describing the shape of nothing, shown to
+ * somebody who typed a coupon code — it names neither the request that failed
+ * nor the status it failed with, and it sends whoever is debugging it looking
+ * for a JSON bug that does not exist.
+ *
+ * So the body is read as text first, and an empty or unparseable one becomes a
+ * sentence with the status code in it. The status is the part worth surfacing:
+ * it says the server was reached and refused, which is most of the diagnosis.
+ */
+async function readJson(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  if (!text.trim()) {
+    throw new Error(`The server sent back nothing at all (${res.status}). Check the server log.`);
+  }
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    throw new Error(`The server sent back something unreadable (${res.status}).`);
+  }
+}
+
+/** The `error` a route reports, if it reported one in the shape routes use. */
+function errorFrom(json: Record<string, unknown>, fallback: string): string {
+  return typeof json.error === "string" && json.error ? json.error : fallback;
+}
+
 /** Cents from a typed decimal. Never negative: the form is not a place to owe us. */
 function centsFrom(text: string): number {
   const n = Math.round(parseFloat(text) * 100);
@@ -112,9 +144,9 @@ export default function Donate() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ code }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "That code didn't go through.");
-      const added = json as CouponResponse;
+      const json = await readJson(res);
+      if (!res.ok) throw new Error(errorFrom(json, "That code didn't go through."));
+      const added = json as unknown as CouponResponse;
       setRedeemed(added);
       // Echo back the code as the server stored it, so a lower-case entry
       // becomes the canonical one under the confirmation that names it.
@@ -530,9 +562,12 @@ export default function Donate() {
                   // one is sent.
                   body: JSON.stringify({ amountCents, maintenanceCents, monthly, from }),
                 });
-                const json = await res.json();
-                if (!res.ok) throw new Error(json.error ?? "That didn't go through.");
-                setResult(json as DonateResponse);
+                // Same read as the coupon above it: this button had the same
+                // bug waiting, and a bodyless 500 here would have reported
+                // itself as a JSON parse error too.
+                const json = await readJson(res);
+                if (!res.ok) throw new Error(errorFrom(json, "That didn't go through."));
+                setResult(json as unknown as DonateResponse);
                 setRevealing(true);
               } catch (e) {
                 setError(e instanceof Error ? e.message : "That didn't go through.");

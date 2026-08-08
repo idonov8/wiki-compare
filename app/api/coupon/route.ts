@@ -50,16 +50,40 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: `${code} isn't a code we know.` }, { status: 404 });
   }
 
-  // Second press of a code that worked. Not scolded, just told — the credit is
-  // already on the account it was meant for, which is not a failure of anything.
-  if (!(await claimCoupon(user.id, code, cents))) {
+  let creditCents: number;
+  try {
+    // Second press of a code that worked. Not scolded, just told — the credit
+    // is already on the account it was meant for, which is not a failure of
+    // anything.
+    if (!(await claimCoupon(user.id, code, cents))) {
+      return NextResponse.json({ error: `You've already redeemed ${code}.` }, { status: 409 });
+    }
+    creditCents = await grant(user.id, cents);
+  } catch (error) {
+    // A route that throws answers 500 with no body at all, and `res.json()` on
+    // no body is "Unexpected end of JSON input" — a parser complaining about
+    // the shape of nothing, in place of the reason. Every other way out of this
+    // handler is JSON, so this one is too, whatever went wrong behind it.
+    console.error("[coupon] redemption failed:", error);
+    // 42P01 is undefined_table, which here means one thing: db/schema.sql has
+    // moved on and this database has not. It is worth its own sentence because
+    // it is a setup step somebody skipped rather than a fault, and the fix is
+    // one command.
+    const missingTable =
+      typeof error === "object" && error !== null && (error as { code?: string }).code === "42P01";
+    if (missingTable) {
+      console.error("[coupon] run `npm run db:init` to create coupon_redemptions.");
+    }
     return NextResponse.json(
-      { error: `You've already redeemed ${code}.` },
-      { status: 409 },
+      {
+        error: missingTable
+          ? "Coupons aren't set up on this server yet."
+          : "That code couldn't be redeemed just now. Please try again.",
+      },
+      { status: 500 },
     );
   }
 
-  const creditCents = await grant(user.id, cents);
   void capture("coupon_redeemed", { code, grantedCents: cents }, user.id);
 
   const response: CouponResponse = {
