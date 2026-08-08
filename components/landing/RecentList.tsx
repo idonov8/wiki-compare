@@ -56,7 +56,7 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                     3 hours ago
                   </span>
                   <span
-                    className="recent-scope w-14.5 shrink-0 animate-chip-breathe rounded-[2px] border border-transparent bg-ink-wash-strong px-1.25 py-px text-center font-mono text-[10px] tracking-[0.09em] text-transparent max-tight:hidden"
+                    className="recent-scope w-14.5 shrink-0 animate-chip-breathe rounded-[2px] border border-transparent bg-ink-wash-strong px-1.25 py-px text-center font-mono text-[10px] tracking-[0.09em] text-transparent"
                     style={{ animationDelay: `${i * -0.3}s` }}
                   >
                     full
@@ -86,7 +86,7 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                     {relative(item.computedAt)}
                   </span>
                   <span
-                    className={`recent-scope w-14.5 shrink-0 border border-rule px-1.25 py-px text-center font-mono text-[10px] tracking-[0.09em] uppercase text-ink-soft max-tight:hidden ${
+                    className={`recent-scope w-14.5 shrink-0 border border-rule px-1.25 py-px text-center font-mono text-[10px] tracking-[0.09em] uppercase text-ink-soft ${
                       item.scope === "full" ? "font-bold" : "opacity-80"
                     }`}
                     title={
