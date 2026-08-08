@@ -32,7 +32,18 @@ export default function Legend({ describe = false }: { describe?: boolean }) {
   }
 
   return (
-    <div className="legend flex gap-[16px] max-cols:gap-x-[12px] max-cols:gap-y-[6px] text-ink-soft flex-wrap">
+    // A column beside the length chart on a phone, rather than a row under it.
+    // Set as a row there the three kinds wrap onto two ragged lines and push
+    // the strip down a third one, all while the space to the chart's right sits
+    // empty — which is exactly where a key to the chart wants to be anyway.
+    //
+    // `flex-1 basis-0 min-w-0` rather than letting the strip wrap it there: a
+    // legend that drops below the chart the moment it stops fitting costs a
+    // line of height on the narrowest screens, which are the ones that can
+    // least afford one. Given the leftover width instead it takes what there
+    // is, wrapping its own longest label on the smallest phones and staying
+    // beside the chart at every width.
+    <div className="legend flex flex-wrap gap-[16px] max-cols:gap-x-[12px] max-cols:gap-y-[6px] text-ink-soft max-tight:min-w-0 max-tight:flex-1 max-tight:basis-0 max-tight:flex-col max-tight:flex-nowrap max-tight:gap-y-[8px]">
       {KINDS.map(([key, swatch, label]) => (
         <span key={key} className="flex items-center gap-[6px]">
           <i className={`swatch ${key} inline-block w-[15px] h-[15px] rounded-[2px] ${swatch}`} /> {label}

@@ -548,7 +548,10 @@ export default function Compare() {
             onPick={narrow ? readIn : toggle}
           />
           <Legend />
-          <div className="meta text-ink-soft ms-auto max-cols:ms-0">
+          {/* A line of its own below `cols`, rather than whatever is left over
+              beside the legend: given the leftover, it squeezes the legend into
+              wrapping labels it has the room to set on one line each. */}
+          <div className="meta text-ink-soft ms-auto max-cols:ms-0 max-tight:basis-full">
             {/* What it cost to process this article, whoever paid it and
                 whenever they did — see `costNote`. The badge beside it says
                 "cached" in its own right, so the sentence never repeats it. */}

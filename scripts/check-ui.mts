@@ -622,6 +622,25 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     `${await charted()} vs ${(await columns())[0]}`,
   );
 
+  // The key to the marks goes in the space beside the chart rather than on a
+  // line under it. Set as a row on a phone the three kinds wrap into a ragged
+  // block and push the strip down a third line, which is a line of the article
+  // itself — and the width to the chart's right was sitting empty to pay for
+  // it. Beside and stacked is also simply what a key to a chart looks like.
+  const key = await small.evaluate(() => {
+    const legend = document.querySelector(".legend")!;
+    const chart = document.querySelector(".toggles")!.getBoundingClientRect();
+    const box = legend.getBoundingClientRect();
+    return {
+      right: box.left >= chart.right - 1,
+      alongside: !(box.bottom < chart.top || chart.bottom < box.top),
+      column: getComputedStyle(legend).flexDirection === "column",
+    };
+  });
+  check(key.right && key.alongside, "the legend sits beside the chart, not under it",
+    JSON.stringify(key));
+  check(key.column, "and stacks its three kinds into a column");
+
   // Pressing a language brings it up — from the pill under the thumb, or from
   // the chart at the top of the page, which are the same state written twice
   // more.
