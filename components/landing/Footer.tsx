@@ -2,10 +2,6 @@
 
 import { MEASURE } from "./Section";
 
-/** The width the numerals occupy in every section above, held open here so the
- *  footer's text starts on the same vertical line. */
-const RailGap = () => <div aria-hidden="true" className="hidden w-[34px] shrink-0 cols:block" />;
-
 /**
  * The colophon. Not an argument, just a signature — a year, a name, and a
  * quiet way to give a little back, in the same mono voice as the meta strip
@@ -15,9 +11,8 @@ export default function Footer({ onDonate }: { onDonate: () => void }) {
   return (
     <footer className="mt-[max(6vh,40px)] border-t border-rule px-[24px] py-[22px] max-tight:px-[18px]">
       <div
-        className={`${MEASURE} items-baseline justify-between gap-[16px] font-mono text-[11px] tracking-[0.04em] text-ink-soft max-tight:flex-col max-tight:items-start`}
+        className={`${MEASURE} flex items-baseline justify-between gap-[16px] font-mono text-[11px] tracking-[0.04em] text-ink-soft max-tight:flex-col max-tight:items-start`}
       >
-        <RailGap />
         <span className="min-w-0 flex-1">
           © {new Date().getFullYear()} · Project by Ido Nov
         </span>
