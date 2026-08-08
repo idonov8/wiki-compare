@@ -94,8 +94,13 @@ export default function Hero({ query, setQuery, onSearch, onPick, busy, sentinel
 
 /** How long the sphere takes to come back round, and the angle it is caught at
  *  before it starts — 0° puts a meridian exactly edge-on, which is a thin frame
- *  to be stuck on if motion is off. */
-const SPIN_SECONDS = 26;
+ *  to be stuck on if motion is off.
+ *
+ *  A full minute-plus per turn, because this sits directly above the headline
+ *  and anything quicker competes with the words for attention: at 26s the eye
+ *  kept being pulled back to it. The globe wants to be something noticed on a
+ *  second look, not motion at the edge of vision while somebody is reading. */
+const SPIN_SECONDS = 68;
 const SPIN_START = 18;
 
 /** The six bands between the seven parallels, as [top, bottom] latitudes. */
@@ -126,6 +131,11 @@ const CELL_GATE = 0.5;
  * fixed patches are blinking. Fixed rather than random because this renders on
  * the server too, and a `Math.random()` here would mean the markup React
  * hydrates against never matches the one it sent.
+ *
+ * The periods are scaled with `SPIN_SECONDS` rather than set independently. A
+ * cell that comes and goes faster than the surface it is painted on reads as
+ * blinking rather than as turning, so slowing the sphere without slowing these
+ * would have made the fades more distracting, not less.
  */
 const CELLS: {
   band: number;
@@ -134,30 +144,30 @@ const CELLS: {
   period: number;
   phase: number;
 }[] = [
-  { band: 0, lon: 22.5, fill: "var(--color-contradiction)", period: 17, phase: 0.00 },
-  { band: 0, lon: 112.5, fill: "var(--color-unique)", period: 23, phase: 0.38 },
-  { band: 0, lon: -157.5, fill: "var(--color-framing)", period: 29, phase: 0.76 },
-  { band: 0, lon: -67.5, fill: "var(--color-contradiction)", period: 19, phase: 0.15 },
-  { band: 1, lon: 67.5, fill: "var(--color-unique)", period: 26, phase: 0.53 },
-  { band: 1, lon: 157.5, fill: "var(--color-framing)", period: 22, phase: 0.91 },
-  { band: 1, lon: -112.5, fill: "var(--color-contradiction)", period: 31, phase: 0.29 },
-  { band: 1, lon: -22.5, fill: "var(--color-unique)", period: 14, phase: 0.67 },
-  { band: 2, lon: 112.5, fill: "var(--color-framing)", period: 27, phase: 0.06 },
-  { band: 2, lon: -157.5, fill: "var(--color-contradiction)", period: 21, phase: 0.44 },
-  { band: 2, lon: -67.5, fill: "var(--color-unique)", period: 33, phase: 0.82 },
-  { band: 2, lon: 22.5, fill: "var(--color-framing)", period: 16, phase: 0.20 },
-  { band: 3, lon: 157.5, fill: "var(--color-contradiction)", period: 24, phase: 0.58 },
-  { band: 3, lon: -112.5, fill: "var(--color-unique)", period: 18, phase: 0.96 },
-  { band: 3, lon: -22.5, fill: "var(--color-framing)", period: 30, phase: 0.35 },
-  { band: 3, lon: 67.5, fill: "var(--color-contradiction)", period: 25, phase: 0.73 },
-  { band: 4, lon: -157.5, fill: "var(--color-unique)", period: 32, phase: 0.11 },
-  { band: 4, lon: -67.5, fill: "var(--color-framing)", period: 20, phase: 0.49 },
-  { band: 4, lon: 22.5, fill: "var(--color-contradiction)", period: 28, phase: 0.87 },
-  { band: 4, lon: 112.5, fill: "var(--color-unique)", period: 15, phase: 0.26 },
-  { band: 5, lon: -112.5, fill: "var(--color-framing)", period: 34, phase: 0.64 },
-  { band: 5, lon: -22.5, fill: "var(--color-contradiction)", period: 36, phase: 0.02 },
-  { band: 5, lon: 67.5, fill: "var(--color-unique)", period: 13, phase: 0.40 },
-  { band: 5, lon: 157.5, fill: "var(--color-framing)", period: 35, phase: 0.78 },
+  { band: 0, lon: 22.5, fill: "var(--color-contradiction)", period: 45, phase: 0.00 },
+  { band: 0, lon: 112.5, fill: "var(--color-unique)", period: 59, phase: 0.38 },
+  { band: 0, lon: -157.5, fill: "var(--color-framing)", period: 75, phase: 0.76 },
+  { band: 0, lon: -67.5, fill: "var(--color-contradiction)", period: 49, phase: 0.15 },
+  { band: 1, lon: 67.5, fill: "var(--color-unique)", period: 67, phase: 0.53 },
+  { band: 1, lon: 157.5, fill: "var(--color-framing)", period: 57, phase: 0.91 },
+  { band: 1, lon: -112.5, fill: "var(--color-contradiction)", period: 81, phase: 0.29 },
+  { band: 1, lon: -22.5, fill: "var(--color-unique)", period: 37, phase: 0.67 },
+  { band: 2, lon: 112.5, fill: "var(--color-framing)", period: 71, phase: 0.06 },
+  { band: 2, lon: -157.5, fill: "var(--color-contradiction)", period: 55, phase: 0.44 },
+  { band: 2, lon: -67.5, fill: "var(--color-unique)", period: 85, phase: 0.82 },
+  { band: 2, lon: 22.5, fill: "var(--color-framing)", period: 41, phase: 0.20 },
+  { band: 3, lon: 157.5, fill: "var(--color-contradiction)", period: 63, phase: 0.58 },
+  { band: 3, lon: -112.5, fill: "var(--color-unique)", period: 47, phase: 0.96 },
+  { band: 3, lon: -22.5, fill: "var(--color-framing)", period: 79, phase: 0.35 },
+  { band: 3, lon: 67.5, fill: "var(--color-contradiction)", period: 65, phase: 0.73 },
+  { band: 4, lon: -157.5, fill: "var(--color-unique)", period: 83, phase: 0.11 },
+  { band: 4, lon: -67.5, fill: "var(--color-framing)", period: 51, phase: 0.49 },
+  { band: 4, lon: 22.5, fill: "var(--color-contradiction)", period: 73, phase: 0.87 },
+  { band: 4, lon: 112.5, fill: "var(--color-unique)", period: 39, phase: 0.26 },
+  { band: 5, lon: -112.5, fill: "var(--color-framing)", period: 89, phase: 0.64 },
+  { band: 5, lon: -22.5, fill: "var(--color-contradiction)", period: 93, phase: 0.02 },
+  { band: 5, lon: 67.5, fill: "var(--color-unique)", period: 35, phase: 0.40 },
+  { band: 5, lon: 157.5, fill: "var(--color-framing)", period: 91, phase: 0.78 },
 ];
 
 /** How far round the sphere has turned, `t` seconds in. */
