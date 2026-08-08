@@ -14,26 +14,17 @@ interface Props {
 /**
  * Articles somebody has already paid to have read.
  *
- * Kept as a list rather than as cards on purpose: it is a ledger, and it is the
- * first half of the argument the footer below finishes — these cost money, and
- * they are free now because of it.
+ * Kept as a list rather than as cards on purpose: it is a ledger, not a
+ * gallery.
  */
 export default function RecentList({ recent, onOpen, relative }: Props) {
   if (!recent.length) return null;
 
   return (
     <Section
-      numeral="IV."
       heading="Recently compared:"
       className="py-[max(7vh,52px)]"
     >
-      <p className="mt-4 mb-0 max-w-[52ch] text-[15px] leading-[1.65] text-ink-soft">
-
-      </p>
-
-      {/* `recent`, `recent-title` and `recent-langs` are not styling — they are
-          the hooks `scripts/check-ui.mts` reads the list through, including the
-          per-row `dir` assertion. Renaming them silently disables that check. */}
       <ul className="recent mt-[26px] mb-0 list-none border-t border-rule p-0">
         {recent.map((item) => (
           <li key={item.qid} className="border-b border-rule">
