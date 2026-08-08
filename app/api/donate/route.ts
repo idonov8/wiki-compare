@@ -40,7 +40,6 @@ export async function POST(request: Request) {
   const amountCents = clampMoney(body.amountCents);
   const maintenanceCents = clampMoney(body.maintenanceCents);
   const monthly = body.monthly === true;
-  const coupon = typeof body.coupon === "string" ? body.coupon.trim().slice(0, 64) : "";
 
   const alreadyGranted = await hasHadMockGrant(user.id);
   const grantedCents = alreadyGranted ? 0 : MOCK_GRANT_CENTS;
@@ -50,13 +49,12 @@ export async function POST(request: Request) {
     amountCents,
     maintenanceCents,
     monthly,
-    coupon: coupon || undefined,
     grantedCents,
   });
 
   void capture(
     "donate_attempted",
-    { amountCents, maintenanceCents, monthly, hasCoupon: !!coupon, from: body.from ?? null },
+    { amountCents, maintenanceCents, monthly, from: body.from ?? null },
     user.id,
   );
 

@@ -4,13 +4,38 @@ import { useEffect, useState } from "react";
 import SignIn from "@/components/SignIn";
 import { initAnalytics, track } from "@/lib/analytics";
 import { articlesFor, formatCents } from "@/lib/pricing";
-import type { DonateResponse, MeResponse } from "@/lib/types";
+import type { CouponCheck, DonateResponse, MeResponse } from "@/lib/types";
 
 const PRESETS = [100, 300, 500, 1000];
 
 /** About a sixth of the gift, rounded to a quarter, as an opening suggestion. */
 function suggestedMaintenance(amountCents: number): number {
   return Math.round((amountCents * 0.15) / 25) * 25;
+}
+
+/**
+ * The JSON body, or an error that says what actually happened.
+ *
+ * A route that throws answers 500 with zero bytes, and `res.json()` on zero
+ * bytes raises "Unexpected end of JSON input" — a parser describing the shape
+ * of nothing, shown to somebody who typed a coupon code. Read as text first, so
+ * an empty or unparseable body reports the status instead.
+ */
+async function readJson(res: Response): Promise<Record<string, unknown>> {
+  const text = await res.text();
+  if (!text.trim()) {
+    throw new Error(`The server sent back nothing at all (${res.status}). Check the server log.`);
+  }
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    throw new Error(`The server sent back something unreadable (${res.status}).`);
+  }
+}
+
+/** The `error` a route reported, if it reported one. */
+function errorFrom(json: Record<string, unknown>, fallback: string): string {
+  return typeof json.error === "string" && json.error ? json.error : fallback;
 }
 
 /** Cents from a typed decimal. Never negative: the form is not a place to owe us. */
@@ -49,6 +74,10 @@ export default function Donate() {
   const [maintenance, setMaintenance] = useState(String(suggestedMaintenance(500) / 100));
   const [monthly, setMonthly] = useState(false);
   const [coupon, setCoupon] = useState("");
+  // No state for "redeemed": the moment that happens, this page is leaving.
+  const [checking, setChecking] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [applied, setApplied] = useState<CouponCheck | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DonateResponse | null>(null);
@@ -82,8 +111,42 @@ export default function Donate() {
 
   const amountCents = custom.trim() ? centsFrom(custom) : amount;
   const maintenanceCents = centsFrom(maintenance);
-  const totalCents = amountCents + maintenanceCents;
+  const subtotalCents = amountCents + maintenanceCents;
+  const discountCents = applied?.cents ?? 0;
+  // Floored rather than capped: a coupon bigger than the order gives no change,
+  // the way a paper one doesn't.
+  const totalCents = Math.max(0, subtotalCents - discountCents);
   const articles = articlesFor(amountCents);
+
+  /**
+   * Checks the typed code. Takes nothing, grants nothing — redeeming is the pay
+   * button's job, so this stops short of it and sets up the order it will cover.
+   */
+  async function applyCoupon(): Promise<void> {
+    const code = coupon.trim();
+    if (!code || checking || applied) return;
+    setChecking(true);
+    setCouponError(null);
+    void track("coupon_submitted", { from });
+    try {
+      const res = await fetch(`/api/coupon?code=${encodeURIComponent(code)}`);
+      const json = await readJson(res);
+      if (!res.ok) throw new Error(errorFrom(json, "That code didn't check out."));
+      const good = json as unknown as CouponCheck;
+      setApplied(good);
+      setCoupon(good.code);
+      // The coupon becomes the order and then pays for it: processing set to
+      // exactly what the code is worth, upkeep to nothing, so the total is zero
+      // and the articles it buys are the coupon's.
+      setAmount(good.cents);
+      setCustom("");
+      setMaintenance("0");
+    } catch (e) {
+      setCouponError(e instanceof Error ? e.message : "That code didn't check out.");
+    } finally {
+      setChecking(false);
+    }
+  }
 
   /* ---- the reveal ---- */
 
@@ -320,20 +383,62 @@ export default function Donate() {
               </span>
             </label>
 
-            <div className="donate-field flex items-baseline gap-[14px] py-[14px] border-t border-rule max-tight:flex-wrap max-tight:gap-[6px_14px]">
+            {/* The small button answers "is this code real" on the spot, so
+                nobody has to commit to a donation to find out. It stops there:
+                the credit still arrives on the pay button. */}
+            <div className="donate-field donate-coupon flex items-baseline gap-[14px] py-[14px] border-t border-rule max-tight:flex-wrap max-tight:gap-[6px_14px]">
               <label htmlFor="coupon" className="flex-[1_1_auto] min-w-0 text-[14px] cursor-pointer">
                 Coupon code
-                <small className="block text-[12.5px] leading-[1.5] text-ink-soft">
-                  If somebody gave you one.
+                {/* One line, three things it can say. `role="status"` so a
+                    press is announced; the words change, not just the colour. */}
+                <small
+                  role="status"
+                  className={`block text-[12.5px] leading-[1.5] ${
+                    couponError ? "text-contradiction" : "text-ink-soft"
+                  }`}
+                >
+                  {applied
+                    ? `${formatCents(applied.cents)} off — ${articlesFor(applied.cents)} articles, on us.`
+                    : (couponError ?? "If somebody gave you one. Check it before you decide.")}
                 </small>
               </label>
-              <input
-                id="coupon"
-                value={coupon}
-                placeholder="Optional"
-                onChange={(e) => setCoupon(e.target.value)}
-                className="flex-[0_0_118px] w-[118px] font-mono text-[14px] py-[8px] px-[10px] bg-paper-raised border border-rule rounded-[2px] text-inherit text-end placeholder:text-ink-soft max-tight:flex-[1_1_100%] max-tight:w-auto max-tight:text-start"
-              />
+              {/* Field and button wrap together, so on a phone the button
+                  never lands under the code it belongs to. */}
+              <div className="donate-coupon-entry flex-none flex items-center gap-[8px] max-tight:flex-[1_1_100%]">
+                <input
+                  id="coupon"
+                  value={coupon}
+                  placeholder="Optional"
+                  disabled={!!applied}
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  onChange={(e) => {
+                    setCoupon(e.target.value);
+                    // The refusal was about the code that has just been
+                    // replaced, so it stops being true as it is typed over.
+                    if (couponError) setCouponError(null);
+                  }}
+                  // Not inside a form, so Enter is wired up by hand.
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void applyCoupon();
+                    }
+                  }}
+                  className="flex-[0_0_118px] w-[118px] font-mono text-[14px] py-[8px] px-[10px] bg-paper-raised border border-rule rounded-[2px] text-inherit text-end uppercase placeholder:normal-case placeholder:text-ink-soft disabled:opacity-[0.6] max-tight:flex-1 max-tight:w-auto max-tight:text-start"
+                />
+                {/* Outlined, not filled: the pay button keeps the page's only
+                    block of ink, since this one finishes nothing. */}
+                <button
+                  type="button"
+                  className="donate-redeem flex-none py-[8px] px-[13px] font-mono text-[12px] tracking-[0.04em] bg-transparent text-ink border border-ink rounded-[2px] transition-[background,color] duration-[120ms] ease-[ease] hover:not-disabled:bg-ink hover:not-disabled:text-paper-raised disabled:opacity-[0.4] disabled:cursor-default"
+                  disabled={checking || !!applied || !coupon.trim()}
+                  onClick={() => void applyCoupon()}
+                >
+                  {applied ? "Checked" : checking ? "One moment…" : "Check"}
+                </button>
+              </div>
             </div>
           </section>
         </div>
@@ -380,16 +485,16 @@ export default function Donate() {
               </dd>
             </div>
 
-            {coupon.trim() && (
+            {applied && (
               <div className="summary-line summary-line-quiet flex items-baseline justify-between gap-[16px] py-[12px] border-t border-rule">
                 <dt className="flex-[1_1_auto] min-w-0 text-[14px] leading-[1.4]">
-                  Coupon
+                  Coupon {applied.code}
                   <small className="block mt-[3px] font-body text-[12px] leading-[1.45] text-ink-soft">
-                    checked when you pay
+                    covers the first {formatCents(applied.cents)}, applied when you press Pay
                   </small>
                 </dt>
-                <dd className="flex-none m-0 font-mono text-[12px] text-ink-soft whitespace-nowrap overflow-hidden text-ellipsis max-w-[12ch]">
-                  {coupon.trim().slice(0, 24)}
+                <dd className="flex-none m-0 font-mono text-[15px] whitespace-nowrap">
+                  −{formatCents(applied.cents)}
                 </dd>
               </div>
             )}
@@ -418,25 +523,42 @@ export default function Donate() {
 
           <button
             className="donate-pay mt-[18px] block w-full py-[14px] px-[22px] bg-ink text-paper-raised border border-ink text-[16px] disabled:opacity-[0.45] disabled:cursor-progress"
-            disabled={busy || amountCents <= 0}
+            // A checked coupon is worth pressing this for, with nothing to pay.
+            disabled={busy || (subtotalCents <= 0 && !applied)}
             onClick={async () => {
               setBusy(true);
               setError(null);
               try {
+                // The coupon first, because it is the part that is real: if it
+                // fails, no reveal should be celebrating something else.
+                if (applied) {
+                  const res = await fetch("/api/coupon", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({ code: applied.code }),
+                  });
+                  const json = await readJson(res);
+                  if (!res.ok) throw new Error(errorFrom(json, "That code didn't go through."));
+                }
+
+                // The coupon covered the whole order, so there is no payment to
+                // attempt — and an unpaid attempt in `donations` would dilute
+                // the one number that table exists to answer.
+                if (totalCents <= 0) {
+                  window.location.href = "/";
+                  return;
+                }
+
                 const res = await fetch("/api/donate", {
                   method: "POST",
                   headers: { "content-type": "application/json" },
-                  body: JSON.stringify({
-                    amountCents,
-                    maintenanceCents,
-                    monthly,
-                    coupon: coupon.trim() || undefined,
-                    from,
-                  }),
+                  // No coupon here: this button redeems one directly, above.
+                  body: JSON.stringify({ amountCents, maintenanceCents, monthly, from }),
                 });
-                const json = await res.json();
-                if (!res.ok) throw new Error(json.error ?? "That didn't go through.");
-                setResult(json as DonateResponse);
+                // Same read as above: a bodyless 500 here had the same bug.
+                const json = await readJson(res);
+                if (!res.ok) throw new Error(errorFrom(json, "That didn't go through."));
+                setResult(json as unknown as DonateResponse);
                 setRevealing(true);
               } catch (e) {
                 setError(e instanceof Error ? e.message : "That didn't go through.");
@@ -445,13 +567,20 @@ export default function Donate() {
               }
             }}
           >
-            {busy ? "One moment…" : `Pay ${formatCents(totalCents)}${monthly ? " a month" : ""}`}
+            {/* "Pay $0.00" is not a thing to ask anybody to press. */}
+            {busy
+              ? "One moment…"
+              : applied && totalCents === 0
+                ? `Get ${formatCents(applied.cents)} of credit`
+                : `Pay ${formatCents(totalCents)}${monthly ? " a month" : ""}`}
           </button>
 
           <p className="summary-note mt-[10px] text-[12px] leading-[1.5] text-ink-soft">
             {articles > 0
               ? `${articles} articles of processing, readable by everyone who opens them afterwards.`
-              : "Enter an amount to fund some processing."}
+              : applied
+                ? `${articlesFor(applied.cents)} articles, on us. Add an amount above to fund more.`
+                : "Enter an amount to fund some processing."}
           </p>
 
           {error && (

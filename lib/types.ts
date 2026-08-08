@@ -173,9 +173,28 @@ export interface DonateRequest {
   amountCents: number;
   maintenanceCents: number;
   monthly: boolean;
-  coupon?: string;
   /** Which surface sent them here, for the funnel. */
   from?: string;
+}
+
+/** What the pay button submits to redeem. Case and spacing are the server's problem. */
+export interface CouponRequest {
+  code: string;
+}
+
+/** A code that checked out. No balance in it: nothing has moved yet. */
+export interface CouponCheck {
+  code: string;
+  cents: number;
+}
+
+/** A redeemed coupon. Separate from `DonateResponse`: a donation may not follow. */
+export interface CouponResponse {
+  code: string;
+  grantedCents: number;
+  /** The balance afterwards, so the page need not re-ask `/api/me`. */
+  creditCents: number;
+  message: string;
 }
 
 /**

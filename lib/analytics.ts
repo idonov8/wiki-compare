@@ -35,6 +35,11 @@ export const EVENTS = [
   /** The one that matters: somebody tried to pay. */
   "donate_attempted",
   "mock_grant_issued",
+  /** A code was submitted, and what came of it. Together they say whether a
+   *  code is reaching people or only collecting typos. */
+  "coupon_submitted",
+  "coupon_redeemed",
+  "coupon_rejected",
   /** Credits deducted for a full read. */
   "credits_spent",
   /** A comparison was served, cached or freshly run. */
