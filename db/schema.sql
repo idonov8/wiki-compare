@@ -157,6 +157,9 @@ CREATE INDEX IF NOT EXISTS "verification_identifier_idx" ON "verification" ("ide
 -- them to here would quietly rewrite the donation history every time somebody
 -- closed an account, and the count of people who tried to pay is the one number
 -- this table exists to keep. A dangling id is the correct outcome.
+--
+-- `coupon` is kept and no longer written: coupons land in coupon_redemptions
+-- now, and this column still holds the codes typed in before they did.
 CREATE TABLE IF NOT EXISTS donations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id TEXT NOT NULL,
@@ -165,6 +168,27 @@ CREATE TABLE IF NOT EXISTS donations (
   granted_cents INTEGER NOT NULL, mock BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- One row per coupon somebody has redeemed. Which codes exist and what they are
+-- worth is policy, and lives in lib/coupons.ts; this is the record of fact.
+--
+-- UNIQUE (user_id, code) is the guard, not tidiness: redemption inserts against
+-- it with ON CONFLICT DO NOTHING, so two tabs on one code are serialised by
+-- Postgres and exactly one comes back with a row. A SELECT first would leave a
+-- window between the question and the grant.
+--
+-- Same TEXT user_id with no foreign key as the ledgers below: append-only
+-- evidence, and a closed account should not un-redeem its coupons.
+CREATE TABLE IF NOT EXISTS coupon_redemptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  code TEXT NOT NULL,
+  granted_cents INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, code)
+);
+
+CREATE INDEX IF NOT EXISTS coupon_redemptions_user_idx ON coupon_redemptions (user_id);
 
 -- The other side of the ledger: one row per comparison somebody's credit paid
 -- for. charged_cents is the flat article price and actual_cost_cents is what the

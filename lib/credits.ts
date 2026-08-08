@@ -81,12 +81,43 @@ export async function hasHadMockGrant(userId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+/**
+ * Claims a coupon for an account. True if this account had not already had it.
+ *
+ * The unique index decides, the way the WHERE clause decides in `debit`: two
+ * tabs both attempt the insert, and the loser conflicts and gets nothing back.
+ *
+ * Claimed before granted, deliberately. Dying between the two leaves the
+ * account short, which somebody reports; the other order leaves a code that
+ * pays out twice, which nobody does.
+ */
+export async function claimCoupon(userId: string, code: string, cents: number): Promise<boolean> {
+  const rows = await sql()`
+    INSERT INTO coupon_redemptions (user_id, code, granted_cents)
+    VALUES (${userId}, ${code}, ${cents})
+    ON CONFLICT (user_id, code) DO NOTHING
+    RETURNING id
+  `;
+  return rows.length > 0;
+}
+
+/**
+ * Whether this account has already had this code. Answers the Check button and
+ * guards nothing: by the time it reaches the pay button another tab may have
+ * spent the code, so `claimCoupon` is what actually decides.
+ */
+export async function hasRedeemed(userId: string, code: string): Promise<boolean> {
+  const rows = await sql()`
+    SELECT 1 FROM coupon_redemptions WHERE user_id = ${userId} AND code = ${code} LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
 export interface DonationRecord {
   userId: string;
   amountCents: number;
   maintenanceCents: number;
   monthly: boolean;
-  coupon?: string;
   /** Zero on every attempt after the first — the intent is still worth recording. */
   grantedCents: number;
 }
@@ -102,10 +133,10 @@ export interface DonationRecord {
  */
 export async function recordDonation(donation: DonationRecord): Promise<void> {
   await sql()`
-    INSERT INTO donations (user_id, amount_cents, maintenance_cents, monthly, coupon, granted_cents)
+    INSERT INTO donations (user_id, amount_cents, maintenance_cents, monthly, granted_cents)
     VALUES (
       ${donation.userId}, ${donation.amountCents}, ${donation.maintenanceCents},
-      ${donation.monthly}, ${donation.coupon ?? null}, ${donation.grantedCents}
+      ${donation.monthly}, ${donation.grantedCents}
     )
   `;
 }
