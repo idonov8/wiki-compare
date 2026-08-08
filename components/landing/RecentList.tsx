@@ -32,7 +32,7 @@ export default function RecentList({ recent, onOpen, relative }: Props) {
               type="button"
               className="group flex w-full items-baseline gap-[14px] border-0 bg-none px-[8px] py-[11px] text-start [font:inherit] text-wiki-link hover:bg-paper-raised"
               onClick={() => onOpen(item.title, item.lang)}
-              aria-label={`Compare ${item.title}, cached ${relative(item.computedAt)}`}
+              aria-label={`Compare ${item.title}, ${item.scope} cached ${relative(item.computedAt)}`}
             >
               <span
                 className="recent-title min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left group-hover:underline"
@@ -41,8 +41,23 @@ export default function RecentList({ recent, onOpen, relative }: Props) {
               >
                 {item.title}
               </span>
+              {/* What's cached, not what a click will cost: a preview reads
+                  free and a full run was already paid for, so the badge just
+                  names which one is sitting in the cache right now. */}
               <span className="shrink-0 font-mono text-[11px] tracking-[0.04em] text-ink-soft max-tight:hidden">
                 {relative(item.computedAt)}
+              </span>
+              <span
+                className={`recent-scope w-14.5 shrink-0 border border-rule px-1.25 py-px text-center font-mono text-[10px] tracking-[0.09em] uppercase text-ink-soft max-tight:hidden ${
+                  item.scope === "full" ? "font-bold" : "opacity-80"
+                }`}
+                title={
+                  item.scope === "preview"
+                    ? "Cached run read the free preview"
+                    : "Cached run read the whole article"
+                }
+              >
+                {item.scope}
               </span>
             </button>
           </li>

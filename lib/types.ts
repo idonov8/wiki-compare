@@ -234,4 +234,8 @@ export interface RecentArticle {
   lang: Lang;
   langs: Lang[];
   computedAt: string;
+  /** Whether the cached run behind this row read the whole article or just the
+   *  free preview. Rows written before previews existed have no scope in the
+   *  database and are read as `"full"`, which is what they are. */
+  scope: ScopeKind;
 }
