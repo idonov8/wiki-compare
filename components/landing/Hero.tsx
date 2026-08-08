@@ -30,13 +30,18 @@ interface Props {
 export default function Hero({ query, setQuery, onSearch, onPick, busy, sentinel }: Props) {
   return (
     <div className="relative">
-      {/* The sphere at rest, bled off the right edge and set well behind the
-          type. It is the same object the loading panel turns, which is the
-          point: the reader meets it here and recognises it while they wait. */}
-      <GlobeMark />
+      {/* The sphere at rest, centred above the headline. It is the same object
+          the loading panel turns, which is the point: the reader meets it
+          here and recognises it while they wait. The three squares mark the
+          site's own palette for disagreement — contradiction, uniqueness,
+          framing — so the shape reads as "three tellings, one globe" before
+          a word of the headline is read. */}
+      <div className="animate-reveal-in flex justify-center pt-[max(5vh,28px)]" style={{ animationDelay: "10ms" }}>
+        <GlobeMark />
+      </div>
 
       <Section
-        className="relative pt-[max(7vh,44px)] pb-[max(4vh,32px)]"
+        className="relative pt-[max(2vh,16px)] pb-[max(4vh,32px)]"
       >
 
         <h1
@@ -76,14 +81,27 @@ export default function Hero({ query, setQuery, onSearch, onPick, busy, sentinel
 }
 
 /**
- * The sphere, still. No strands, no chips, no glyph sweep — the loading panel
+ * The three squares set on the sphere's face, one per kind of difference the
+ * rest of the site marks in the same colours (see `--color-contradiction`,
+ * `--color-unique`, `--color-framing` in globals.css). Hand-placed on three
+ * separate parallels so none sits on another, same spirit as the rest of
+ * this file's geometry.
+ */
+const TILES: { fill: string; x: number; y: number; size: number }[] = [
+  { fill: "var(--color-contradiction)", x: 128, y: 100, size: 11 },
+  { fill: "var(--color-unique)", x: 178, y: 146, size: 11 },
+  { fill: "var(--color-framing)", x: 138, y: 168, size: 11 },
+];
+
+/**
+ * The sphere, still. No strands, no chip, no glyph sweep — the loading panel
  * earns that motion by having a wait to fill, and repeating it here would put
- * something urgently in progress behind a page where nothing is happening.
+ * something urgently in progress above a page where nothing is happening.
  */
 function GlobeMark() {
   return (
     <svg
-      className="pointer-events-none absolute end-[-110px] top-[4vh] hidden h-auto w-[520px] opacity-[0.15] cols:block"
+      className="pointer-events-none h-auto w-[clamp(150px,26vw,240px)] opacity-90"
       viewBox="0 0 320 300"
       aria-hidden="true"
     >
@@ -106,6 +124,17 @@ function GlobeMark() {
           cy={GLOBE_CY}
           rx={rx}
           ry="62"
+        />
+      ))}
+      {TILES.map(({ fill, x, y, size }, i) => (
+        <rect
+          key={`tile-${i}`}
+          x={x - size / 2}
+          y={y - size / 2}
+          width={size}
+          height={size}
+          rx="1.5"
+          fill={fill}
         />
       ))}
     </svg>
