@@ -44,8 +44,13 @@ export default function RecentList({ recent, onOpen, relative }: Props) {
               {/* What's cached, not what a click will cost: a preview reads
                   free and a full run was already paid for, so the badge just
                   names which one is sitting in the cache right now. */}
+              <span className="shrink-0 font-mono text-[11px] tracking-[0.04em] text-ink-soft max-tight:hidden">
+                {relative(item.computedAt)}
+              </span>
               <span
-                className="recent-scope shrink-0 border border-rule px-[5px] py-[1px] font-mono text-[10px] tracking-[0.09em] uppercase text-ink-soft max-tight:hidden"
+                className={`recent-scope w-14.5 shrink-0 border border-rule px-1.25 py-px text-center font-mono text-[10px] tracking-[0.09em] uppercase text-ink-soft max-tight:hidden ${
+                  item.scope === "full" ? "font-bold" : "opacity-80"
+                }`}
                 title={
                   item.scope === "preview"
                     ? "Cached run read the free preview"
@@ -53,9 +58,6 @@ export default function RecentList({ recent, onOpen, relative }: Props) {
                 }
               >
                 {item.scope}
-              </span>
-              <span className="shrink-0 font-mono text-[11px] tracking-[0.04em] text-ink-soft max-tight:hidden">
-                {relative(item.computedAt)}
               </span>
             </button>
           </li>
