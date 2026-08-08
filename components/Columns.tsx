@@ -11,6 +11,13 @@ import {
   type LinkSpan,
 } from "@/lib/types";
 
+/** Lead photos never render wider than this, so a portrait from one edition
+ *  can't dwarf a landscape from another. */
+const IMAGE_MAX_WIDTH = 300;
+/** Used only when no visible photo carries known dimensions, e.g. all three
+ *  columns lack an infobox image size. */
+const IMAGE_FALLBACK_MAX_HEIGHT = 260;
+
 /**
  * The articles, side by side. Rendered as soon as the text exists — before any
  * comparison — so the reader confirms they picked the right subject by reading
@@ -60,6 +67,20 @@ export default function Columns({
   onLeave?: () => void;
   onLink?: (title: string, lang: Lang) => void;
 }) {
+  // Same-height lead photos: scale each to its height at the shared max
+  // width, then use the shortest of those as the ceiling for all of them —
+  // the tallest photo shrinks to match rather than the row growing to fit it.
+  const imageHeightsAtMaxWidth = visible
+    .map((lang) => articles[lang]?.image)
+    .filter((image): image is { src: string; width: number; height: number; alt?: string } =>
+      Boolean(image?.width && image?.height),
+    )
+    .map((image) => (image.height * Math.min(image.width, IMAGE_MAX_WIDTH)) / image.width);
+  const imageMaxHeight =
+    imageHeightsAtMaxWidth.length > 0
+      ? Math.min(...imageHeightsAtMaxWidth)
+      : IMAGE_FALLBACK_MAX_HEIGHT;
+
   return (
     <div
       className={
@@ -140,7 +161,8 @@ export default function Columns({
             {chrome && article.image && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                className="article-image block mx-auto w-auto h-auto max-w-full max-h-[260px] object-contain m-0 mb-4 p-1 bg-wiki-page border border-wiki-border rounded-[2px]"
+                className="article-image block mx-auto w-auto h-auto max-w-[300px] object-contain m-0 mb-4 p-1 bg-wiki-page border border-wiki-border rounded-[2px]"
+                style={{ maxHeight: imageMaxHeight }}
                 src={article.image.src}
                 alt={article.image.alt ?? article.title}
                 loading="lazy"
