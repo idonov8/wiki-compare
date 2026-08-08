@@ -16,6 +16,8 @@ interface Props {
   onOpen: (title: string, lang: string) => void;
   busy: boolean;
   recent: RecentArticle[];
+  /** True until the first `/api/recent` response lands — see RecentList. */
+  recentLoading: boolean;
   relative: (iso: string) => string;
   onDonate: () => void;
   /** Told when the hero's search field has scrolled out of reach, so the
@@ -38,6 +40,7 @@ export default function Landing({
   onOpen,
   busy,
   recent,
+  recentLoading,
   relative,
   onDonate,
   onDocked,
@@ -90,7 +93,7 @@ export default function Landing({
           sentinel={sentinel}
         />
 
-        <RecentList recent={recent} onOpen={onOpen} relative={relative} />
+        <RecentList recent={recent} onOpen={onOpen} relative={relative} loading={recentLoading} />
         <Footer onDonate={onDonate} />
       </div>
     </main>
