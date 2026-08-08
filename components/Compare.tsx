@@ -454,7 +454,9 @@ export default function Compare() {
             busy={busy}
           />
         )}
-        <CreditBar me={me} onDonate={() => goDonate("masthead")} />
+        <div className="ms-auto">
+          <CreditBar me={me} onDonate={() => goDonate("masthead")} />
+        </div>
       </header>
 
       {(comparing || phase === "done") && hasColumns && (

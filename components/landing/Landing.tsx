@@ -92,10 +92,10 @@ export default function Landing({
           sentinel={sentinel}
         />
 
-        <SampleDiff onOpen={onOpen} />
-        <WhyItMatters />
+        {/* <SampleDiff onOpen={onOpen} /> */}
+        {/* <WhyItMatters /> */}
         <RecentList recent={recent} onOpen={onOpen} relative={relative} />
-        <SupportFooter onDonate={onDonate} />
+        {/* <SupportFooter onDonate={onDonate} /> */}
       </div>
     </main>
   );

@@ -24,12 +24,11 @@ export default function RecentList({ recent, onOpen, relative }: Props) {
   return (
     <Section
       numeral="IV."
-      kicker="Already paid for"
-      heading="Recently compared."
+      heading="Recently compared:"
       className="py-[max(7vh,52px)]"
     >
-      <p className="mt-[16px] mb-0 max-w-[52ch] text-[15px] leading-[1.65] text-ink-soft">
-        Somebody has run these already, so they open immediately and cost nothing.
+      <p className="mt-4 mb-0 max-w-[52ch] text-[15px] leading-[1.65] text-ink-soft">
+
       </p>
 
       {/* `recent`, `recent-title` and `recent-langs` are not styling — they are
@@ -53,9 +52,6 @@ export default function RecentList({ recent, onOpen, relative }: Props) {
               </span>
               <span className="shrink-0 font-mono text-[11px] tracking-[0.04em] text-ink-soft max-tight:hidden">
                 {relative(item.computedAt)}
-              </span>
-              <span className="recent-langs shrink-0 font-mono text-[11px] tracking-[0.04em] text-ink-soft">
-                {item.langs.map((l) => l.toUpperCase()).join(" · ")}
               </span>
             </button>
           </li>
