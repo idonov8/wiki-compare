@@ -5,8 +5,11 @@ import Columns from "./Columns";
 import { comparePath } from "./Highlighted";
 import CreditBar from "./CreditBar";
 import DiffNav from "./DiffNav";
+import Landing from "./landing/Landing";
+import Legend from "./Legend";
 import Loading from "./Loading";
 import PreviewGate from "./PreviewGate";
+import SearchBox from "./SearchBox";
 import { initAnalytics, track } from "@/lib/analytics";
 import { formatCost, storedCost } from "@/lib/pricing";
 import {
@@ -153,6 +156,10 @@ export default function Compare() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [funding, setFunding] = useState(false);
   const [fundError, setFundError] = useState<string | null>(null);
+  /** Set once the landing page's own search field has scrolled out of reach.
+   *  While it is on screen the masthead carries no search at all — two boxes
+   *  visible at once is just the same control asked for twice. */
+  const [docked, setDocked] = useState(false);
 
   const reset = () => {
     setError(null);
@@ -413,31 +420,43 @@ export default function Compare() {
 
   const hasColumns = visible.length > 0;
   const comparing = phase === "comparing";
+  const landing = phase === "idle" && !error;
+  const mastheadSearch = !landing || docked;
 
   return (
     <>
-      <header className="masthead border-b border-rule px-[24px] py-[20px] flex gap-[24px] items-baseline flex-wrap">
+      {/* Sticky on the landing page only. That page now scrolls far enough that
+          a masthead pinned to the top of the document would be gone by the
+          second section, taking the search and the credit meter with it — but a
+          comparison must not have one. Everything that scrolls a mark into view
+          there (DiffNav, the internal links, a jump from the URL) lands it at
+          the top of the viewport, and a sticky header sits on top of exactly
+          that spot: the mark arrives already covered, and the hover card it is
+          supposed to open never opens. `npm run check:ui` catches this. */}
+      <header
+        className={`masthead z-40 border-b border-rule bg-paper px-[24px] py-[20px] flex gap-[24px] items-baseline flex-wrap max-tight:px-[18px] ${
+          landing ? "sticky top-0" : ""
+        }`}
+      >
         <a href="/" className="wordmark font-display text-[30px] leading-none tracking-[-0.01em]">
           wiki<span className="text-ink-soft">-</span>compare*
         </a>
-        <div className="search flex gap-2 flex-[1_1_320px]">
-          <input
-            className="flex-1 [font:inherit] px-[12px] py-[9px] bg-paper-raised border border-rule rounded-[2px] text-inherit placeholder:text-ink-soft"
+        {/* On the landing page this appears only once the hero's own field has
+            scrolled away — see `docked`. Everywhere else it is the only search
+            there is, so it is always here. */}
+        {mastheadSearch && (
+          <SearchBox
+            variant="bar"
+            className="animate-reveal-in flex-[1_1_320px]"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && search()}
-            placeholder="Article title, or paste a Wikipedia URL"
-            aria-label="Article title"
+            onChange={setQuery}
+            onSubmit={search}
+            busy={busy}
           />
-          <button
-            className="px-[18px] py-[9px] bg-ink text-paper-raised border border-ink disabled:opacity-[0.45] disabled:cursor-progress"
-            onClick={search}
-            disabled={busy}
-          >
-            {busy ? "Working…" : "Search"}
-          </button>
+        )}
+        <div className="ms-auto">
+          <CreditBar me={me} onDonate={() => goDonate("masthead")} />
         </div>
-        <CreditBar me={me} onDonate={() => goDonate("masthead")} />
       </header>
 
       {(comparing || phase === "done") && hasColumns && (
@@ -454,17 +473,7 @@ export default function Compare() {
               </button>
             ))}
           </div>
-          <div className="legend flex gap-[16px] text-ink-soft flex-wrap">
-            <span className="flex items-center gap-[6px]">
-              <i className="swatch contradiction inline-block w-[15px] h-[15px] rounded-[2px] bg-mark-contradiction inset-shadow-contradiction" /> contradiction
-            </span>
-            <span className="flex items-center gap-[6px]">
-              <i className="swatch unique inline-block w-[15px] h-[15px] rounded-[2px] bg-mark-unique inset-shadow-unique" /> only in one version
-            </span>
-            <span className="flex items-center gap-[6px]">
-              <i className="swatch framing inline-block w-[15px] h-[15px] rounded-[2px] bg-mark-framing inset-shadow-framing" /> different framing
-            </span>
-          </div>
+          <Legend />
           <div className="meta text-ink-soft ms-auto">
             {/* What it cost to process this article, whoever paid it and
                 whenever they did — see `costNote`. The badge beside it says
@@ -538,69 +547,22 @@ export default function Compare() {
         </div>
       )}
 
-      {phase === "idle" && !error && (
-        // Two-up landing layout: the intro sits beside the recently-cached list
-        // rather than above it, so a returning reader sees their history without
-        // scrolling past the pitch. Narrow viewports fall back to the original
-        // single column.
-        <div
-          className={`state text-ink-soft py-[64px] px-[24px] ${
-            recent.length > 0
-              ? "state-grid max-w-[1120px] grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-[64px] items-start max-cols:grid-cols-1 max-cols:gap-[40px] max-cols:max-w-[58ch]"
-              : "max-w-[58ch]"
-          }`}
-        >
-          <div className="state-intro min-w-0">
-            <h2 className="font-display text-[27px] font-normal text-ink m-0 mb-[10px]">Same Article, different language - different information.</h2>
-            <p>
-              Search for an article, or paste a Wikipedia URL. The different versions appear side by side and you'll get to see every place they contradict each other, cover something the others skip, or frame the
-              same fact differently. <b>You'd be surprised how often it happens.</b>
-            </p>
-          </div>
-          {/* Already-compared articles, carrying no heading of their own: the
-              rows are self-evidently a list of articles, and the hand-picked
-              suggestions are only worth the space while there is nothing here. */}
-          {recent.length > 0 && (
-            <div className="recent-container">
-              <h2 className="font-display text-[27px] font-normal text-ink m-0 mb-[10px]">Recently cached articles:</h2>
-              <p>View them freely & quickly.</p>
-              {/* Ruled rows rather than chips: a chip row reads as a set of
-                  suggestions, and these are a history. Each row sets its own
-                  `dir`, so a Hebrew or Arabic title runs the right way inside a
-                  left-to-right list. */}
-              <ul className="recent list-none mt-[26px] mx-0 mb-0 p-0 border-t border-rule">
-              {recent.map((item) => (
-                <li key={item.qid} className="border-b border-rule">
-                  <button
-                    type="button"
-                    className="group flex items-baseline gap-[14px] w-full px-[8px] py-[9px] border-0 bg-none [font:inherit] text-wiki-link text-start hover:bg-paper-raised"
-                    onClick={() => navigate(item.title, item.lang)}
-                    aria-label={`Compare ${item.title}, cached ${relative(item.computedAt)}`}
-                  >
-                    {/* `dir` on the row orders the title's own characters, not
-                        moves it: the list is a left-to-right piece of interface
-                        whichever script a title is in, and letting the title
-                        resolve to a logical `text-start` per row left the
-                        Hebrew and Arabic titles floating against the language
-                        column while the English ones sat at the margin — hence
-                        `text-left`, physically, regardless of `dir`. */}
-                    <span
-                      className="recent-title flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-left group-hover:underline"
-                      dir={LANG_META[item.lang].dir}
-                      lang={item.lang}
-                    >
-                      {item.title}
-                    </span>
-                    <span className="recent-langs font-mono text-[11px] tracking-[0.04em] text-ink-soft shrink-0">
-                      {item.langs.map((l) => l.toUpperCase()).join(" · ")}
-                    </span>
-                  </button>
-                </li>
-              ))}
-              </ul>
-            </div>
-          )}
-        </div>
+      {/* The landing page. It holds none of the state above — the query, the
+          search and the URL all stay here, and it works entirely through the
+          callbacks below, which is what keeps its sections safe to restyle
+          without going near the diff renderer. */}
+      {landing && (
+        <Landing
+          query={query}
+          setQuery={setQuery}
+          onSearch={search}
+          onOpen={navigate}
+          busy={busy}
+          recent={recent}
+          relative={relative}
+          onDonate={() => goDonate("landing_footer")}
+          onDocked={setDocked}
+        />
       )}
 
       {phase === "results" && (
