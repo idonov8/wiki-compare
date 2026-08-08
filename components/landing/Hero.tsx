@@ -72,7 +72,7 @@ export default function Hero({ query, setQuery, onSearch, onPick, busy, sentinel
           className="animate-reveal-in mt-5.5 mb-0 max-w-[66ch] text-[16px] leading-[1.65] text-ink-soft"
           style={{ animationDelay: "130ms" }}
         >
-          Explore different narratives through Wikipedia articles.
+          Explore differences in narratives through Wikipedia articles.
       </p>
 
         <div className="animate-reveal-in mt-[32px]" style={{ animationDelay: "190ms" }}>
