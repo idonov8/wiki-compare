@@ -316,7 +316,10 @@ moment. The chart stays at the top of the page there rather than being dropped, 
 the two editions you are not reading are is a question only it can answer on a screen showing one
 column — what a filled bar means simply narrows to fit, from "these editions sit beside each
 other" to "this is the one being read". Pressing a bar there moves the same state the pill and the
-swipe move, so all three can never disagree.
+swipe move, so all three can never disagree. The legend moves into the space to the chart's right
+there and stacks into a column, which is what a key to a chart looks like anyway and takes the
+strip from three lines to two — set as a row it wraps into a ragged block, and the line that costs
+is a line of the article.
 `useSwipe` reads the gesture without preventing anything, and takes only drags that are clearly
 flatter than they are long — a page of Wikipedia is read by dragging it up and down, and a
 gesture that stole a scroll halfway through would cost far more than the swipe is worth.
