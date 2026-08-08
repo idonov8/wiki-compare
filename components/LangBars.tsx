@@ -75,7 +75,16 @@ export default function LangBars({
   const longest = Math.max(...sorted.map((lang) => words[lang]), 1);
 
   return (
-    <div className="toggles flex" role="group" aria-label="Editions and how long each one is">
+    // Given a share of the width on a phone rather than sitting at its natural
+    // size against the left margin, which left the strip crowded into two
+    // thirds of the screen with the rest blank. The slots widen and the bars
+    // spread; the buttons stay flush against each other, because the axis under
+    // them is only continuous while they are.
+    <div
+      className="toggles flex max-tight:flex-1 max-tight:basis-0"
+      role="group"
+      aria-label="Editions and how long each one is"
+    >
       {sorted.map((lang, index) => {
         const on = onScreen.includes(lang);
         const height = Math.max(SHORTEST, Math.round((words[lang] / longest) * TALLEST));
@@ -84,7 +93,7 @@ export default function LangBars({
             key={lang}
             // No gap between the buttons, so the baselines below the bars meet
             // into one unbroken axis across all three.
-            className="toggle group flex w-[44px] flex-col items-center bg-transparent"
+            className="toggle group flex w-[44px] flex-col items-center bg-transparent max-tight:flex-1"
             aria-pressed={on}
             aria-label={`${LANG_META[lang].label}, ${words[lang].toLocaleString()} words`}
             onClick={() => onPick(lang)}
@@ -111,7 +120,7 @@ export default function LangBars({
                 // bar drawn to the same height either way is what makes the
                 // hidden version's size still readable, which is the only
                 // reason a reader would press it back on.
-                className={`langbar w-[22px] origin-bottom animate-bar-rise transition-[background-color] duration-[120ms] ease-[ease] ${
+                className={`langbar w-[22px] max-tight:w-[28px] origin-bottom animate-bar-rise transition-[background-color] duration-[120ms] ease-[ease] ${
                   on
                     ? "bg-ink group-hover:bg-ink-soft"
                     : "border border-rule bg-ink-wash-strong group-hover:bg-ink-view-edge"
