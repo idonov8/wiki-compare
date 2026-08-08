@@ -69,6 +69,7 @@ export const auth = betterAuth({
    * check pass locally without weakening it in production, where this entry is
    * simply never the origin of a real request.
    */
+  baseURL: process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "production" ? `https://${process.env.VERCEL_URL}` : process.env.BETTER_AUTH_URL,
   trustedOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"],
   socialProviders: {
     // Spread rather than a `google: undefined` key: Better Auth treats the
