@@ -20,7 +20,7 @@ export default function Wordmark() {
       aria-label="Wiki Narratives — beta"
       className="wordmark group inline-flex items-end gap-[10px] no-underline"
     >
-      <span className="wordmark-type font-wordmark text-[29px] leading-none tracking-[-0.01em] text-ink italic">
+      <span className="wordmark-type font-wordmark text-[29px] max-tight:text-[26px] leading-none tracking-[-0.01em] text-ink italic">
         wiki
         <Strand />
         narratives
