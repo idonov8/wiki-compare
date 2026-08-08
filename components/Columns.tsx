@@ -140,7 +140,7 @@ export default function Columns({
             {chrome && article.image && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                className="article-image block w-full max-w-[300px] h-auto m-0 mb-4 p-1 bg-wiki-page border border-wiki-border rounded-[2px]"
+                className="article-image block mx-auto w-auto h-auto max-w-full max-h-[260px] object-contain m-0 mb-4 p-1 bg-wiki-page border border-wiki-border rounded-[2px]"
                 src={article.image.src}
                 alt={article.image.alt ?? article.title}
                 loading="lazy"
