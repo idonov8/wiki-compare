@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { GLOBE_CX, GLOBE_CY, MERIDIAN_RX, PARALLELS, RING_PATH } from "./globe";
 import { LANGS, LANG_META, type Lang } from "@/lib/types";
 
 /**
@@ -39,17 +40,8 @@ const LANDINGS: Record<Lang, [x: number, y: number]> = {
   ar: [160, 194],
 };
 
-/** Latitude rings: cy/rx/ry for the sphere's parallels, flattened by 0.26 for
- *  perspective. The meridians are ellipses whose rx the stylesheet animates. */
-const PARALLELS: [cy: number, rx: number, ry: number][] = [
-  [132, 62, 16],
-  [105.8, 56.2, 14.6],
-  [158.2, 56.2, 14.6],
-  [84.5, 39.9, 10.4],
-  [179.5, 39.9, 10.4],
-  [73, 19.2, 5],
-  [191, 19.2, 5],
-];
+// The sphere's own geometry lives in `./globe`, because the landing page draws
+// the same sphere at rest.
 
 /**
  * What the route is doing, in the order it does it. The endpoint answers with a
@@ -100,29 +92,27 @@ export default function Loading({ title }: { title: string }) {
 
         {/* the sphere, left open at the upper right */}
         <g className="sphere">
-          <path className="ring fill-none stroke-ink [stroke-width:1.6]" d="M 206.1 90.5 A 62 62 0 1 1 183.2 74.5" />
+          <path className="ring fill-none stroke-ink [stroke-width:1.6]" d={RING_PATH} />
           {PARALLELS.map(([cy, rx, ry], i) => (
             <ellipse
               key={`lat-${i}`}
               className="parallel fill-none stroke-ink-soft [stroke-width:0.9] opacity-50"
-              cx="160"
+              cx={GLOBE_CX}
               cy={cy}
               rx={rx}
               ry={ry}
             />
           ))}
-          {/* The stylesheet animates rx, but the attribute still has to hold a
-              staggered value: with motion turned off these are all that is
-              left, and four identical circles would not read as a globe. The
-              sphere turns by squashing each meridian through zero width —
+          {/* The sphere turns by squashing each meridian through zero width —
               cheaper than projecting a real rotation, and at this size
-              indistinguishable from one. */}
-          {[62, 46, 30, 14].map((rx, i) => (
+              indistinguishable from one. See `./globe` for why the resting rx
+              values are staggered rather than all 62. */}
+          {MERIDIAN_RX.map((rx, i) => (
             <ellipse
               key={`mer-${i}`}
               className="meridian fill-none stroke-ink-soft [stroke-width:0.9] opacity-50 animate-meridian-turn"
-              cx="160"
-              cy="132"
+              cx={GLOBE_CX}
+              cy={GLOBE_CY}
               rx={rx}
               ry="62"
               style={{ animationDelay: `${i * -3}s` }}
