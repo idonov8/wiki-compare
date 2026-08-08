@@ -119,7 +119,10 @@ console.log(`\n${FIXTURE}`);
 // ---- recently cached, before any search ------------------------------------
 
 await page.goto(BASE, { waitUntil: "domcontentloaded" });
-await page.waitForSelector(".recent li", { timeout: 5000 });
+// Not ".recent li": that also matches the skeleton rows shown before the
+// fetch resolves, which carry no button and would let this race ahead of
+// the real list.
+await page.waitForSelector(".recent li button", { timeout: 5000 });
 
 const recent = await page.$$eval(".recent li button", (els) =>
   els.map((el) => {
