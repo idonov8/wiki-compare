@@ -178,7 +178,7 @@ export async function bumpServedCount(cacheKey: string): Promise<void> {
  */
 export async function recentComparisons(limit = 12): Promise<RecentArticle[]> {
   const rows = await sql()`
-    SELECT qid, title, lang, langs, computed_at FROM (
+    SELECT qid, title, lang, langs, scope, computed_at FROM (
       SELECT DISTINCT ON (qid)
         qid,
         COALESCE(
@@ -192,6 +192,9 @@ export async function recentComparisons(limit = 12): Promise<RecentArticle[]> {
           ELSE 'ar'
         END AS lang,
         ARRAY(SELECT jsonb_object_keys(result->'articles')) AS langs,
+        -- Rows written before previews existed carry no scope at all;
+        -- COALESCE reads those as full, which is what they are.
+        COALESCE(result->'scope'->>'kind', 'full') AS scope,
         computed_at
       FROM comparisons
       ORDER BY qid, computed_at DESC
@@ -206,6 +209,7 @@ export async function recentComparisons(limit = 12): Promise<RecentArticle[]> {
     lang: row.lang as Lang,
     // jsonb orders its own keys; restore the reading order the columns use.
     langs: LANGS.filter((l) => (row.langs as string[]).includes(l)),
+    scope: row.scope as ScopeKind,
     computedAt: new Date(row.computed_at as string).toISOString(),
   }));
 }
