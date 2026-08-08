@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Footer from "./Footer";
 import Hero from "./Hero";
 import RecentList from "./RecentList";
-import SampleDiff from "./SampleDiff";
-import SupportFooter from "./SupportFooter";
-import WhyItMatters from "./WhyItMatters";
 import type { RecentArticle } from "@/lib/types";
 
 interface Props {
@@ -92,10 +90,8 @@ export default function Landing({
           sentinel={sentinel}
         />
 
-        {/* <SampleDiff onOpen={onOpen} /> */}
-        {/* <WhyItMatters /> */}
         <RecentList recent={recent} onOpen={onOpen} relative={relative} />
-        {/* <SupportFooter onDonate={onDonate} /> */}
+        <Footer onDonate={onDonate} />
       </div>
     </main>
   );

@@ -36,7 +36,6 @@ export default function Hero({ query, setQuery, onSearch, onPick, busy, sentinel
       <GlobeMark />
 
       <Section
-        numeral="I."
         className="relative pt-[max(7vh,44px)] pb-[max(4vh,32px)]"
       >
 
