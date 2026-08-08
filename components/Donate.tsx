@@ -111,12 +111,16 @@ export default function Donate() {
 
   const amountCents = custom.trim() ? centsFrom(custom) : amount;
   const maintenanceCents = centsFrom(maintenance);
-  const totalCents = amountCents + maintenanceCents;
+  const subtotalCents = amountCents + maintenanceCents;
+  const discountCents = applied?.cents ?? 0;
+  // Floored rather than capped: a coupon bigger than the order gives no change,
+  // the way a paper one doesn't.
+  const totalCents = Math.max(0, subtotalCents - discountCents);
   const articles = articlesFor(amountCents);
 
   /**
    * Checks the typed code. Takes nothing, grants nothing — redeeming is the pay
-   * button's job, so this stops short of it and clears the order out of the way.
+   * button's job, so this stops short of it and sets up the order it will cover.
    */
   async function applyCoupon(): Promise<void> {
     const code = coupon.trim();
@@ -131,9 +135,10 @@ export default function Donate() {
       const good = json as unknown as CouponCheck;
       setApplied(good);
       setCoupon(good.code);
-      // Somebody who arrived with a code came for the code, so the order is
-      // emptied and one button is left doing one thing.
-      setAmount(0);
+      // The coupon becomes the order and then pays for it: processing set to
+      // exactly what the code is worth, upkeep to nothing, so the total is zero
+      // and the articles it buys are the coupon's.
+      setAmount(good.cents);
       setCustom("");
       setMaintenance("0");
     } catch (e) {
@@ -393,7 +398,7 @@ export default function Donate() {
                   }`}
                 >
                   {applied
-                    ? `${formatCents(applied.cents)} of credit, added when you press Pay.`
+                    ? `${formatCents(applied.cents)} off — ${articlesFor(applied.cents)} articles, on us.`
                     : (couponError ?? "If somebody gave you one. Check it before you decide.")}
                 </small>
               </label>
@@ -480,18 +485,16 @@ export default function Donate() {
               </dd>
             </div>
 
-            {/* Listed as what it will add, not folded into the total: the
-                total is what this order costs, and a coupon costs nothing. */}
             {applied && (
               <div className="summary-line summary-line-quiet flex items-baseline justify-between gap-[16px] py-[12px] border-t border-rule">
                 <dt className="flex-[1_1_auto] min-w-0 text-[14px] leading-[1.4]">
                   Coupon {applied.code}
                   <small className="block mt-[3px] font-body text-[12px] leading-[1.45] text-ink-soft">
-                    credit, added when you press Pay
+                    covers the first {formatCents(applied.cents)}, applied when you press Pay
                   </small>
                 </dt>
                 <dd className="flex-none m-0 font-mono text-[15px] whitespace-nowrap">
-                  +{formatCents(applied.cents)}
+                  −{formatCents(applied.cents)}
                 </dd>
               </div>
             )}
@@ -521,7 +524,7 @@ export default function Donate() {
           <button
             className="donate-pay mt-[18px] block w-full py-[14px] px-[22px] bg-ink text-paper-raised border border-ink text-[16px] disabled:opacity-[0.45] disabled:cursor-progress"
             // A checked coupon is worth pressing this for, with nothing to pay.
-            disabled={busy || (amountCents <= 0 && !applied)}
+            disabled={busy || (subtotalCents <= 0 && !applied)}
             onClick={async () => {
               setBusy(true);
               setError(null);
@@ -538,9 +541,10 @@ export default function Donate() {
                   if (!res.ok) throw new Error(errorFrom(json, "That code didn't go through."));
                 }
 
-                // Nothing offered, so nothing to record and nothing to reveal.
-                // Back to the reading; the masthead reloads the balance there.
-                if (amountCents <= 0) {
+                // The coupon covered the whole order, so there is no payment to
+                // attempt — and an unpaid attempt in `donations` would dilute
+                // the one number that table exists to answer.
+                if (totalCents <= 0) {
                   window.location.href = "/";
                   return;
                 }
