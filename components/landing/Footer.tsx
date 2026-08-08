@@ -14,7 +14,7 @@ export default function Footer({ onDonate }: { onDonate: () => void }) {
         className={`${MEASURE} flex items-baseline justify-between gap-[16px] font-mono text-[11px] tracking-[0.04em] text-ink-soft max-tight:flex-col max-tight:items-start`}
       >
         <span className="min-w-0 flex-1">
-          © {new Date().getFullYear()} · Project by Ido Nov
+          © {new Date().getFullYear()} · Project by <a href="https://idonov.com" target="_blank" rel="noopener noreferrer" className="text-ink hover:underline">Ido Nov</a>
         </span>
         <button
           type="button"
