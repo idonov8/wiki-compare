@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Highlighted from "./Highlighted";
 import {
   KEY_FACTS_HEADING,
@@ -10,6 +11,13 @@ import {
   type Lang,
   type LinkSpan,
 } from "@/lib/types";
+
+/** Every lead photo renders in a box this size regardless of its own aspect
+ *  ratio, so the columns line up instead of stair-stepping by photo shape.
+ *  `object-contain` letterboxes rather than crops, so nothing of the photo
+ *  is lost. */
+const IMAGE_WIDTH = 300;
+const IMAGE_HEIGHT = 260;
 
 /**
  * The articles, side by side. Rendered as soon as the text exists — before any
@@ -60,6 +68,11 @@ export default function Columns({
   onLeave?: () => void;
   onLink?: (title: string, lang: Lang) => void;
 }) {
+  // One state for every column's "Key facts" accordion, so opening it in any
+  // language opens it in all of them — they're the same disclosure, just
+  // shown three times.
+  const [keyFactsOpen, setKeyFactsOpen] = useState(false);
+
   return (
     <div
       className={
@@ -140,14 +153,19 @@ export default function Columns({
             {chrome && article.image && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                className="article-image block w-full max-w-[300px] h-auto m-0 mb-4 p-1 bg-wiki-page border border-wiki-border rounded-[2px]"
+                className="article-image block mx-auto object-contain m-0 mb-4 p-1 bg-wiki-page rounded-[2px]"
+                style={{ width: IMAGE_WIDTH, height: IMAGE_HEIGHT }}
                 src={article.image.src}
                 alt={article.image.alt ?? article.title}
                 loading="lazy"
               />
             )}
             {chrome && keyFacts && (
-              <details className="key-facts group mb-5 border border-wiki-border rounded-[2px] bg-wiki-shade">
+              <details
+                className="key-facts group mb-5 border border-wiki-border rounded-[2px] bg-wiki-shade"
+                open={keyFactsOpen}
+                onToggle={(e) => setKeyFactsOpen(e.currentTarget.open)}
+              >
                 <summary className="cursor-pointer py-2 px-3 font-mono text-[11px] tracking-[0.09em] uppercase text-ink-soft select-none group-open:border-b group-open:border-wiki-border">
                   Key facts
                 </summary>
