@@ -31,7 +31,7 @@ export default function Footer({
         </p>
         <div className="flex items-baseline justify-between gap-[16px] max-tight:flex-col max-tight:items-start">
           <span className="min-w-0 flex-1">
-            © {new Date().getFullYear()} · Project by <a href="https://idonov.com" target="_blank" rel="noopener noreferrer" className="text-ink hover:underline">Ido Nov</a>
+            © {new Date().getFullYear()} · Project by <a href="https://idonov.com" target="_blank" rel="noopener noreferrer" className="text-ink hover:underline">Ido Nov</a> · <a href="/privacy" className="text-ink hover:underline">Privacy</a>
           </span>
           <button
             type="button"
