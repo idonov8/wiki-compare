@@ -72,9 +72,9 @@ it is strictly necessary to deliver the thing being asked for, and no reading of
 that into a consent prompt.
 
 **One caveat, and it matters:** cookieless mode is not fully in your control from this repo. It
-must also be switched on in the PostHog project settings, or PostHog silently drops every
-event the site sends. The failure mode is an empty dashboard rather than an error. Enable it
-before launch, and confirm events are landing.
+must also be switched on in the PostHog project settings — "Cookieless server hash mode" —
+or PostHog silently drops every event the site sends. The failure mode is an empty dashboard
+rather than an error. ✅ Enabled 9 Aug 2026.
 
 ---
 
@@ -94,12 +94,16 @@ PostHog's default, and four of those defaults were wrong here:
 | `person_profiles: "identified_only"` | No profile for anonymous readers, but the persistent id was still stored, and any future `identify()` call would have created profiles keyed to email-bearing accounts. | `person_profiles: "never"` |
 | `disable_session_recording: false` | Replay was one checkbox in the PostHog dashboard away from recording readers' screens, with nothing in the repo to say it had changed. | `disable_session_recording: true` |
 
-Two things outside the repo still need doing:
+Outside the repo: **cookieless server hash mode is enabled** ✅. Still to do in the same
+settings screen —
 
-- **Turn on "Discard client IP data"** in the PostHog project. The client no longer stores an
-  identifier, but ingestion still reads the source IP off the request — that is now the only
-  personal data left in the pipeline. Note that the `ip: false` config option is deprecated
-  and does nothing; this has to be the project setting.
+- **Turn on "Discard client IP data."** The client no longer stores an identifier, but
+  ingestion still reads the source IP off the request — that is now the only personal data left
+  in the pipeline. Note that the `ip: false` config option is deprecated and does nothing; this
+  has to be the project setting.
+- **Turn off autocapture and session replay at the project level.** Both are already off in
+  code, so this is belt-and-braces — but it is the cheap kind: it means a future `posthog.init`
+  written by someone who has not read this file cannot quietly turn them back on.
 - **Move to an EU project** (`https://eu.i.posthog.com`). Israel holds an EU adequacy decision,
   so EU-hosted processing is a one-line disclosure. A US project is a transfer to a
   jurisdiction with no reciprocal finding, and a longer paragraph to defend. `.env.example` now
@@ -167,7 +171,7 @@ There is also no route to *make* a deletion request other than emailing you, whi
 acceptable at this scale as long as the address in the notice is monitored and answered inside
 30 days.
 
-### 5. The code promises emails that s.30A would not permit
+### 5. The code promises emails that s.30A would not permit *(fixed)*
 
 Two places commit to sending future email:
 
@@ -186,10 +190,21 @@ an explicit opt-in at the point of the promise (an unticked checkbox, separately
 column recording when and how it was given, the sender's name and contact in the message body,
 the word "advertisement" where required, and one-click unsubscribe.
 
-The cheapest correct fix, if you don't want to build that yet, is to **stop making the
-promise** — reword both strings so they don't commit to contacting anyone.
+**Done.** `email_consents` logs each decision — grant and withdrawal alike — with the account,
+the surface that asked, and the exact wording agreed to. It is a log rather than a flag on the
+user row because a flag answers "may we write to them now" while only a log answers "were we
+allowed to send the one we sent in March", which is the question a claim actually asks.
+`mayEmail()` in `lib/consent.ts` is the gate, and answers false when the log is unreachable.
 
-### 6. Wikipedia content is reproduced with no attribution
+The donate page carries an unticked box, on its own row rather than folded into the monthly
+one, and the "we'll email you" reveal is now sent only to somebody who ticked it. The monthly
+row lost "we'll email before each one" for the same reason.
+
+Still outstanding, for whenever mail actually starts going out: the message body needs the
+sender's name and contact, the word "advertisement" where required, and one-click
+unsubscribe writing a `granted = false` row through `recordEmailConsent`.
+
+### 6. Wikipedia content is reproduced with no attribution *(fixed)*
 
 Not privacy, and the largest single exposure in the repo.
 
@@ -200,18 +215,28 @@ authors, a statement of the licence, an indication that the material was modifie
 derivatives carry the same licence. The site currently provides none of these — the footer
 credits you and nobody else.
 
-Two fixes, both small:
+**Done, both halves.**
 
-- **Text:** each column already links to the source article. Add a licence line beside it —
-  attribution to "Wikipedia contributors", a link to the CC BY-SA 4.0 deed, and a note that the
-  text is excerpted. The footer disclaimer is a good place for the standing part of it.
-- **Images:** this one needs a code change, not a copy change. `extractLeadImage` picks the
-  best-looking photo without checking its licence, and a large share of English Wikipedia lead
-  images — album covers, film posters, portraits of living people — are **non-free files used
-  under a fair-use rationale that only covers the encyclopedia article itself**. Hotlinking
-  them here is outside that rationale. You need to query the file's licence via the MediaWiki
-  API and skip anything not freely licensed, and display the required author/licence credit for
-  the ones you keep.
+- **Text:** each column head now carries the CC BY-SA 4.0 deed beside its revision link, and the
+  footer states the standing part — that the text is excerpted and abridged, that it is
+  Wikipedia contributors' work, and that this page and anything drawn from it carry the same
+  terms.
+- **Images:** candidates are restricted to files hosted on **Commons**, which is the licence
+  question in disguise — Commons accepts freely licensed and public-domain files only, while a
+  file uploaded locally to an edition is overwhelmingly the opposite case (album covers, film
+  posters, portraits of living people) kept under a rationale covering that one article.
+  `withImageCredit` then resolves author and licence from the file page and the renderer prints
+  them under the photo. **Every failure drops the image** — file gone, API unreachable, licence
+  unreadable or non-free — because a photograph whose terms we cannot name is one we have no
+  permission to publish.
+
+  Verified live: `Thriller (album)` used to lead with its non-free cover, and now falls through
+  to a public-domain press photo further down the page. `PARSER_VERSION` moved to `v5` so
+  snapshots cached with the old picks are re-read rather than served.
+
+  One wrinkle worth knowing: fixture replay is offline, so `snapshotOf` cannot look a credit up
+  and dev fixtures render their photo uncredited. Production always goes through `fetchArticle`,
+  which does. Re-record with `npm run fixtures:refresh` if that ever matters.
 
 ### 7. Defamation exposure on LLM-generated claims
 
@@ -221,14 +246,24 @@ generates characterisations of how sources disagree about subjects who include l
 on the most litigated topic in the country, and publishes them as marked-up claims.
 
 The footer disclaimer — *"treat a marked difference as a pointer to check the sources, not a
-finding"* — is genuinely useful and well-placed. It is not a defence on its own. What is
-missing is a **route to complain**: a visible way for a person to report that a comparison says
-something false about them, and a commitment to act on it. Prompt notice-and-takedown is the
-single most effective mitigation available to a site like this, and it costs an email address
-and a paragraph.
+finding"* — is genuinely useful and well-placed. It is not a defence on its own. What was
+missing is a **route to complain**, and that is now in the footer beside the disclaimer: a
+mailto with a subject line, and a stated commitment to take a comparison down while it is
+looked at.
 
-Worth asking a lawyer about specifically. It is the one finding here where the downside is not
-a fine but a lawsuit.
+**A per-comparison report button is not what the law asks for, and is the wrong first move.**
+What matters to a defamation claim is that a complaint reaches you and that you act on it
+quickly — the speed of the response, not the ergonomics of the reporting. A standing contact on
+every page satisfies that today, at the cost of one line. A button next to the marks would be a
+UI feature with a queue and a moderation workflow behind it, and it is worth building only when
+volume makes the inbox the bottleneck.
+
+The remaining half is the commitment itself: when a complaint arrives, the fastest thing you can
+do is delete the row from `comparisons` for that `cache_key`, which drops the comparison
+entirely and makes the next request re-read the article. Worth knowing before you need it.
+
+Still the one finding worth a lawyer's specific attention. It is where the downside is not a
+fine but a lawsuit.
 
 ### 8. Accessibility (IS 5568)
 
@@ -274,16 +309,31 @@ notice. What is not handled:
 
 ## What this branch changed
 
+**Privacy and analytics**
+
 - `lib/analytics.ts` — cookieless mode, autocapture off, person profiles off, session recording
   off; removed the unused `identify()` path and the pending-identity queue it needed.
 - `app/privacy/page.tsx` — new privacy notice. **Draft; needs your review.**
-- `components/Footer.tsx` — privacy link on every page.
 - `components/SignIn.tsx` — notice at the point the email address is asked for.
-- `.env.example` — documented the PostHog variables, which were undocumented, along with the two
+- `.env.example` — documented the PostHog variables, which were undocumented, along with the
   project settings the code cannot enforce.
 
-Typecheck passes. No behavioural change to any funnel: all fifteen events in `EVENTS` still
-fire, from the same call sites, with the same properties.
+**Licensing and defamation**
+
+- `lib/wikipedia.ts` — Commons-only image selection, `withImageCredit`, `PARSER_VERSION` → `v5`.
+- `lib/types.ts` — `ImageCredit`; `ArticleImage` gains `file` and `credit`.
+- `components/Columns.tsx` — the credit beneath each photo, the licence beside each revision link.
+- `components/Footer.tsx` — the standing licence notice, the privacy link, and the takedown route.
+
+**Email consent**
+
+- `db/schema.sql` — `email_consents`.
+- `lib/consent.ts` — `recordEmailConsent`, `mayEmail`.
+- `components/Donate.tsx`, `app/api/donate/route.ts` — the unticked opt-in, and copy that only
+  promises mail to whoever asked for it.
+
+Typecheck, `npm run check` and `npm run build` all pass. No behavioural change to any funnel:
+all fifteen events in `EVENTS` still fire, from the same call sites, with the same properties.
 
 ## What is left, in the order I would do it
 
@@ -291,24 +341,24 @@ fire, from the same call sites, with the same properties.
 
 1. Enable cookieless mode in the PostHog project, or the analytics silently stop working.
 2. Enable "Discard client IP data" in the same place.
-3. Read the privacy notice and correct it where it is wrong about you.
-4. Reword the two email promises, or don't send them (Finding 5).
-5. Add Wikipedia attribution and a CC BY-SA notice (Finding 6, text half).
-6. Add a takedown contact for defamation complaints (Finding 7).
+3. Turn off autocapture and session replay at the project level too, so the code and the
+   dashboard agree rather than relying on the code alone.
+4. Read the privacy notice and correct it where it is wrong about you.
+5. Run `npm run db:init` so `email_consents` exists before the donate route writes to it.
 
 **Soon after**
 
-7. Filter non-free images by licence (Finding 6, image half).
-8. Anonymise `user_id` on account deletion; expire old sessions (Finding 4).
-9. Move PostHog to the EU project.
-10. Accept the vendor DPAs; write the database definition document.
-11. Self-host the fonts.
+6. Anonymise `user_id` on account deletion; expire old sessions (Finding 4).
+7. Move PostHog to the EU project.
+8. Accept the vendor DPAs; write the database definition document.
+9. Self-host the fonts.
+10. Unsubscribe handling, if and when mail starts going out (Finding 5).
 
 **When money becomes real**
 
-12. IS 5568 audit and accessibility statement.
-13. Terms of use.
-14. A lawyer on Findings 5, 6 and 7 — the three where the downside is not a fine.
+11. IS 5568 audit and accessibility statement.
+12. Terms of use.
+13. A lawyer on Finding 7 — the one where the downside is not a fine but a lawsuit.
 
 ---
 
