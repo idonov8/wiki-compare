@@ -53,6 +53,7 @@ await page.route("**/api/recent", (route) =>
           title: `demo:${FIXTURE}`,
           lang: "en",
           langs: ["en", "he", "ar"],
+          scope: "full",
           computedAt: new Date(Date.now() - 3600_000).toISOString(),
         },
         {
@@ -60,6 +61,7 @@ await page.route("**/api/recent", (route) =>
           title: "הדג נחש",
           lang: "he",
           langs: ["he", "ar"],
+          scope: "preview",
           computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
         },
       ],
@@ -130,7 +132,7 @@ const recent = await page.$$eval(".recent li button", (els) =>
     return {
       title: title?.textContent ?? "",
       dir: title?.getAttribute("dir") ?? "",
-      langs: el.querySelector(".recent-langs")?.textContent ?? "",
+      scope: el.querySelector(".recent-scope")?.textContent ?? "",
     };
   }),
 );
@@ -141,14 +143,24 @@ check(
   recent.map((r) => `${r.title}=${r.dir}`).join("; "),
 );
 check(
-  recent.every((r) => /^[A-Z]{2}( · [A-Z]{2})*$/.test(r.langs)),
-  "rows show which languages were compared",
-  recent.map((r) => r.langs).join("; "),
+  recent.every((r) => r.scope === "full" || r.scope === "preview"),
+  "each row says how much of the article the cached run read",
+  recent.map((r) => `${r.title}=${r.scope || "—"}`).join("; "),
 );
 check(
   (await page.$$(".recent h2, .recent h3")).length === 0,
   "the list carries no heading of its own",
 );
+
+// The ledger holds every cached subject, so the toggle is how a reader gets to
+// the ones somebody paid to read in full. Pressed and released again, because a
+// filter that cannot be undone hides the rest of the history for good.
+const rowCount = () => page.$$eval(".recent li button", (els) => els.length);
+const toggle = await page.$(".recent-filter");
+await toggle?.click();
+check((await rowCount()) === 1, "the full-only toggle drops the preview rows", `${await rowCount()} rows`);
+await toggle?.click();
+check((await rowCount()) === 2, "releasing it brings them back", `${await rowCount()} rows`);
 
 // The list is a history, so a row has to actually open its comparison.
 await page.click(".recent li:first-child button");
