@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import Highlighted from "./Highlighted";
 import {
   KEY_FACTS_HEADING,
@@ -52,55 +52,102 @@ const opening = (langs: Lang[]): Band => ({
  *  reader more in surprise than the reclaimed width is worth. */
 const MIN_CONTINUATION = 280;
 
-/** The most runs a widened column will set its remainder in. */
-const MAX_RUNS = 3;
+/**
+ * How wide the last edition standing sets its text.
+ *
+ * A band with one column in it has the whole page, and taking the whole page at
+ * this type size is a 150-character line — the empty space would be gone and the
+ * article unreadable instead. So the sheet narrows to the measure Wikipedia
+ * itself sets an article at and the paper shows either side of it, which is also
+ * the layout a reader arriving from the source article already knows.
+ */
+const READING_WIDTH = 960;
+
+/** How tall the drawn seam between two bands is. Enough for the rules to travel
+ *  their distance at a readable angle, short enough to read as a joint in the
+ *  page rather than as a gap in the article. */
+const BEND = 54;
+
+/** The bend is drawn in thousandths of the page width, so its geometry survives
+ *  the viewport changing under it between one measurement and the next. */
+const SPAN = 1000;
 
 /** `useLayoutEffect` on the server is a no-op React warns about, and the banding
  *  below is pure measurement — there is nothing for it to do before hydration. */
 const useBrowserLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
-/** Roughly how many lines a section sets in. Characters alone underweight a
- *  list, which is most of what an article's later sections are: a one-word
- *  bullet ends where it ends and still costs a whole line of height. */
-function depth(section: Section): number {
-  const PER_LINE = 64;
-  let total = section.heading === LEAD_HEADING ? 0 : 3; // the heading and its rule
-  for (const line of section.text.split("\n")) {
-    total += Math.max(1, Math.ceil(line.length / PER_LINE));
-  }
-  return total;
+/** Where a band's rules stand, as fractions of the page width: the two outer
+ *  edges of the sheet and every seam between two columns. */
+function boundaries(band: Band, inset: number): number[] {
+  const columns = band.langs.length;
+  const left = columns === 1 ? inset : 0;
+  const span = 1 - 2 * left;
+  return Array.from({ length: columns + 1 }, (_, i) => left + (span * i) / columns);
 }
 
 /**
- * Split a column's sections into `count` runs of roughly equal length, in order.
+ * The seam between two bands, drawn rather than written.
  *
- * The last band is one edition across the whole page, which at this type size is
- * a 150-character line: the empty space would be gone and the article unreadable
- * instead. So a column that has swallowed its neighbours' width sets its
- * remainder in as many runs as it swallowed columns, newspaper fashion. The runs
- * are contiguous rather than balanced by a bin-packer — reading order is the
- * whole point, and a run has to be the piece that follows the one beside it.
+ * An edition ending is a change in the shape of the page, and the page can say
+ * so itself: every rule the band above stands on travels, in the depth of one
+ * joint, to wherever the band below stands it. A seam whose column is gone
+ * arrives at the same place as its neighbour and the wedge between them closes;
+ * the sheet's own edges bend inwards where the last edition narrows to a
+ * readable measure. The reader watches the columns become fewer and wider
+ * instead of being told they have.
+ *
+ * Which rule goes where falls straight out of the reading order the columns keep
+ * — the nth rule from the left lands on the nth rule from the left below,
+ * counting only the editions that survive.
  */
-function contiguousRuns(sections: Section[], count: number): Section[][] {
-  if (count <= 1 || sections.length <= 1) return [sections];
-  const runs = Math.min(count, sections.length);
-  const weight = sections.map(depth);
-  const total = weight.reduce((sum, w) => sum + w, 0);
+function Bend({ above, below, inset }: { above: Band; below: Band; inset: number }) {
+  const top = boundaries(above, inset).map((x) => x * SPAN);
+  const stands = boundaries(below, inset);
 
-  const out: Section[][] = [];
-  let start = 0;
-  let taken = 0;
-  for (let run = 1; run < runs; run++) {
-    const target = (total * run) / runs;
-    // Every run still to come needs a section of its own left for it.
-    const limit = sections.length - (runs - run);
-    let cut = start;
-    while (cut < limit && (cut === start || taken < target)) taken += weight[cut++];
-    out.push(sections.slice(start, cut));
-    start = cut;
+  const steps = [0];
+  let survivors = 0;
+  for (const lang of above.langs) {
+    if (below.langs.includes(lang)) survivors += 1;
+    steps.push(survivors);
   }
-  out.push(sections.slice(start));
-  return out;
+  const foot = steps.map((step) => stands[step] * SPAN);
+
+  const last = top.length - 1;
+  const bend = (from: number, to: number) => `M ${from} 0 C ${from} 58, ${to} 42, ${to} 100`;
+
+  return (
+    <svg
+      className="bend block w-full"
+      style={{ height: BEND }}
+      viewBox={`0 0 ${SPAN} 100`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      {/* The sheet itself, carried across the joint so the article reads as one
+          piece of paper changing shape rather than as two pages stacked. */}
+      <path
+        d={
+          `${bend(top[0], foot[0])} L ${foot[last]} 100 ` +
+          `C ${foot[last]} 42, ${top[last]} 58, ${top[last]} 0 Z`
+        }
+        fill="var(--color-wiki-page)"
+      />
+      {top.map((from, i) =>
+        // An outer edge that stays at the edge of the page is not a rule anywhere
+        // above or below this joint, so it is not one inside it either.
+        (i === 0 || i === last) && from === foot[i] ? null : (
+          <path
+            key={i}
+            d={bend(from, foot[i])}
+            fill="none"
+            stroke="var(--color-rule)"
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+        ),
+      )}
+    </svg>
+  );
 }
 
 /**
@@ -216,7 +263,15 @@ export default function Columns({
   const [keyFactsOpen, setKeyFactsOpen] = useState(false);
 
   const wrap = useRef<HTMLDivElement>(null);
-  const [layout, setLayout] = useState<{ sig: string; bands: Band[] }>({ sig: "", bands: [] });
+  /** `width` is the page the bands were measured against. The margins that
+   *  narrow the last band are written as a percentage of it and the bend is
+   *  drawn in fractions of it, so the two are the same number and cannot drift
+   *  apart — the rules land where the columns actually stand. */
+  const [layout, setLayout] = useState<{ sig: string; bands: Band[]; width: number }>({
+    sig: "",
+    bands: [],
+    width: 0,
+  });
   /** The signature whose banding has stopped growing, so the measuring pass can
    *  step aside on every ordinary re-render — a hover changes the marks, not the
    *  endings, and re-reading every block's rect for it would cost a reflow. */
@@ -252,24 +307,28 @@ export default function Columns({
 
   useBrowserLayoutEffect(() => {
     if (!banding) {
-      if (layout.bands.length) setLayout({ sig: "", bands: [] });
+      if (layout.bands.length) setLayout({ sig: "", bands: [], width: 0 });
       return;
     }
+    const width = wrap.current?.clientWidth ?? 0;
     if (layout.sig !== signature) {
       settled.current = "";
-      setLayout({ sig: signature, bands: [opening(visible)] });
+      setLayout({ sig: signature, bands: [opening(visible)], width });
       return;
     }
     if (settled.current === signature) return;
     // Each pass measures the band the previous pass opened, so the whole
     // sequence resolves in at most one pass per language, before the paint.
     const grown = grow(wrap.current, layout.bands);
-    if (grown) setLayout({ sig: signature, bands: grown });
+    if (grown) setLayout({ sig: signature, bands: grown, width });
     else settled.current = signature;
   }, [banding, signature, layout, visible]);
 
-  const bands =
-    banding && layout.sig === signature && layout.bands.length ? layout.bands : [opening(visible)];
+  const banded = banding && layout.sig === signature && layout.bands.length > 0;
+  const bands = banded ? layout.bands : [opening(visible)];
+  /** How far in from each page edge the last edition standing sets its text. */
+  const inset =
+    layout.width > READING_WIDTH ? (layout.width - READING_WIDTH) / (2 * layout.width) : 0;
 
   const bodyOf = (lang: Lang): Section[] => {
     const article = articles[lang];
@@ -280,230 +339,216 @@ export default function Columns({
   };
 
   return (
-    <div
-      ref={wrap}
-      className="columns-flow bg-wiki-page"
-      aria-hidden={part === "tail" ? true : undefined}
-    >
+    <div ref={wrap} className="columns-flow" aria-hidden={part === "tail" ? true : undefined}>
       {bands.map((band, bandIndex) => {
         const following = bands[bandIndex + 1];
         const closing = bandIndex === bands.length - 1;
-        // How many of the original columns' worth of width each column in this
-        // band has been handed, which is how many runs it sets its text in.
-        const runs = Math.min(
-          MAX_RUNS,
-          Math.max(1, Math.floor(visible.length / band.langs.length)),
-        );
+        // The last edition standing narrows to a readable measure and lets the
+        // paper show either side of it, which is what makes the sheet's own
+        // edges something the bend above can bring in.
+        const alone = band.langs.length === 1 && inset > 0;
         return (
-          <div
-            key={bandIndex}
-            data-band={bandIndex}
-            className={
-              part === "tail"
-                ? // The unread remainder. It fades out rather than being cut off, because
-                  // the article does not end there — only our reading of it does.
-                  // No `user-select: none`: the text below the gate is Wikipedia's own,
-                  // free to anyone, and locking it would be charging for something we
-                  // neither wrote nor paid for. Only the comparison is unfunded.
-                  // `pointer-events` is off because there is nothing here to hover — no
-                  // marks were placed in this half — and a help cursor over plain text
-                  // would promise a card that never opens.
-                  // Both spellings of the mask: Safari still wants the prefix, and
-                  // dropping it would cut the remainder off flat rather than fading it.
-                  // The height is capped where the fade reaches transparent, so the
-                  // document ends with the fade and the footer follows it. Everything
-                  // past that point was invisible anyway, and scrolling through it —
-                  // or having a script hold the page back from it — made the article
-                  // feel broken rather than paywalled.
-                  "columns columns-faded grid max-cols:block items-stretch [-webkit-mask-image:linear-gradient(to_bottom,black_0,transparent_340px)] [mask-image:linear-gradient(to_bottom,black_0,transparent_340px)] pointer-events-none max-h-[340px] overflow-hidden"
-                : bandIndex === 0
-                  ? "columns grid max-cols:block items-stretch"
-                  : // A rule straight across says the page has changed shape here,
-                    // so the columns below it landing out of line with the ones
-                    // above reads as deliberate rather than as a broken grid.
-                    "columns-more grid max-cols:block items-stretch border-t border-rule"
-            }
-            style={{ gridTemplateColumns: `repeat(${band.langs.length}, minmax(0, 1fr))` }}
-          >
-            {band.langs.map((lang) => {
-              const article = articles[lang];
-              if (!article) return null;
-              const meta = LANG_META[lang];
-              const keyFacts = article.sections.find((s) => s.heading === KEY_FACTS_HEADING);
-              const all = bodyOf(lang);
-              const from = band.from[lang] ?? 0;
-              const to = following?.langs.includes(lang) ? following.from[lang]! : all.length;
-              const body = all.slice(from, to);
-              const chrome = bandIndex === 0 && part !== "tail";
-              // This edition stops here while the page carries on without it. Said
-              // out loud, because a column that simply stopped next to one that
-              // did not would read as text we had dropped.
-              const closes = !closing && !following?.langs.includes(lang);
-              const highlight = (text: string, links?: LinkSpan[]) => (
-                <Highlighted
-                  text={text}
-                  lang={lang}
-                  claims={claims}
-                  links={links}
-                  ghost={ghost}
-                  activeId={activeId}
-                  onEnter={onEnter}
-                  onLeave={onLeave}
-                  onLink={onLink}
-                />
-              );
-              // `data-block` is what the banding measures against: one rect per
-              // section, and the cut falls between two of them.
-              const block = (section: Section, i: number) => (
-                <div key={`${section.heading}-${i}`} data-block>
-                  {section.heading !== LEAD_HEADING && (
-                    <h3 className="section-heading mt-[26px] mb-2 pb-[5px] font-wiki-heading text-[21px] font-normal border-b border-wiki-border text-wiki-text">
-                      {section.heading}
-                    </h3>
-                  )}
-                  {highlight(section.text, section.links)}
-                </div>
-              );
-              const groups = contiguousRuns(body, runs);
-              return (
-                // Physical, not inline: columns always sit en|he|ar left-to-right
-                // regardless of each column's own direction, so the seam belongs
-                // between every pair.
-                <section
-                  key={lang}
-                  data-edition={lang}
-                  // The deeper bottom padding is for the floating language switch
-                  // below `cols` and the footer above it: the article's last
-                  // paragraph must not end up underneath either. A band with more
-                  // article below it wants neither — the gap would read as the
-                  // text having stopped.
-                  className={`${bandIndex === 0 ? "column" : "column-more"} min-w-0 pt-[22px] px-[26px] ${
-                    closing ? "pb-20 max-cols:pb-[110px]" : "pb-10"
-                  } max-tight:px-[17px] border-rule border-l first:border-l-0 max-cols:border-l-0 max-cols:border-t max-cols:first:border-t-0`}
-                  dir={meta.dir}
-                  lang={lang}
-                >
-                  {chrome && (
-                    <div className="column-head flex items-baseline gap-2.5 pb-2.5 mb-4 border-b-2 border-ink font-mono text-[12px] text-ink-soft">
-                      <span className="native font-body text-[17px] text-ink">{meta.native}</span>
-                      <span className="arrow text-[13px] text-ink" aria-hidden="true">
-                        {meta.dir === "rtl" ? "←" : "→"}
-                      </span>
-                      <a
-                        href={article.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-wiki-link no-underline hover:underline"
+          <Fragment key={bandIndex}>
+            {bandIndex > 0 && <Bend above={bands[bandIndex - 1]} below={band} inset={inset} />}
+            <div
+              data-band={bandIndex}
+              className={`${
+                part === "tail"
+                  ? // The unread remainder. It fades out rather than being cut off, because
+                    // the article does not end there — only our reading of it does.
+                    // No `user-select: none`: the text below the gate is Wikipedia's own,
+                    // free to anyone, and locking it would be charging for something we
+                    // neither wrote nor paid for. Only the comparison is unfunded.
+                    // `pointer-events` is off because there is nothing here to hover — no
+                    // marks were placed in this half — and a help cursor over plain text
+                    // would promise a card that never opens.
+                    // Both spellings of the mask: Safari still wants the prefix, and
+                    // dropping it would cut the remainder off flat rather than fading it.
+                    // The height is capped where the fade reaches transparent, so the
+                    // document ends with the fade and the footer follows it. Everything
+                    // past that point was invisible anyway, and scrolling through it —
+                    // or having a script hold the page back from it — made the article
+                    // feel broken rather than paywalled.
+                    "columns columns-faded [-webkit-mask-image:linear-gradient(to_bottom,black_0,transparent_340px)] [mask-image:linear-gradient(to_bottom,black_0,transparent_340px)] pointer-events-none max-h-[340px] overflow-hidden"
+                  : bandIndex === 0
+                    ? "columns"
+                    : "columns-more"
+              } grid max-cols:block items-stretch bg-wiki-page ${
+                // A band this narrow is always the last one — nothing can run out
+                // beside a single column — so it is ruled on three sides and the
+                // sheet closes rather than running off the foot of the article.
+                alone ? "border-x border-b border-rule" : ""
+              }`}
+              style={{
+                gridTemplateColumns: `repeat(${band.langs.length}, minmax(0, 1fr))`,
+                // Written as a percentage of the same width the bend is drawn
+                // in, so the sheet's edges and the rules that arrive at them are
+                // one measurement rather than two that can disagree.
+                marginInline: alone ? `${inset * 100}%` : undefined,
+              }}
+            >
+              {band.langs.map((lang) => {
+                const article = articles[lang];
+                if (!article) return null;
+                const meta = LANG_META[lang];
+                const keyFacts = article.sections.find((s) => s.heading === KEY_FACTS_HEADING);
+                const all = bodyOf(lang);
+                const from = band.from[lang] ?? 0;
+                const to = following?.langs.includes(lang) ? following.from[lang]! : all.length;
+                const body = all.slice(from, to);
+                const chrome = bandIndex === 0 && part !== "tail";
+                // This edition stops here while the page carries on without it. Said
+                // out loud, because a column that simply stopped next to one that
+                // did not would read as text we had dropped.
+                const closes = !closing && !following?.langs.includes(lang);
+                const highlight = (text: string, links?: LinkSpan[]) => (
+                  <Highlighted
+                    text={text}
+                    lang={lang}
+                    claims={claims}
+                    links={links}
+                    ghost={ghost}
+                    activeId={activeId}
+                    onEnter={onEnter}
+                    onLeave={onLeave}
+                    onLink={onLink}
+                  />
+                );
+                // `data-block` is what the banding measures against: one rect per
+                // section, and the cut falls between two of them.
+                const block = (section: Section, i: number) => (
+                  <div key={`${section.heading}-${i}`} data-block>
+                    {section.heading !== LEAD_HEADING && (
+                      <h3 className="section-heading mt-[26px] mb-2 pb-[5px] font-wiki-heading text-[21px] font-normal border-b border-wiki-border text-wiki-text">
+                        {section.heading}
+                      </h3>
+                    )}
+                    {highlight(section.text, section.links)}
+                  </div>
+                );
+                return (
+                  // Physical, not inline: columns always sit en|he|ar left-to-right
+                  // regardless of each column's own direction, so the seam belongs
+                  // between every pair.
+                  <section
+                    key={lang}
+                    data-edition={lang}
+                    // The deeper bottom padding is for the floating language switch
+                    // below `cols` and the footer above it: the article's last
+                    // paragraph must not end up underneath either. A band with more
+                    // article below it wants neither — the gap would read as the
+                    // text having stopped.
+                    className={`${bandIndex === 0 ? "column" : "column-more"} min-w-0 pt-[22px] px-[26px] ${
+                      closing ? "pb-20 max-cols:pb-[110px]" : "pb-10"
+                    } max-tight:px-[17px] border-rule border-l first:border-l-0 max-cols:border-l-0 max-cols:border-t max-cols:first:border-t-0`}
+                    dir={meta.dir}
+                    lang={lang}
+                  >
+                    {chrome && (
+                      <div className="column-head flex items-baseline gap-2.5 pb-2.5 mb-4 border-b-2 border-ink font-mono text-[12px] text-ink-soft">
+                        <span className="native font-body text-[17px] text-ink">{meta.native}</span>
+                        <span className="arrow text-[13px] text-ink" aria-hidden="true">
+                          {meta.dir === "rtl" ? "←" : "→"}
+                        </span>
+                        <a
+                          href={article.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-wiki-link no-underline hover:underline"
+                        >
+                          rev {article.revid}
+                        </a>
+                      </div>
+                    )}
+                    {chrome && (
+                      <h1 className="article-title m-0 mb-3.5 pb-2 text-[26px] leading-tight font-wiki-heading font-normal border-b border-wiki-border text-wiki-text">
+                        {article.title}
+                      </h1>
+                    )}
+                    {chrome && article.image && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        className="article-image block mx-auto object-contain m-0 mb-4 p-1 bg-wiki-page rounded-[2px]"
+                        style={{ width: IMAGE_WIDTH, height: IMAGE_HEIGHT }}
+                        src={article.image.src}
+                        alt={article.image.alt ?? article.title}
+                        loading="lazy"
+                      />
+                    )}
+                    {chrome && keyFacts && (
+                      <details
+                        className="key-facts group mb-5 border border-wiki-border rounded-[2px] bg-wiki-shade"
+                        open={keyFactsOpen}
+                        onToggle={(e) => setKeyFactsOpen(e.currentTarget.open)}
                       >
-                        rev {article.revid}
-                      </a>
-                    </div>
-                  )}
-                  {chrome && (
-                    <h1 className="article-title m-0 mb-3.5 pb-2 text-[26px] leading-tight font-wiki-heading font-normal border-b border-wiki-border text-wiki-text">
-                      {article.title}
-                    </h1>
-                  )}
-                  {chrome && article.image && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      className="article-image block mx-auto object-contain m-0 mb-4 p-1 bg-wiki-page rounded-[2px]"
-                      style={{ width: IMAGE_WIDTH, height: IMAGE_HEIGHT }}
-                      src={article.image.src}
-                      alt={article.image.alt ?? article.title}
-                      loading="lazy"
-                    />
-                  )}
-                  {chrome && keyFacts && (
-                    <details
-                      className="key-facts group mb-5 border border-wiki-border rounded-[2px] bg-wiki-shade"
-                      open={keyFactsOpen}
-                      onToggle={(e) => setKeyFactsOpen(e.currentTarget.open)}
-                    >
-                      <summary className="cursor-pointer py-2 px-3 font-mono text-[11px] tracking-[0.09em] uppercase text-ink-soft select-none group-open:border-b group-open:border-wiki-border">
-                        Key facts
-                      </summary>
-                      <dl className="kf-body m-0 pt-1.5 px-3 pb-2.5 text-[13.5px] text-wiki-text">
-                        {keyFacts.text.split("\n").map((line, i) => {
-                          // A claim can span the label and value of one row, so a row
-                          // carrying one stays a single highlightable unit rather than
-                          // being split into bold label + value.
-                          const hasClaim = claims.some(
-                            (c) => c.spans[lang] && line.includes(c.spans[lang]!),
-                          );
-                          if (hasClaim) {
+                        <summary className="cursor-pointer py-2 px-3 font-mono text-[11px] tracking-[0.09em] uppercase text-ink-soft select-none group-open:border-b group-open:border-wiki-border">
+                          Key facts
+                        </summary>
+                        <dl className="kf-body m-0 pt-1.5 px-3 pb-2.5 text-[13.5px] text-wiki-text">
+                          {keyFacts.text.split("\n").map((line, i) => {
+                            // A claim can span the label and value of one row, so a row
+                            // carrying one stays a single highlightable unit rather than
+                            // being split into bold label + value.
+                            const hasClaim = claims.some(
+                              (c) => c.spans[lang] && line.includes(c.spans[lang]!),
+                            );
+                            if (hasClaim) {
+                              return (
+                                <div
+                                  key={i}
+                                  className="kf-row kf-row-full block py-[5px] border-t border-wiki-rule first:border-t-0"
+                                >
+                                  {highlight(line)}
+                                </div>
+                              );
+                            }
+                            const sep = line.indexOf(": ");
+                            if (sep === -1) {
+                              return (
+                                <div
+                                  key={i}
+                                  className="kf-group pt-2 pb-0.5 font-bold text-center text-ink-soft"
+                                >
+                                  {line}
+                                </div>
+                              );
+                            }
                             return (
                               <div
                                 key={i}
-                                className="kf-row kf-row-full block py-[5px] border-t border-wiki-rule first:border-t-0"
+                                className="kf-row grid grid-cols-[minmax(0,38%)_minmax(0,1fr)] gap-y-0.5 gap-x-3 py-[5px] border-t border-wiki-rule first:border-t-0"
                               >
-                                {highlight(line)}
+                                <dt className="kf-label m-0 font-bold">{line.slice(0, sep)}</dt>
+                                <dd className="kf-value m-0">{line.slice(sep + 2)}</dd>
                               </div>
                             );
-                          }
-                          const sep = line.indexOf(": ");
-                          if (sep === -1) {
-                            return (
-                              <div
-                                key={i}
-                                className="kf-group pt-2 pb-0.5 font-bold text-center text-ink-soft"
-                              >
-                                {line}
-                              </div>
-                            );
-                          }
-                          return (
-                            <div
-                              key={i}
-                              className="kf-row grid grid-cols-[minmax(0,38%)_minmax(0,1fr)] gap-y-0.5 gap-x-3 py-[5px] border-t border-wiki-rule first:border-t-0"
-                            >
-                              <dt className="kf-label m-0 font-bold">{line.slice(0, sep)}</dt>
-                              <dd className="kf-value m-0">{line.slice(sep + 2)}</dd>
-                            </div>
-                          );
-                        })}
-                      </dl>
-                    </details>
-                  )}
-                  {bandIndex > 0 && (
-                    // The masthead of a continued column. Without it a band that
-                    // has dropped from three columns to one is a wall of text in a
-                    // script the reader has to identify for themselves.
-                    <div className="column-continues flex items-baseline gap-2.5 pb-2 mb-4 border-b border-wiki-border font-mono text-[11px] tracking-[0.08em] uppercase text-ink-soft">
-                      <span className="native font-body text-[15px] normal-case tracking-normal text-ink">
-                        {meta.native}
-                      </span>
-                      <span className="arrow text-[12px] text-ink" aria-hidden="true">
-                        {meta.dir === "rtl" ? "←" : "→"}
-                      </span>
-                      <span>continues</span>
-                    </div>
-                  )}
-                  {groups.length > 1 ? (
-                    <div
-                      className="runs grid gap-x-[38px]"
-                      style={{
-                        gridTemplateColumns: `repeat(${groups.length}, minmax(0, 1fr))`,
-                      }}
-                    >
-                      {groups.map((group, i) => (
-                        <div key={i} className="run min-w-0">
-                          {group.map(block)}
+                          })}
+                        </dl>
+                      </details>
+                    )}
+                    {body.map(block)}
+                    {closes && (
+                      // The one thing on this page that is written rather than
+                      // drawn, and the reason it is: a column of Hebrew that simply
+                      // stopped beside a column of English that did not would read
+                      // as text we had dropped. So it is set as a colophon — a rule
+                      // in full ink across the column, the edition named in its own
+                      // script, and the sentence under it in the interface's voice
+                      // rather than the article's.
+                      <div className="column-ends mt-9 pt-4 border-t-2 border-ink text-center">
+                        <div className="font-body text-[24px] leading-none text-ink">
+                          {meta.native}
                         </div>
-                      ))}
-                    </div>
-                  ) : (
-                    body.map(block)
-                  )}
-                  {closes && (
-                    <div className="column-ends mt-7 pt-2.5 border-t border-wiki-border font-mono text-[11px] tracking-[0.08em] uppercase text-ink-soft">
-                      end of the {meta.label} article
-                    </div>
-                  )}
-                </section>
-              );
-            })}
-          </div>
+                        <div className="mt-2 font-mono text-[11px] tracking-[0.18em] uppercase text-ink-soft">
+                          end of the {meta.label} article
+                        </div>
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
+            </div>
+          </Fragment>
         );
       })}
     </div>
