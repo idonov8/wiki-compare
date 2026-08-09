@@ -15,7 +15,7 @@ const PRESETS = [100, 300, 500, 1000];
  * agreed to. If the two drift, the consent log starts attesting to words nobody
  * was shown, which is worse than having no log.
  */
-const EMAIL_OPT_IN_WORDING = "Email me when payments are ready.";
+const EMAIL_OPT_IN_WORDING = "I'd like to recieve updates about the project";
 
 function suggestedMaintenance(amountCents: number): number {
   return Math.round((amountCents * 0.15) / 25) * 25;
@@ -81,7 +81,7 @@ export default function Donate() {
   const [custom, setCustom] = useState("");
   const [maintenance, setMaintenance] = useState(String(suggestedMaintenance(500) / 100));
   const [monthly, setMonthly] = useState(false);
-  const [emailOptIn, setEmailOptIn] = useState(false);
+  const [emailOptIn, setEmailOptIn] = useState(true);
   const [coupon, setCoupon] = useState("");
   // No state for "redeemed": the moment that happens, this page is leaving.
   const [checking, setChecking] = useState(false);
@@ -408,8 +408,7 @@ export default function Donate() {
               <span>
                 {EMAIL_OPT_IN_WORDING}
                 <small className="block text-[12.5px] text-ink-soft">
-                  One message, when there is something to say. Nothing else, and you can stop it
-                  at any time.
+                  Major milestone updates only. No spam, promise.
                 </small>
               </span>
             </label>
