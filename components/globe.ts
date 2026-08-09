@@ -12,9 +12,11 @@ export const GLOBE_CX = 160;
 export const GLOBE_CY = 132;
 
 /**
- * The outline, drawn as an arc that stops short of closing. The gap at the
- * upper right is deliberate: `Loading` settles a tile into it, and even at rest
- * an unclosed ring reads as drawn by a hand rather than by a shape tool.
+ * The outline, drawn as an arc that stops short of closing — `Loading`'s, and
+ * only `Loading`'s. The gap at the upper right is where the last tile settles,
+ * so it reads as a space being filled rather than as a hole. The landing page
+ * has no tile coming and draws the circle closed: the same arc there was just
+ * a bite missing out of the sphere.
  */
 export const RING_PATH = "M 206.1 90.5 A 62 62 0 1 1 183.2 74.5";
 

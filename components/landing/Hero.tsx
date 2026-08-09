@@ -5,10 +5,11 @@ import Section from "./Section";
 import SearchBox from "../SearchBox";
 import {
   GLOBE_CX,
+  GLOBE_CY,
+  GLOBE_R,
   LATITUDES,
   MERIDIAN_LON,
   PARALLELS,
-  RING_PATH,
   cellPath,
   meridianPath,
   normaliseLon,
@@ -366,7 +367,16 @@ function GlobeMark() {
         );
       })}
 
-      <path className="fill-none stroke-ink [stroke-width:1.6]" d={RING_PATH} />
+      {/* Closed, unlike `Loading`'s. That one is `RING_PATH`, which stops 26°
+          short so the last tile has somewhere to land — a gap that reads as a
+          gap only for as long as something is on its way into it. Nothing is
+          arriving here, so the same arc just left a bite out of the sphere. */}
+      <circle
+        className="fill-none stroke-ink [stroke-width:1.6]"
+        cx={GLOBE_CX}
+        cy={GLOBE_CY}
+        r={GLOBE_R}
+      />
 
       {PARALLELS.map(([cy, rx, ry], i) => (
         <ellipse
