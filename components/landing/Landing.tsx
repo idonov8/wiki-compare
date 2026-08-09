@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import Footer from "./Footer";
+import Footer from "../Footer";
 import Hero from "./Hero";
 import RecentList from "./RecentList";
 import type { RecentArticle } from "@/lib/types";
