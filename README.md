@@ -188,6 +188,14 @@ API lists every link on the rendered page, including navboxes, authority-control
 citation footnotes — so using it made the coverage panel disagree with the columns above it and
 report "WorldCat" as a concept one version uniquely covers.
 
+The panel groups its pills into one column per edition rather than one flat list, and each pill is
+a jump: `extractLinks` stamps every `LinkSpan` with the Wikidata id its title resolved to, so a
+click can find the one span in that edition's own column that is the pill's evidence, scroll to it
+and flash it — the same ring `DiffNav`'s jump-to uses. A concept linked only from the infobox has
+no such span (the key-facts block flattens its links to plain text) and the search gives up rather
+than spinning; everywhere else, following a coverage gap means never having to read a whole column
+to find the sentence it named.
+
 ### Why infoboxes survive
 
 `stripChrome` removes what wraps the prose, but the infobox is extracted first, into a `(key facts)`
