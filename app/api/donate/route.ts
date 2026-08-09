@@ -4,17 +4,8 @@ import { getSessionUser } from "@/lib/auth";
 import { grant, hasHadMockGrant, recordDonation } from "@/lib/credits";
 import { MOCK_GRANT_CENTS, formatCents } from "@/lib/pricing";
 import { capture } from "@/lib/analytics";
-import { recordEmailConsent } from "@/lib/consent";
 
 export const runtime = "nodejs";
-
-/**
- * The proposition the checkbox puts to somebody, stored verbatim with their
- * answer. s.30A consent is consent to a particular wording, so this string and
- * the one rendered in components/Donate.tsx have to stay the same sentence —
- * change one and the log starts claiming agreement to words nobody saw.
- */
-const EMAIL_OPT_IN_WORDING = "Email me when payments are ready.";
 
 /**
  * The mock payment.
@@ -49,27 +40,6 @@ export async function POST(request: Request) {
   const amountCents = clampMoney(body.amountCents);
   const maintenanceCents = clampMoney(body.maintenanceCents);
   const monthly = body.monthly === true;
-
-  // Recorded before the grant, and independently of whether one happens: the
-  // permission is about future messages, not about this donation, and tying the
-  // two together is how a donation quietly becomes a subscription.
-  const emailOptIn = body.emailOptIn === true;
-  if (emailOptIn) {
-    try {
-      await recordEmailConsent({
-        userId: user.id,
-        email: user.email,
-        granted: true,
-        source: "donate",
-        evidence: EMAIL_OPT_IN_WORDING,
-      });
-    } catch (error) {
-      // The donation is not held up by the consent log. Failing to write the row
-      // means the permission is not provable, so it does not exist — `mayEmail`
-      // reads the log and finds nothing, which is the correct answer.
-      console.warn("email consent not recorded:", error instanceof Error ? error.message : error);
-    }
-  }
 
   const alreadyGranted = await hasHadMockGrant(user.id);
   const grantedCents = alreadyGranted ? 0 : MOCK_GRANT_CENTS;
@@ -113,36 +83,23 @@ export async function POST(request: Request) {
           body: "Intention counts! Have some credit in the meantime. Thank you so much.",
         },
       }
-    : // Two versions, and which one is sent turns on the checkbox rather than on
-      // the donation. The old copy promised an email to everybody, which is a
-      // commitment s.30A does not allow to be made on the strength of a payment
-      // — so the promise is now only made to somebody who asked for it, and the
-      // rest are thanked without one being implied.
-      emailOptIn
-      ? {
-          granted: false,
-          grantedCents,
-          creditCents,
-          message: `You'll get an email once we are ready to accept payments. Soon, I promise.`,
-          reveal: {
-            kicker: "",
-            headline: "We’ll email you once payments are ready.",
-            gift: null,
-            body: "Soon, I promise. Thanks again :)",
-          },
-        }
-      : {
-          granted: false,
-          grantedCents,
-          creditCents,
-          message: `Payments still aren't ready, but the offer is noted. Thanks again.`,
-          reveal: {
-            kicker: "",
-            headline: "Payments still aren’t ready.",
-            gift: null,
-            body: "Your offer is noted, which is the part that counts. Thanks again :)",
-          },
-        };
+    : // No email promised here any more. The old copy told everybody who pressed
+      // pay that they would be written to, which is a commitment s.30A does not
+      // allow to be made on the strength of a payment. The reveal now says only
+      // what is true of everyone, and the offer to be told sits beside it as a
+      // button somebody can press or ignore.
+      {
+        granted: false,
+        grantedCents,
+        creditCents,
+        message: `Payments still aren't ready, but the offer is noted. Thanks again.`,
+        reveal: {
+          kicker: "",
+          headline: "Payments still aren’t ready.",
+          gift: null,
+          body: "Your offer is noted, which is the part that counts. Thanks again :)",
+        },
+      };
   return NextResponse.json(response);
 }
 

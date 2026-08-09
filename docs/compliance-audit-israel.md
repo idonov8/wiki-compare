@@ -196,9 +196,16 @@ user row because a flag answers "may we write to them now" while only a log answ
 allowed to send the one we sent in March", which is the question a claim actually asks.
 `mayEmail()` in `lib/consent.ts` is the gate, and answers false when the log is unreachable.
 
-The donate page carries an unticked box, on its own row rather than folded into the monthly
-one, and the "we'll email you" reveal is now sent only to somebody who ticked it. The monthly
-row lost "we'll email before each one" for the same reason.
+The asking happens on the reveal, after the payment, as a button reading *"Send me an email
+once payments are available"* — `POST /api/email-consent`, its own route rather than a field on
+the donation. Consent carried inside the payment body is consent inferred from a payment, which
+is the thing the section does not allow; a separate deliberate press is the written permission
+it does. The reveal copy no longer promises mail to anyone, and the monthly row lost "we'll
+email before each one" for the same reason.
+
+`EMAIL_CONSENT_WORDING` lives in `lib/types.ts` because both sides need the same string and
+neither may own it — the button renders it, the route stores it as the evidence. Stored per row
+rather than looked up, so changing the sentence later cannot rewrite what past consents meant.
 
 Still outstanding, for whenever mail actually starts going out: the message body needs the
 sender's name and contact, the word "advertisement" where required, and one-click
@@ -329,8 +336,9 @@ notice. What is not handled:
 
 - `db/schema.sql` — `email_consents`.
 - `lib/consent.ts` — `recordEmailConsent`, `mayEmail`.
-- `components/Donate.tsx`, `app/api/donate/route.ts` — the unticked opt-in, and copy that only
-  promises mail to whoever asked for it.
+- `app/api/email-consent/route.ts` — the one act that grants permission.
+- `components/Donate.tsx`, `app/api/donate/route.ts` — the button on the reveal, and reveal copy
+  that no longer promises mail to anybody.
 
 Typecheck, `npm run check` and `npm run build` all pass. No behavioural change to any funnel:
 all fifteen events in `EVENTS` still fire, from the same call sites, with the same properties.
