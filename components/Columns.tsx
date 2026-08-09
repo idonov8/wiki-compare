@@ -11,12 +11,12 @@ import {
   type LinkSpan,
 } from "@/lib/types";
 
-/** Lead photos never render wider than this, so a portrait from one edition
- *  can't dwarf a landscape from another. */
-const IMAGE_MAX_WIDTH = 300;
-/** Lead photos never render taller than this, so the columns line up
- *  regardless of each photo's own aspect ratio. */
-const IMAGE_MAX_HEIGHT = 260;
+/** Every lead photo renders in a box this size regardless of its own aspect
+ *  ratio, so the columns line up instead of stair-stepping by photo shape.
+ *  `object-contain` letterboxes rather than crops, so nothing of the photo
+ *  is lost. */
+const IMAGE_WIDTH = 300;
+const IMAGE_HEIGHT = 260;
 
 /**
  * The articles, side by side. Rendered as soon as the text exists — before any
@@ -147,8 +147,8 @@ export default function Columns({
             {chrome && article.image && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                className="article-image block mx-auto w-auto h-auto object-contain m-0 mb-4 p-1 bg-wiki-page border border-wiki-border rounded-[2px]"
-                style={{ maxWidth: IMAGE_MAX_WIDTH, maxHeight: IMAGE_MAX_HEIGHT }}
+                className="article-image block mx-auto object-contain m-0 mb-4 p-1 bg-wiki-page border border-wiki-border rounded-[2px]"
+                style={{ width: IMAGE_WIDTH, height: IMAGE_HEIGHT }}
                 src={article.image.src}
                 alt={article.image.alt ?? article.title}
                 loading="lazy"
