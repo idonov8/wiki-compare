@@ -2,7 +2,7 @@ import Link from "next/link";
 import { MEASURE } from "@/components/landing/Section";
 
 export const metadata = {
-  title: "Privacy — Wiki Narratives",
+  title: "Privacy — Wiki Compare",
   description: "What this site collects, why, who it reaches, and how to have it removed.",
 };
 
@@ -34,7 +34,7 @@ export default function Page() {
           href="/"
           className="font-mono text-[11px] tracking-[0.09em] uppercase text-ink-soft no-underline hover:text-ink"
         >
-          ← Wiki Narratives
+          ← Wiki Compare
         </Link>
 
         <h1 className="mt-[28px] mb-[10px] font-display font-normal text-[clamp(30px,4vw,42px)] leading-[1.05] tracking-[-0.01em] text-ink">
