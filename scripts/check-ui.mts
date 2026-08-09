@@ -420,7 +420,10 @@ await page.waitForSelector("mark.claim", { timeout: 30000 });
 
 const marks = await page.evaluate(() => {
   const out: { lang: string; gap: number; rects: number; sample: string }[] = [];
-  for (const col of document.querySelectorAll("section.column")) {
+  // Continuation columns too: a mark in the band where one edition runs on alone
+  // is set at a width nothing else on the page uses, which is exactly where a
+  // span that breaks at a direction boundary would go unnoticed.
+  for (const col of document.querySelectorAll("section.column, section.column-more")) {
     const lang = col.getAttribute("lang") ?? "?";
     for (const mark of col.querySelectorAll("mark.claim")) {
       const rects = [...mark.getClientRects()];
@@ -451,6 +454,78 @@ for (const lang of ["en", "he", "ar"]) {
   const n = marks.filter((m) => m.lang === lang).length;
   if (n) console.log(`        ${lang}: ${n} marks, max intra-line gap ${Math.max(...marks.filter((m) => m.lang === lang).map((m) => m.gap)).toFixed(1)}px`);
 }
+
+// ---- the page a lopsided set of editions leaves behind ----------------------
+
+// The three articles are never the same length, so the row of columns runs out
+// one column at a time — and it used to run out into a page that was a single
+// narrow column of Hebrew beside two thirds of nothing, for as long as the
+// longest edition kept going. The article is laid out in bands now: each band
+// carries only the editions that still have text and shares the whole width
+// between them, so the page is spent rather than left blank.
+const bands = await page.evaluate(() => {
+  const unit = document
+    .querySelector<HTMLElement>('[data-band="0"] [data-edition]')!
+    .getBoundingClientRect().width;
+  return [...document.querySelectorAll<HTMLElement>("[data-band]")].map((band) => {
+    const cols = [...band.querySelectorAll<HTMLElement>("[data-edition]")];
+    const runs = [...band.querySelectorAll<HTMLElement>(".run")];
+    return {
+      langs: cols.map((col) => col.getAttribute("data-edition") ?? "?"),
+      // Both as multiples of a starting column, which is the width the article
+      // was written to be read at.
+      width: cols[0].getBoundingClientRect().width / unit,
+      measure:
+        Math.max(
+          ...(runs.length ? runs : cols).map((el) => el.getBoundingClientRect().width),
+        ) / unit,
+      ends: cols.filter((col) => col.querySelector(".column-ends")).length,
+      resumes: cols.filter((col) => col.querySelector(".column-continues")).length,
+    };
+  });
+});
+
+check(bands.length > 1, "a lopsided article is laid out in bands, not one row of columns",
+  `${bands.length} band(s)`);
+check(
+  bands.every((band, i) => i === 0 || band.langs.length < bands[i - 1].langs.length),
+  "each band carries fewer editions than the one above it",
+  bands.map((b) => b.langs.join("+")).join(" → "),
+);
+// The point of the whole arrangement: the width an edition gives up when it ends
+// goes to the ones still running, rather than to the margin.
+check(
+  bands.every((band, i) => i === 0 || band.width > bands[i - 1].width + 0.1),
+  "and the editions still running take the width the finished ones gave up",
+  bands.map((b) => `${b.width.toFixed(2)}×`).join(" → "),
+);
+// Reclaiming the width must not cost the line length: a column set three times
+// as wide sets its remainder in three runs, so the measure stays what it was.
+check(
+  bands.every((band) => band.measure < 1.75),
+  "a widened column breaks into runs rather than setting a page-wide line",
+  bands.map((b) => `${b.measure.toFixed(2)}×`).join(", "),
+);
+// An edition that simply stopped beside one that did not would read as text we
+// had dropped, and an unlabelled column of Hebrew two bands down is a script the
+// reader has to identify for themselves.
+check(
+  bands.slice(0, -1).every((band, i) => band.ends === band.langs.length - bands[i + 1].langs.length),
+  "every edition that stops says where it ended",
+  bands.map((b) => `${b.ends} of ${b.langs.length}`).join("; "),
+);
+check(
+  bands.slice(1).every((band) => band.resumes === band.langs.length),
+  "and every edition that carries on is named again where it resumes",
+  bands.map((b) => `${b.resumes} of ${b.langs.length}`).join("; "),
+);
+// A band drops languages and never takes one back: an edition that ended two
+// bands ago reappearing below would mean the article was being re-ordered.
+check(
+  bands.every((band, i) => i === 0 || band.langs.every((l) => bands[i - 1].langs.includes(l))),
+  "no edition comes back after it has ended",
+  bands.map((b) => b.langs.join("+")).join(" → "),
+);
 
 // ---- lead image + collapsible key facts -------------------------------------
 
