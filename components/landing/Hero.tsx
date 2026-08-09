@@ -5,10 +5,11 @@ import Section from "./Section";
 import SearchBox from "../SearchBox";
 import {
   GLOBE_CX,
+  GLOBE_CY,
+  GLOBE_R,
   LATITUDES,
   MERIDIAN_LON,
   PARALLELS,
-  RING_PATH,
   cellPath,
   meridianPath,
   normaliseLon,
@@ -48,7 +49,7 @@ export default function Hero({ query, setQuery, onSearch, onPick, busy, sentinel
           goes, in the site's own three colours for disagreement, so the
           shape reads as somewhere with a great many tellings in it before a
           word of the headline is read. */}
-      <div className="animate-reveal-in pt-[max(2vh,12px)]" style={{ animationDelay: "10ms" }}>
+      <div className="animate-reveal-in pt-[max(1vh,8px)]" style={{ animationDelay: "10ms" }}>
         <GlobeWithLanguages />
       </div>
 
@@ -60,7 +61,12 @@ export default function Hero({ query, setQuery, onSearch, onPick, busy, sentinel
           // Not tighter than 1.05: the marked word carries a band the height of
           // its line box, and at 0.94 that band climbed into the descenders of
           // the line above it.
-          className="animate-reveal-in mt-5.5 mb-0 font-display font-normal text-[clamp(40px,7vw,84px)] leading-[1.05] tracking-[-0.02em]"
+          //
+          // Capped against the window's height as well as its width, for the
+          // same reason the globe above is: two lines of this set at 84px are
+          // 176px of a 700px-tall window, and the headline and the sphere
+          // together were what pushed the search field off the bottom of it.
+          className="animate-reveal-in mt-5.5 mb-0 font-display font-normal text-[clamp(38px,min(7vw,8vh),84px)] leading-[1.05] tracking-[-0.02em]"
           style={{ animationDelay: "70ms" }}
         >
           Same article.
@@ -75,7 +81,7 @@ export default function Hero({ query, setQuery, onSearch, onPick, busy, sentinel
           Explore differences in narratives through Wikipedia articles.
       </p>
 
-        <div className="animate-reveal-in mt-[32px]" style={{ animationDelay: "190ms" }}>
+        <div className="animate-reveal-in mt-[max(2.4vh,18px)]" style={{ animationDelay: "190ms" }}>
           <SearchBox
             variant="hero"
             value={query}
@@ -334,7 +340,13 @@ function GlobeMark() {
 
   return (
     <svg
-      className="pointer-events-none h-auto w-[clamp(170px,33vw,336px)]"
+      // Sized against the shorter side of the window, not the width alone. At
+      // 33vw a 1440x700 laptop drew a 336px sphere, and the sphere is only the
+      // top of a stack that also has two lines of display type and the search
+      // field under it: the field went off the bottom of the screen on the one
+      // page whose whole job is to be searched from. Height is the binding
+      // constraint on that window and the min() lets it bind.
+      className="pointer-events-none h-auto w-[clamp(150px,min(28vw,20vh),300px)]"
       viewBox="92 64 136 136"
       aria-hidden="true"
     >
@@ -355,7 +367,16 @@ function GlobeMark() {
         );
       })}
 
-      <path className="fill-none stroke-ink [stroke-width:1.6]" d={RING_PATH} />
+      {/* Closed, unlike `Loading`'s. That one is `RING_PATH`, which stops 26°
+          short so the last tile has somewhere to land — a gap that reads as a
+          gap only for as long as something is on its way into it. Nothing is
+          arriving here, so the same arc just left a bite out of the sphere. */}
+      <circle
+        className="fill-none stroke-ink [stroke-width:1.6]"
+        cx={GLOBE_CX}
+        cy={GLOBE_CY}
+        r={GLOBE_R}
+      />
 
       {PARALLELS.map(([cy, rx, ry], i) => (
         <ellipse
