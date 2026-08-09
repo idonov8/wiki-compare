@@ -5,6 +5,7 @@ import Columns from "./Columns";
 import { comparePath } from "./Highlighted";
 import CreditBar from "./CreditBar";
 import DiffNav from "./DiffNav";
+import Footer from "./Footer";
 import Landing from "./landing/Landing";
 import LangBars from "./LangBars";
 import LangSwitch from "./LangSwitch";
@@ -486,6 +487,10 @@ export default function Compare() {
   const comparing = phase === "comparing";
   const landing = phase === "idle" && !error;
   const mastheadSearch = !landing || docked;
+  /** Whether the floating language switch is over the bottom of the page, which
+   *  the footer has to keep its last line clear of. */
+  const langSwitch =
+    narrow && !!solo && hasColumns && (comparing || phase === "done") && available.length > 1;
 
   return (
     <>
@@ -739,9 +744,7 @@ export default function Compare() {
         </div>
       )}
 
-      {narrow && solo && hasColumns && (comparing || phase === "done") && (
-        <LangSwitch langs={available} active={solo} onChange={readIn} />
-      )}
+      {langSwitch && <LangSwitch langs={available} active={solo!} onChange={readIn} />}
 
       {comparing && <Loading title={target?.title ?? ""} />}
 
@@ -774,6 +777,17 @@ export default function Compare() {
             </div>
           )}
         </>
+      )}
+
+      {/* Every page ends the same way. The landing page carries its own copy
+          inside the grain overlay, so this is the footer for everything else —
+          including a preview, where the faded remainder now stops rather than
+          scrolling on into nothing. */}
+      {!landing && (
+        <Footer
+          onDonate={() => goDonate("footer")}
+          className={langSwitch ? "pb-[76px]" : ""}
+        />
       )}
 
       {card && (

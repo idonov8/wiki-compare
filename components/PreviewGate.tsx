@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import { PRICE_PER_ARTICLE_CENTS, formatCents } from "@/lib/pricing";
 
 /**
@@ -34,40 +33,11 @@ export default function PreviewGate({
   const affordable = creditCents >= PRICE_PER_ARTICLE_CENTS;
   const canFund = signedIn && affordable;
 
-  // Below the gate is just the unprocessed tail — nothing to read. Rather
-  // than let the reader scroll through that empty space, we pin it in place
-  // once the gate reaches the middle of the screen, so scrolling stops
-  // exactly where the article does.
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el) return;
-
-    const holdAtCenter = () => {
-      const rect = el.getBoundingClientRect();
-      const gateCenter = rect.top + rect.height / 2;
-      const viewportCenter = window.innerHeight / 2;
-      if (gateCenter < viewportCenter) {
-        window.scrollBy(0, gateCenter - viewportCenter);
-      }
-    };
-
-    holdAtCenter();
-    window.addEventListener("scroll", holdAtCenter, { passive: true });
-    window.addEventListener("resize", holdAtCenter);
-    return () => {
-      window.removeEventListener("scroll", holdAtCenter);
-      window.removeEventListener("resize", holdAtCenter);
-    };
-  }, []);
-
   return (
     // Raised paper, ruled top and bottom, no shadow and no accent colour: this
     // is the point where the article stops being compared, stated plainly,
     // not a panel selling something.
     <div
-      ref={rootRef}
       className="gate border-t border-b border-rule bg-paper-raised px-[24px] pt-[34px] pb-[32px] text-center max-tight:px-[18px] max-tight:pt-[26px] max-tight:pb-[24px]"
     >
       <h2 className="mb-[6px] font-display text-[27px] font-normal max-tight:text-[23px]">
