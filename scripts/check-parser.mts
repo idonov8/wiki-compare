@@ -9,6 +9,7 @@
  */
 import { KEY_FACTS_HEADING, LEAD_HEADING, type Lang } from "../lib/types";
 import { fixtureSnapshots, listFixtures, loadFixture } from "../fixtures/loader";
+import { plainText } from "../lib/wikipedia";
 
 let failures = 0;
 
@@ -56,6 +57,21 @@ for (const slug of listFixtures()) {
     }
   }
 }
+
+// ---- image credit fields ----------------------------------------------------
+
+// Commons returns the author as a fragment of the file page, TemplateStyles and
+// all. Recorded verbatim from File:Red flag waving.svg, whose credit rendered as
+// a stylesheet followed by the author's name.
+const ARTIST_WITH_TEMPLATESTYLES =
+  '<style data-mw-deduplicate="TemplateStyles:r1129693374">' +
+  '.mw-parser-output .ubx-floatleft{float:left}.mw-parser-output .ubx-floatright{float:right}' +
+  "</style>" +
+  '<a href="//commons.wikimedia.org/wiki/User:Wereon" title="User:Wereon">Wereon</a>';
+
+console.log("\nImage credit");
+check(plainText(ARTIST_WITH_TEMPLATESTYLES) === "Wereon", "author credit drops TemplateStyles");
+check(plainText("<span>Jane <b>Doe</b></span>") === "Jane Doe", "author credit keeps the rendered name");
 
 // ---- the hand-compared case -------------------------------------------------
 
