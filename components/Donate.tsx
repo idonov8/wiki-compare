@@ -4,19 +4,11 @@ import { useEffect, useState } from "react";
 import SignIn from "@/components/SignIn";
 import { initAnalytics, track } from "@/lib/analytics";
 import { articlesFor, formatCents } from "@/lib/pricing";
-import type { CouponCheck, DonateResponse, MeResponse } from "@/lib/types";
+import { EMAIL_CONSENT_WORDING, type CouponCheck, type DonateResponse, type MeResponse } from "@/lib/types";
 
 const PRESETS = [100, 300, 500, 1000];
 
 /** About a sixth of the gift, rounded to a quarter, as an opening suggestion. */
-/**
- * The exact proposition the opt-in box puts, kept as a constant because
- * app/api/donate/route.ts stores this same sentence as the evidence of what was
- * agreed to. If the two drift, the consent log starts attesting to words nobody
- * was shown, which is worse than having no log.
- */
-const EMAIL_OPT_IN_WORDING = "I'd like to recieve updates about the project";
-
 function suggestedMaintenance(amountCents: number): number {
   return Math.round((amountCents * 0.15) / 25) * 25;
 }
@@ -81,7 +73,11 @@ export default function Donate() {
   const [custom, setCustom] = useState("");
   const [maintenance, setMaintenance] = useState(String(suggestedMaintenance(500) / 100));
   const [monthly, setMonthly] = useState(false);
-  const [emailOptIn, setEmailOptIn] = useState(true);
+  /** The offer to be told when payments open, made on the reveal rather than in
+   *  the form: "idle" until pressed, then the request, then whichever way it
+   *  went. Never resets — the permission is given once and the button that gave
+   *  it should not come back looking pressable. */
+  const [notify, setNotify] = useState<"idle" | "saving" | "done" | "failed">("idle");
   const [coupon, setCoupon] = useState("");
   // No state for "redeemed": the moment that happens, this page is leaving.
   const [checking, setChecking] = useState(false);
@@ -221,6 +217,52 @@ export default function Donate() {
                 readable for everyone who comes after you.
               </p>
             )}
+
+            {/* The offer to be told, and the whole of the permission behind it.
+                Pressing this is the written consent s.30A asks for — an act of
+                its own, after the payment rather than inside it, so that nothing
+                about giving money can be read as agreeing to be written to.
+                Somebody who ignores it is never mailed, which is why it has to
+                be a button and not a notice. */}
+            <div className="donate-reveal-notify mb-[30px]">
+              {notify === "done" ? (
+                <p
+                  className="m-0 font-mono text-[12px] leading-[1.6] tracking-[0.04em] text-paper-62"
+                  role="status"
+                >
+                  We&apos;ll write to {me?.email ?? "you"} once, when payments open.
+                </p>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={notify === "saving"}
+                    onClick={async () => {
+                      if (notify === "saving") return;
+                      setNotify("saving");
+                      try {
+                        const res = await fetch("/api/email-consent", { method: "POST" });
+                        if (!res.ok) throw new Error("no");
+                        setNotify("done");
+                      } catch {
+                        setNotify("failed");
+                      }
+                    }}
+                    className="py-[11px] px-[20px] bg-transparent border border-paper-55 rounded-[2px] font-mono text-[12px] tracking-[0.06em] text-paper-raised transition-colors duration-[120ms] enabled:hover:border-paper-raised enabled:hover:bg-paper-22 disabled:opacity-[0.5] disabled:cursor-progress"
+                  >
+                    {notify === "saving" ? "One moment…" : EMAIL_CONSENT_WORDING}
+                  </button>
+                  <p
+                    className="mt-[10px] mb-0 font-mono text-[11px] leading-[1.6] tracking-[0.04em] text-paper-55"
+                    role={notify === "failed" ? "alert" : undefined}
+                  >
+                    {notify === "failed"
+                      ? "That didn't save. Press it again?"
+                      : "One message, and nothing else."}
+                  </p>
+                </>
+              )}
+            </div>
 
             <p className="donate-reveal-back m-0">
               <a
@@ -388,27 +430,6 @@ export default function Donate() {
                 Repeat this every month
                 <small className="block text-[12.5px] text-ink-soft">
                   Cancel whenever, from your account.
-                </small>
-              </span>
-            </label>
-
-            {/* Unticked, and stays unticked. The row is separate from the
-                monthly one above rather than folded into it because s.30A wants
-                consent to being advertised to, given on its own — a box that
-                also means "charge me every month" is not that, and a donation is
-                not consent to anything. The wording is duplicated verbatim in
-                app/api/donate/route.ts, which stores it alongside the answer. */}
-            <label className="donate-email-optin flex items-baseline gap-[10px] py-[14px] border-t border-rule text-[14px]">
-              <input
-                type="checkbox"
-                checked={emailOptIn}
-                onChange={(e) => setEmailOptIn(e.target.checked)}
-                className="flex-none w-[15px] h-[15px] accent-ink relative top-[2px]"
-              />
-              <span>
-                {EMAIL_OPT_IN_WORDING}
-                <small className="block text-[12.5px] text-ink-soft">
-                  Major milestone updates only. No spam, promise.
                 </small>
               </span>
             </label>
@@ -583,7 +604,7 @@ export default function Donate() {
                   method: "POST",
                   headers: { "content-type": "application/json" },
                   // No coupon here: this button redeems one directly, above.
-                  body: JSON.stringify({ amountCents, maintenanceCents, monthly, from, emailOptIn }),
+                  body: JSON.stringify({ amountCents, maintenanceCents, monthly, from }),
                 });
                 // Same read as above: a bodyless 500 here had the same bug.
                 const json = await readJson(res);

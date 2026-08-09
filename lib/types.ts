@@ -198,16 +198,20 @@ export interface DonateRequest {
   monthly: boolean;
   /** Which surface sent them here, for the funnel. */
   from?: string;
-  /**
-   * Whether they ticked the box asking to be told when payments open.
-   *
-   * Separate from `monthly` and from the donation itself on purpose: s.30A wants
-   * consent to receiving advertisements specifically, and a donation is not it.
-   * Absent and false mean the same thing — nobody is written to — which is what
-   * makes an unticked box the safe default rather than an ambiguous one.
-   */
-  emailOptIn?: boolean;
 }
+
+/**
+ * The exact proposition somebody agrees to by pressing the button on the reveal.
+ *
+ * Lives here because both sides need the same string and neither may own it: the
+ * button renders it in the browser, and `/api/email-consent` stores it as the
+ * evidence of what was agreed to. s.30A consent is consent to a particular
+ * wording, so a log holding different words from the ones on the screen attests
+ * to something that never happened. Changing this sentence changes what future
+ * rows mean — old rows keep the words they were given, which is the point of
+ * storing them per row rather than looking them up.
+ */
+export const EMAIL_CONSENT_WORDING = "Send me an email once payments are available";
 
 /** What the pay button submits to redeem. Case and spacing are the server's problem. */
 export interface CouponRequest {

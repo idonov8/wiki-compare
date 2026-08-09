@@ -47,6 +47,8 @@ export const EVENTS = [
   "coupon_submitted",
   "coupon_redeemed",
   "coupon_rejected",
+  /** Somebody asked to be told when payments open. */
+  "email_consent_granted",
   /** Credits deducted for a full read. */
   "credits_spent",
   /** A comparison was served, cached or freshly run. */
