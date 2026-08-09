@@ -49,7 +49,7 @@ export default function Hero({ query, setQuery, onSearch, onPick, busy, sentinel
           goes, in the site's own three colours for disagreement, so the
           shape reads as somewhere with a great many tellings in it before a
           word of the headline is read. */}
-      <div className="animate-reveal-in pt-[max(1vh,8px)]" style={{ animationDelay: "10ms" }}>
+      <div className="animate-reveal-in pt-[max(1.8vh,14px)]" style={{ animationDelay: "10ms" }}>
         <GlobeWithLanguages />
       </div>
 
@@ -164,7 +164,10 @@ function GlobeWithLanguages() {
   return (
     <div className="mx-auto grid w-fit grid-cols-[auto_auto_auto] items-center justify-center gap-x-[clamp(10px,2.6vw,26px)]">
       <LanguageMark lang="en" align="items-end text-end" />
-      <div className="flex justify-center">
+      {/* Nudged right of the column's own centre, so the sphere leans towards
+          "He" rather than sitting dead-equidistant between the two — the same
+          bias the reference layout was drawn with. */}
+      <div className="flex translate-x-[clamp(8px,2.4vw,22px)] justify-center">
         <GlobeMark />
       </div>
       <LanguageMark lang="he" align="items-start text-start" />
@@ -346,7 +349,7 @@ function GlobeMark() {
       // field under it: the field went off the bottom of the screen on the one
       // page whose whole job is to be searched from. Height is the binding
       // constraint on that window and the min() lets it bind.
-      className="pointer-events-none h-auto w-[clamp(150px,min(28vw,20vh),300px)]"
+      className="pointer-events-none h-auto w-[clamp(160px,min(32vw,23vh),340px)]"
       viewBox="92 64 136 136"
       aria-hidden="true"
     >
