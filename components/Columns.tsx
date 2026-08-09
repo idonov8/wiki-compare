@@ -148,6 +148,18 @@ export default function Columns({
                 >
                   rev {article.revid}
                 </a>
+                {/* The licence the text below is under, beside the revision it
+                    came from. CC BY-SA asks to be named wherever the material
+                    is; naming it once in the footer would leave three columns
+                    of somebody else's prose with nothing on them saying so. */}
+                <a
+                  href="https://creativecommons.org/licenses/by-sa/4.0/"
+                  target="_blank"
+                  rel="license noreferrer"
+                  className="ms-auto text-wiki-link no-underline hover:underline"
+                >
+                  CC BY-SA 4.0
+                </a>
               </div>
             )}
             {chrome && (
@@ -156,14 +168,33 @@ export default function Columns({
               </h1>
             )}
             {chrome && article.image && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                className="article-image block mx-auto object-contain m-0 mb-4 p-1 bg-wiki-page rounded-[2px]"
-                style={{ width: IMAGE_WIDTH, height: IMAGE_HEIGHT }}
-                src={article.image.src}
-                alt={article.image.alt ?? article.title}
-                loading="lazy"
-              />
+              <figure className="m-0 mb-4">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="article-image block mx-auto object-contain m-0 p-1 bg-wiki-page rounded-[2px]"
+                  style={{ width: IMAGE_WIDTH, height: IMAGE_HEIGHT }}
+                  src={article.image.src}
+                  alt={article.image.alt ?? article.title}
+                  loading="lazy"
+                />
+                {/* The photographer and the terms. Small, because it is not for
+                    the reader so much as owed to whoever took the picture — but
+                    present, because a CC BY-SA photo shown without it is a photo
+                    shown without permission. */}
+                {article.image.credit && (
+                  <figcaption className="article-image-credit mt-[6px] text-center font-mono text-[10px] leading-[1.5] text-ink-soft">
+                    {article.image.credit.artist && <>{article.image.credit.artist} · </>}
+                    <a
+                      href={article.image.credit.licenseUrl ?? article.image.credit.fileUrl}
+                      target="_blank"
+                      rel="license noreferrer"
+                      className="text-wiki-link no-underline hover:underline"
+                    >
+                      {article.image.credit.license}
+                    </a>
+                  </figcaption>
+                )}
+              </figure>
             )}
             {chrome && keyFacts && (
               <details
