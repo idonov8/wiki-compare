@@ -499,13 +499,17 @@ function articleTitleFromHref(href: string, cls: string): string | null {
  * plain text `toText` produced for the same html), so the client can turn them
  * into links to our own comparison of that article without re-parsing.
  *
+ * `qidByTitle` is optional and, when given, stamps each span with the Wikidata
+ * item its title resolved to — the same id the coverage diff groups on, so a
+ * gap pill can find the one span that is its evidence.
+ *
  * ponytail: a forward-moving cursor binds each anchor to the first occurrence
  * of its label at or after the previous one — document order, so it is right in
  * practice. Ceiling: a link whose visible text repeats an earlier identical
  * phrase on the way could bind to the wrong occurrence; upgrade by tracking
  * offsets through `toText`'s normalisation instead of re-finding the label.
  */
-function extractLinks(html: string, text: string): LinkSpan[] {
+function extractLinks(html: string, text: string, qidByTitle?: Map<string, string>): LinkSpan[] {
   const root = parse(html);
   const spans: LinkSpan[] = [];
   let cursor = 0;
@@ -519,13 +523,13 @@ function extractLinks(html: string, text: string): LinkSpan[] {
     if (!label) continue;
     const start = text.indexOf(label, cursor);
     if (start === -1) continue; // dropped by MAX_SECTION_CHARS or reworded by normalisation
-    spans.push({ start, end: start + label.length, title });
+    spans.push({ start, end: start + label.length, title, qid: qidByTitle?.get(title) });
     cursor = start + label.length;
   }
   return spans;
 }
 
-export function splitSections(html: string): Section[] {
+export function splitSections(html: string, qidByTitle?: Map<string, string>): Section[] {
   const root = parse(html);
 
   // Chrome first, then key facts off the surviving infobox, then the tables.
@@ -544,7 +548,7 @@ export function splitSections(html: string): Section[] {
     const html = buffer.join("");
     const text = toText(html).slice(0, MAX_SECTION_CHARS);
     if (text.length > 40 && !isBoilerplate(heading)) {
-      sections.push({ heading, level, text, links: extractLinks(html, text) });
+      sections.push({ heading, level, text, links: extractLinks(html, text, qidByTitle) });
     }
     buffer = [];
   };
@@ -712,13 +716,18 @@ export function linkTitlesOf(page: ParsedPage): string[] {
   return out;
 }
 
-export function snapshotOf(lang: Lang, page: ParsedPage, linkQids: string[]): ArticleSnapshot {
+export function snapshotOf(
+  lang: Lang,
+  page: ParsedPage,
+  linkQids: string[],
+  qidByTitle?: Map<string, string>,
+): ArticleSnapshot {
   return {
     lang,
     title: page.title,
     revid: page.revid,
     url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title.replace(/ /g, "_"))}`,
-    sections: splitSections(page.text),
+    sections: splitSections(page.text, qidByTitle),
     image: extractLeadImage(page.text, lang),
     linkQids,
   };
@@ -727,7 +736,7 @@ export function snapshotOf(lang: Lang, page: ParsedPage, linkQids: string[]): Ar
 export async function fetchArticle(lang: Lang, title: string): Promise<ArticleSnapshot> {
   const page = await fetchParsedPage(lang, title);
   const qidMap = await titlesToQids(lang, linkTitlesOf(page));
-  const snapshot = snapshotOf(lang, page, [...new Set(qidMap.values())]);
+  const snapshot = snapshotOf(lang, page, [...new Set(qidMap.values())], qidMap);
   // The credit lookup lives out here rather than in `snapshotOf` because
   // `snapshotOf` is also how fixtures replay, offline, with no API to ask. A
   // snapshot reaching the database has been through this line; one reconstructed
