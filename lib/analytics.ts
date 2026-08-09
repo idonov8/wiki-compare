@@ -12,6 +12,13 @@ import type { PostHog } from "posthog-js";
  * `donate_attempted` is the event this whole exercise exists to produce. It
  * counts the people who tried to give money to something that could not take it,
  * which is the only number that says whether any of this was worth building.
+ *
+ * The browser half runs cookieless and profileless on purpose, which is what
+ * keeps a consent banner off the front of a reading site. The constraint that
+ * falls out of it: everything here has to be answerable in aggregate, because
+ * there is no per-reader record to go back to and no way to ask a follow-up
+ * question of one visit. Anything that would need one belongs in the database
+ * next to the account it concerns, not here.
  */
 
 const KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
@@ -88,6 +95,13 @@ export function capture(
         // are attributed to the server itself rather than being dropped: the
         // count is the point, and inventing a per-request id would inflate the
         // user total with one "person" per anonymous comparison.
+        //
+        // The `distinctId` callers do pass is an account id, so these events are
+        // the one identified stream left. That is deliberate and needs no banner
+        // — nothing is stored on the device, and an account holder is told about
+        // it in the privacy notice — but it does mean a caller should pass one
+        // only where the account is the subject of the event. `credits_spent`
+        // qualifies; `comparison_served` does not, and does not.
         distinct_id: distinctId ?? "server",
         properties: { ...properties, $lib: "wiki-compare-server" },
         timestamp: new Date().toISOString(),
@@ -111,9 +125,6 @@ let starting = false;
 const queued: Array<[AnalyticsEvent, EventProperties]> = [];
 const QUEUE_LIMIT = 20;
 
-/** An account named before the library was ready, applied once it is. */
-let pendingId: [string, EventProperties] | null = null;
-
 /**
  * Load and initialise posthog-js, at most once per page.
  *
@@ -130,16 +141,47 @@ export function initAnalytics(): void {
         // We send `article_opened` ourselves with the subject attached, which is
         // the pageview worth having; the automatic one would double every row.
         capture_pageview: false,
+        /**
+         * Everything below this line is what lets the site run without a cookie
+         * banner, and none of it is a default — posthog-js out of the box sets a
+         * year-long cookie, autocaptures every click, and leaves replay to a
+         * server-side switch. See docs/compliance-audit-israel.md.
+         *
+         * Cookieless mode stores nothing on the device at all: no cookie, no
+         * localStorage, no sessionStorage. PostHog counts visitors with a hash
+         * of (project, daily salt, IP, user agent, host) computed on their
+         * servers, and the salt is discarded daily, so there is no identifier
+         * here to consent to.
+         *
+         * This one is not self-enforcing: cookieless mode must also be switched
+         * on in the PostHog project settings, or every event sent this way is
+         * dropped at ingestion.
+         */
+        cookieless_mode: "always",
+        /**
+         * No person profiles, ever. A profile is the durable record of one
+         * reader, and the reading list this site would attach to it — which
+         * subjects, in which language — is close enough to political opinion to
+         * be data of special sensitivity under Amendment 13. The event counts
+         * are what the funnels need; the person behind them is not.
+         */
+        person_profiles: "never",
+        /**
+         * Autocapture is the sharpest edge here, because what it records is the
+         * text of whatever was clicked, and on this site that text is Wikipedia
+         * prose about the conflict. Our fifteen named events say everything the
+         * funnels need without shipping the page's own words to a third party.
+         */
+        autocapture: false,
+        /**
+         * Off here as well as in the project settings. Replay of these pages is
+         * a recording of somebody reading about a war, and the belt-and-braces
+         * is deliberate: left at its default this is a checkbox in a dashboard
+         * away from being on, with nothing in the repo to say it changed.
+         */
+        disable_session_recording: true,
       });
       client = posthog;
-      // Identity first, so the events waiting behind it land on the account
-      // rather than on the anonymous id they were raised under.
-      if (pendingId) {
-        try {
-          posthog.identify(pendingId[0], pendingId[1]);
-        } catch {}
-        pendingId = null;
-      }
       for (const [event, properties] of queued.splice(0)) {
         try {
           posthog.capture(event, properties);
@@ -151,7 +193,6 @@ export function initAnalytics(): void {
       // queue is dropped and `track` stays a no-op for the rest of the page.
       starting = false;
       queued.length = 0;
-      pendingId = null;
     });
 }
 
@@ -166,21 +207,5 @@ export function track(event: AnalyticsEvent, properties: EventProperties = {}): 
     }
     initAnalytics();
     if (queued.length < QUEUE_LIMIT) queued.push([event, properties]);
-  } catch {}
-}
-
-/**
- * Attach the browser's events to an account, so the sign-in that a donation
- * needed and the donation itself are one person rather than two.
- */
-export function identify(distinctId: string, properties: EventProperties = {}): void {
-  if (!KEY || typeof window === "undefined") return;
-  try {
-    if (!client) {
-      pendingId = [distinctId, properties];
-      initAnalytics();
-      return;
-    }
-    client.identify(distinctId, properties);
   } catch {}
 }
