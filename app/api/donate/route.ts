@@ -83,16 +83,21 @@ export async function POST(request: Request) {
           body: "Intention counts! Have some credit in the meantime. Thank you so much.",
         },
       }
-    : {
+    : // No email promised here any more. The old copy told everybody who pressed
+      // pay that they would be written to, which is a commitment s.30A does not
+      // allow to be made on the strength of a payment. The reveal now says only
+      // what is true of everyone, and the offer to be told sits beside it as a
+      // button somebody can press or ignore.
+      {
         granted: false,
         grantedCents,
         creditCents,
-        message: `You'll get an email once we are ready to accept payments. Soon, I promise.`,
+        message: `Payments still aren't ready, but the offer is noted. Thanks again.`,
         reveal: {
           kicker: "",
-          headline: "We’ll email you once payments are ready.",
+          headline: "Payments still aren’t ready.",
           gift: null,
-          body: "Soon, I promise. Thanks again :)",
+          body: "Your offer is noted, which is the part that counts. Thanks again :)",
         },
       };
   return NextResponse.json(response);

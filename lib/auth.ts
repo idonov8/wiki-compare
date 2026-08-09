@@ -152,10 +152,10 @@ export async function sendLoginEmail(email: string, url: string): Promise<void> 
       // Resend's shared onboarding sender, which works before any domain is
       // verified. Swap it for an address on a verified domain once there is one;
       // until then this is the difference between mail sending and mail 403ing.
-      from: "wiki-narratives <onboarding@resend.dev>",
+      from: "wiki-compare <onboarding@resend.dev>",
       to: [email],
       subject: "Your sign-in link",
-      text: `Sign in to wiki-narratives:\n\n${url}\n\nIf you did not ask for this, ignore it.`,
+      text: `Sign in to wiki-compare:\n\n${url}\n\nIf you did not ask for this, ignore it.`,
     }),
   });
 

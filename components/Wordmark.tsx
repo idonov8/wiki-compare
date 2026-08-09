@@ -24,11 +24,11 @@ const BETA_GROUP_URL = "https://chat.whatsapp.com/L8T9rwmdALzJD8IqYZ292y?s=cl&p=
 export default function Wordmark() {
   return (
     <span className="wordmark-group inline-flex items-end gap-[10px]">
-      <a href="/" aria-label="Wiki Narratives" className="wordmark group inline-flex items-end no-underline">
+      <a href="/" aria-label="Wiki Compare" className="wordmark group inline-flex items-end no-underline">
         <span className="wordmark-type font-wordmark text-[29px] max-tight:text-[26px] leading-none tracking-[-0.01em] text-ink italic">
           wiki
           <Strand />
-          narratives
+          compare
         </span>
       </a>
       <BetaBadge />
@@ -42,7 +42,7 @@ function BetaBadge() {
       href={BETA_GROUP_URL}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label="Join the Wiki Narratives beta testers group on WhatsApp"
+      aria-label="Join the Wiki Compare beta testers group on WhatsApp"
       className="beta-badge group/beta relative mb-[3px] inline-block overflow-hidden rounded-[2px] border border-rule bg-paper-raised px-[6px] py-[2px] font-mono text-[10px] leading-none tracking-[0.09em] text-ink-soft uppercase no-underline transition-transform duration-150 ease-out hover:-translate-y-[1px] hover:-rotate-[3deg] hover:border-ink hover:text-ink focus-visible:-translate-y-[1px] focus-visible:-rotate-[3deg] focus-visible:border-ink focus-visible:text-ink"
     >
       beta
