@@ -94,10 +94,9 @@ export default function Highlighted({
         <a
           href={comparePath(link.title, lang)}
           className="wikilink text-wiki-link no-underline hover:underline"
-          // The coverage panel below the columns targets a concept's first
-          // mention by this id — undefined for a link that never resolved to a
-          // Wikidata item, which React renders as no attribute at all.
-          data-qid={link.qid}
+          // Disabled for now, along with the coverage panel that read it — see
+          // Compare.tsx. Was `data-qid={link.qid}`, targeting a concept's first
+          // mention by the Wikidata id its title resolved to.
           onClick={(e) => {
             // Let modifier/middle clicks open a new tab; take over the plain one.
             if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
