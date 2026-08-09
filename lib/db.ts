@@ -171,12 +171,16 @@ export async function bumpServedCount(cacheKey: string): Promise<void> {
 /**
  * The most recently computed comparison for each subject, newest first.
  *
+ * Every cached subject, not a page of them: the ledger on the landing page is
+ * the whole record of what has been read, and a cap there would quietly retire
+ * older articles from it. One row per subject is the only reduction.
+ *
  * Titles and language lists are projected out in SQL rather than in TypeScript:
  * `result` holds every article's full section text, so selecting the column to
  * pick two strings off it would pull megabytes across the wire to render a
- * dozen list rows.
+ * list of titles.
  */
-export async function recentComparisons(limit = 12): Promise<RecentArticle[]> {
+export async function recentComparisons(): Promise<RecentArticle[]> {
   const rows = await sql()`
     SELECT qid, title, lang, langs, scope, computed_at FROM (
       SELECT DISTINCT ON (qid)
@@ -201,7 +205,6 @@ export async function recentComparisons(limit = 12): Promise<RecentArticle[]> {
     ) latest
     WHERE title IS NOT NULL
     ORDER BY computed_at DESC
-    LIMIT ${limit}
   `;
   return rows.map((row) => ({
     qid: row.qid as string,
