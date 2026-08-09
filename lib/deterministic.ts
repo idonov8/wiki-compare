@@ -1,4 +1,5 @@
-import type { ArticleSnapshot, CoverageGap, Lang, Section } from "./types";
+import type { ArticleSnapshot, CoverageGap, Lang, PreviewCut, Section } from "./types";
+import { KEY_FACTS_HEADING } from "./types";
 
 /**
  * Everything in this file runs before any model call and costs nothing.
@@ -171,60 +172,89 @@ export function screenGroups(groups: SectionGroup[], langs: Lang[], limit = 8): 
     .map(({ score: _score, ...group }) => group);
 }
 
-/** How much of the article a free preview reads, counted in paragraphs of the
- *  reference version — roughly the first screenful, lead included. A section is
- *  the smallest thing the boundary can land on, so this is a budget rather than
- *  a limit: the group that crosses it is read whole and the preview stops there. */
-export const PREVIEW_PARAGRAPHS = 7;
+/**
+ * How much of each article a free preview reads, in characters of body text.
+ *
+ * One number, applied identically to every language, which is the whole of the
+ * idea. The previous budget was counted in paragraphs of a reference version and
+ * spent on whole aligned sections, so how much of the Hebrew and Arabic articles
+ * a preview actually read was decided by how their section structure happened to
+ * line up against the English one: the same setting read three paragraphs of one
+ * version beside fifteen of another, and the free preview was worth several times
+ * more on some articles than on others. Cutting every version at the same
+ * character count is cruder — the three prefixes do not cover quite the same
+ * material, and a section can be cut in half — but it is the same everywhere, it
+ * is what the fade in the columns can honestly describe, and it prices a preview
+ * at a predictable number of tokens.
+ */
+export const PREVIEW_CHARS = 3000;
 
-/** A ceiling on top of the budget, for the article whose sections are each one
- *  short paragraph: without it a preview of one of those would read seven
- *  separate sections, which is a long way down the page however few words it is. */
-export const PREVIEW_SECTIONS = 2;
+/** Below this much budget left, stop at the section boundary instead. A heading
+ *  followed by a line and a half of text, then the gate, reads as the page
+ *  having broken rather than as the preview having ended. */
+const MIN_SLICE = 400;
 
-/** Paragraphs in a group, as the reference version writes it — or, when that
- *  version has no such section, the longest version that does, so a section
- *  missing from the reference still costs what it is worth. `toText` leaves one
- *  line per block, so lines are paragraphs. */
-function paragraphsIn(group: SectionGroup, refLang: Lang): number {
-  const count = (text: string) => text.split("\n").filter((l) => l.trim()).length;
-  const ref = group.sections[refLang];
-  if (ref) return count(ref.text);
-  return Math.max(0, ...Object.values(group.sections).map((s) => count(s.text)));
+/** `limit` characters of `text`, backed off to the last paragraph break and
+ *  failing that the last word break, so a preview never ends mid-word. Both
+ *  fallbacks have to keep most of the slice, or a text with one early newline
+ *  would cost the preview nearly its whole budget. */
+function clip(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  const slice = text.slice(0, limit);
+  const para = slice.lastIndexOf("\n");
+  if (para > limit / 2) return slice.slice(0, para);
+  const word = slice.lastIndexOf(" ");
+  return word > limit / 2 ? slice.slice(0, word) : slice;
 }
 
 /**
- * The opening of the article: the lead, the key facts, and as much of the body
- * as fits in PREVIEW_PARAGRAPHS, in document order.
+ * The opening of an article: the same PREVIEW_CHARS characters of body text in
+ * every language, plus the key facts, as a snapshot the ordinary comparison
+ * machinery can be pointed at unchanged.
  *
- * Deliberately not `screenGroups` with a smaller limit, which is what this was
- * at first. `screenGroups` takes the highest-scoring groups anywhere in the
- * article, so a preview built from it read the lead, something from the middle
- * and the last section before the references — findings scattered down a page
- * whose intervening text nobody had looked at. The interface fades the article
- * out past the point the comparison stopped, and a fade only means anything if
- * everything above it was actually read: it has to be a prefix. Divergence
- * scoring is still exactly right for the full run, which is free to jump around
- * because it ends up covering the whole article anyway.
+ * A prefix rather than the most divergent parts of the article, because the
+ * interface fades the columns out past the point the comparison stopped and a
+ * fade only means anything if everything above it was read. Divergence scoring
+ * is still what a full run wants — `screenGroups` — since it covers the whole
+ * article anyway and is free to jump around inside it.
  *
- * The budget is spent by the lead as well as the body, and the key facts are
- * free: that block sits above the columns rather than in them, so nothing it
- * costs would be visible as depth on the page. An article whose lead alone
- * exhausts the budget is previewed on its lead — which is where the versions
- * usually disagree most anyway.
+ * The key-facts block is outside the budget and outside the cut: it sits above
+ * the columns rather than in them, so nothing it costs is visible as depth on
+ * the page, and a long infobox should not be able to spend a preview before the
+ * lead has been read.
  */
-export function previewGroups(groups: SectionGroup[], refLang: Lang = "en"): SectionGroup[] {
-  const ordered = [...groups].sort((a, b) => a.order - b.order);
-  const opening = ordered.filter((g) => g.key === "lead" || g.key === "key-facts");
-  const lead = opening.find((g) => g.key === "lead");
+export function previewOf(
+  article: ArticleSnapshot,
+  budget = PREVIEW_CHARS,
+): { article: ArticleSnapshot; cut: PreviewCut } {
+  const sections: Section[] = [];
+  let cut: PreviewCut = { section: 0, chars: 0 };
+  let left = budget;
+  let index = 0;
 
-  let spent = lead ? paragraphsIn(lead, refLang) : 0;
-  const body: SectionGroup[] = [];
-  for (const group of ordered) {
-    if (group.key === "lead" || group.key === "key-facts") continue;
-    if (spent >= PREVIEW_PARAGRAPHS || body.length >= PREVIEW_SECTIONS) break;
-    body.push(group);
-    spent += paragraphsIn(group, refLang);
+  for (const section of article.sections) {
+    if (section.heading === KEY_FACTS_HEADING) {
+      sections.push(section);
+      continue;
+    }
+    if (left < MIN_SLICE) break;
+
+    const text = clip(section.text, left);
+    if (text.length === section.text.length) {
+      sections.push(section);
+      cut = { section: index + 1, chars: 0 };
+      left -= text.length;
+      index++;
+      continue;
+    }
+
+    // The budget ran out inside this section. Links are dropped rather than
+    // kept: their offsets index the full text, and one reaching past the cut
+    // would point at characters this copy no longer has.
+    sections.push({ ...section, text, links: section.links?.filter((l) => l.end <= text.length) });
+    cut = { section: index, chars: text.length };
+    break;
   }
-  return [...opening, ...body];
+
+  return { article: { ...article, sections }, cut };
 }
