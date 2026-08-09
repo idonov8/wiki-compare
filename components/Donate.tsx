@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import SignIn from "@/components/SignIn";
 import { initAnalytics, track } from "@/lib/analytics";
 import { articlesFor, formatCents } from "@/lib/pricing";
-import type { CouponCheck, DonateResponse, MeResponse } from "@/lib/types";
+import { EMAIL_CONSENT_WORDING, type CouponCheck, type DonateResponse, type MeResponse } from "@/lib/types";
 
 const PRESETS = [100, 300, 500, 1000];
 
@@ -73,6 +73,11 @@ export default function Donate() {
   const [custom, setCustom] = useState("");
   const [maintenance, setMaintenance] = useState(String(suggestedMaintenance(500) / 100));
   const [monthly, setMonthly] = useState(false);
+  /** The offer to be told when payments open, made on the reveal rather than in
+   *  the form: "idle" until pressed, then the request, then whichever way it
+   *  went. Never resets — the permission is given once and the button that gave
+   *  it should not come back looking pressable. */
+  const [notify, setNotify] = useState<"idle" | "saving" | "done" | "failed">("idle");
   const [coupon, setCoupon] = useState("");
   // No state for "redeemed": the moment that happens, this page is leaving.
   const [checking, setChecking] = useState(false);
@@ -212,6 +217,52 @@ export default function Donate() {
                 readable for everyone who comes after you.
               </p>
             )}
+
+            {/* The offer to be told, and the whole of the permission behind it.
+                Pressing this is the written consent s.30A asks for — an act of
+                its own, after the payment rather than inside it, so that nothing
+                about giving money can be read as agreeing to be written to.
+                Somebody who ignores it is never mailed, which is why it has to
+                be a button and not a notice. */}
+            <div className="donate-reveal-notify mb-[30px]">
+              {notify === "done" ? (
+                <p
+                  className="m-0 font-mono text-[12px] leading-[1.6] tracking-[0.04em] text-paper-62"
+                  role="status"
+                >
+                  We&apos;ll write to {me?.email ?? "you"} once, when payments open.
+                </p>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    disabled={notify === "saving"}
+                    onClick={async () => {
+                      if (notify === "saving") return;
+                      setNotify("saving");
+                      try {
+                        const res = await fetch("/api/email-consent", { method: "POST" });
+                        if (!res.ok) throw new Error("no");
+                        setNotify("done");
+                      } catch {
+                        setNotify("failed");
+                      }
+                    }}
+                    className="py-[11px] px-[20px] bg-transparent border border-paper-55 rounded-[2px] font-mono text-[12px] tracking-[0.06em] text-paper-raised transition-colors duration-[120ms] enabled:hover:border-paper-raised enabled:hover:bg-paper-22 disabled:opacity-[0.5] disabled:cursor-progress"
+                  >
+                    {notify === "saving" ? "One moment…" : EMAIL_CONSENT_WORDING}
+                  </button>
+                  <p
+                    className="mt-[10px] mb-0 font-mono text-[11px] leading-[1.6] tracking-[0.04em] text-paper-55"
+                    role={notify === "failed" ? "alert" : undefined}
+                  >
+                    {notify === "failed"
+                      ? "That didn't save. Press it again?"
+                      : "One message, and nothing else."}
+                  </p>
+                </>
+              )}
+            </div>
 
             <p className="donate-reveal-back m-0">
               <a
@@ -378,7 +429,7 @@ export default function Donate() {
               <span>
                 Repeat this every month
                 <small className="block text-[12.5px] text-ink-soft">
-                  Cancel whenever. We&apos;ll email before each one.
+                  Cancel whenever, from your account.
                 </small>
               </span>
             </label>

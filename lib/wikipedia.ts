@@ -11,7 +11,7 @@ import { KEY_FACTS_HEADING, LANGS, LEAD_HEADING } from "./types";
  * the stale snapshot keeps being served, and the fix appears not to work. Also
  * folded into the comparison key, since a comparison is downstream of a parse.
  */
-export const PARSER_VERSION = "v4";
+export const PARSER_VERSION = "v5";
 
 /**
  * Wikimedia's rate limits are tiered by how well a client identifies itself: a
@@ -254,6 +254,56 @@ function bestSrc(img: HTMLElement): string {
 }
 
 /**
+ * Whether an upload URL points at Commons rather than at a local wiki, which is
+ * the licence question in disguise.
+ *
+ * Commons accepts freely licensed and public-domain files only — it is the one
+ * Wikimedia project where "is this reusable outside Wikipedia" is answered by
+ * the fact of the file being there. Files uploaded *locally* to an edition are
+ * overwhelmingly the opposite case: album covers, film posters, logos, portraits
+ * of living people, kept under a non-free rationale that covers their use in
+ * that one encyclopedia article and nothing else. Reproducing those here would
+ * be outside the rationale no matter what credit we printed beside them.
+ *
+ * The two are told apart by a path segment — /wikipedia/commons/… against
+ * /wikipedia/en/… — which is stable, and cheaper than asking the API about
+ * candidates we are going to discard anyway.
+ */
+const onCommons = (src: string) => /^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\//.test(src);
+
+/**
+ * The canonical `File:…` title behind a rendered thumbnail.
+ *
+ * The wrapping anchor carries it directly and is preferred, because it is what
+ * MediaWiki itself considers the file. Failing that it is recoverable from the
+ * upload URL, where a thumbnail keeps the original name one segment above the
+ * resized copy: …/commons/thumb/a/ab/Foo.jpg/330px-Foo.jpg.
+ */
+function fileTitleOf(img: HTMLElement, src: string): string | null {
+  for (let node: HTMLElement | null = img.parentNode; node; node = node.parentNode) {
+    const href = node.getAttribute?.("href");
+    const named = href && /\/wiki\/([^#?]*:[^#?]+)$/.exec(href);
+    if (named) {
+      try {
+        // Every edition names the namespace in its own language, so the prefix
+        // is normalised rather than matched: Commons answers to File: alone.
+        return `File:${decodeURIComponent(named[1]).replace(/^[^:]*:/, "").replace(/_/g, " ")}`;
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  const path = /\/wikipedia\/commons\/(?:thumb\/)?[0-9a-f]\/[0-9a-f]{2}\/([^/]+)/.exec(src);
+  if (!path) return null;
+  try {
+    return `File:${decodeURIComponent(path[1]).replace(/_/g, " ")}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The article's lead photo, taken from the infobox (then any inline figure as a
  * fallback). Read from the parsed tree before `stripChrome` discards figures.
  *
@@ -261,6 +311,11 @@ function bestSrc(img: HTMLElement): string {
  * rendered width, and photographs (`.jpg`) are preferred over the logos and
  * coats of arms an infobox also carries, so the picture shown is the one a
  * reader would call the article's photo.
+ *
+ * Non-Commons candidates are skipped rather than ranked last: an article whose
+ * only picture is non-free should show no picture. The photo returned here is
+ * still uncredited — `withImageCredit` finishes the job, and is what decides
+ * whether it can be shown at all.
  */
 export function extractLeadImage(html: string, lang: Lang): ArticleImage | undefined {
   const root = parse(html);
@@ -277,15 +332,87 @@ export function extractLeadImage(html: string, lang: Lang): ArticleImage | undef
 
   for (const { img, width } of candidates) {
     const src = resolveSrc(bestSrc(img), lang);
-    if (!src) continue;
+    if (!src || !onCommons(src)) continue;
+    const file = fileTitleOf(img, src);
+    if (!file) continue;
     return {
       src,
+      file,
       alt: img.getAttribute("alt") || undefined,
       width: width || undefined,
       height: Number(img.getAttribute("height")) || undefined,
     };
   }
   return undefined;
+}
+
+const COMMONS = "https://commons.wikimedia.org/w/api.php";
+
+/** Licence names that permit reuse. Commons membership already implies this, so
+ *  the list is a second opinion rather than the decision — it exists to catch a
+ *  file that slipped in under a rationale Commons should not have accepted. */
+const FREE_LICENSE = /^(cc[ \-0-9]|cc0|public domain|pd|gfdl|fal\b|attribution\b|copyrighted free use|no restrictions)/i;
+const NON_FREE = /fair use|non-?free|all rights reserved/i;
+
+/** Wikimedia returns `Artist` and friends as HTML — a linked username, often
+ *  wrapped in spans. The credit line wants the name it renders to. */
+function plainText(html: string | undefined): string | undefined {
+  if (!html) return undefined;
+  const text = parse(html).textContent.replace(/\s+/g, " ").trim();
+  return text || undefined;
+}
+
+interface ExtMetadata {
+  extmetadata?: Record<string, { value?: string }>;
+  descriptionurl?: string;
+}
+
+/**
+ * Attach the author and licence a Commons file is offered under, or drop the
+ * image.
+ *
+ * Dropping is the right failure. Every branch that returns undefined here is a
+ * case where we could not establish permission — the file vanished, the API was
+ * unreachable, the terms came back non-free or unreadable — and a photograph we
+ * cannot name terms for is one we have no licence to publish. Showing it anyway
+ * and hoping is the single most expensive shortcut available in this file.
+ */
+export async function withImageCredit(image: ArticleImage): Promise<ArticleImage | undefined> {
+  let page: (ExtMetadata & { missing?: boolean }) | undefined;
+  try {
+    const res = await api<{ query?: { pages?: (ExtMetadata & { missing?: boolean })[] } }>(COMMONS, {
+      action: "query",
+      titles: image.file,
+      prop: "imageinfo",
+      iiprop: "extmetadata|url",
+      iiextmetadatafilter: "Artist|Credit|LicenseShortName|License|LicenseUrl|UsageTerms",
+    });
+    page = res.query?.pages?.[0];
+  } catch {
+    return undefined;
+  }
+  if (!page || page.missing) return undefined;
+
+  const info = (page as { imageinfo?: ExtMetadata[] }).imageinfo?.[0];
+  const meta = info?.extmetadata ?? {};
+  const value = (key: string) => meta[key]?.value;
+
+  const license = plainText(value("LicenseShortName")) ?? plainText(value("License"));
+  if (!license || NON_FREE.test(license) || !FREE_LICENSE.test(license)) return undefined;
+
+  const fileUrl =
+    info?.descriptionurl ??
+    `https://commons.wikimedia.org/wiki/${encodeURIComponent(image.file.replace(/ /g, "_"))}`;
+
+  return {
+    ...image,
+    credit: {
+      artist: plainText(value("Artist")) ?? plainText(value("Credit")),
+      license,
+      licenseUrl: value("LicenseUrl"),
+      fileUrl,
+    },
+  };
 }
 
 const rankPhoto = (img: HTMLElement) => (/\.jpe?g/i.test(img.getAttribute("src") ?? "") ? 0 : 1);
@@ -600,7 +727,13 @@ export function snapshotOf(lang: Lang, page: ParsedPage, linkQids: string[]): Ar
 export async function fetchArticle(lang: Lang, title: string): Promise<ArticleSnapshot> {
   const page = await fetchParsedPage(lang, title);
   const qidMap = await titlesToQids(lang, linkTitlesOf(page));
-  return snapshotOf(lang, page, [...new Set(qidMap.values())]);
+  const snapshot = snapshotOf(lang, page, [...new Set(qidMap.values())]);
+  // The credit lookup lives out here rather than in `snapshotOf` because
+  // `snapshotOf` is also how fixtures replay, offline, with no API to ask. A
+  // snapshot reaching the database has been through this line; one reconstructed
+  // from a fixture has not, and shows its photo uncredited in development only.
+  if (snapshot.image) snapshot.image = await withImageCredit(snapshot.image);
+  return snapshot;
 }
 
 export { titlesToQids };

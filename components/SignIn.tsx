@@ -264,6 +264,19 @@ export default function SignIn({
               {status === "sending" ? "Sending…" : "Email me a link"}
             </button>
           </form>
+
+          {/* The notice has to be at the point the address is asked for, not
+              only in the footer, because this is the moment somebody decides
+              whether to hand it over. Two sentences and a link: enough to say
+              what happens to it, short enough to actually be read. */}
+          <p className="signin-screen-notice mt-[18px] font-mono text-[11px] leading-[1.6] tracking-[0.02em] text-ink-soft">
+            We keep your address to sign you in, and nothing else uses it. Delete the account and
+            it goes with it —{" "}
+            <a href="/privacy" className="text-ink underline underline-offset-[3px]">
+              privacy
+            </a>
+            .
+          </p>
         </>
       )}
 
