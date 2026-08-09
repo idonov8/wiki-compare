@@ -821,58 +821,49 @@ export default function Compare() {
         <>
           {data.claims.length > 0 && <DiffNav signature={`${data.qid}:${visible.join("")}`} />}
 
+          {/* "Covered in some versions, not others" is disabled for now — the
+              flat pill list this section used to show wasn't worth reviving,
+              and the grouped-by-language, click-to-jump redesign below needs
+              more work before it's ready to ship. Re-enable by restoring this
+              block along with jumpToLink/pendingLink/coverageColumns/
+              SCROLL_CLEARANCE above.
           {data.coverage.length > 0 && (
             <div
-              // Extra room under it below `cols`: the floating language switch
-              // is over this corner of the page, and the last row of concepts
-              // must not end up behind it.
               className="coverage border-t border-rule p-[24px] max-cols:pb-[96px] max-tight:px-[18px]"
             >
               <h2 className="font-display font-normal text-[24px] m-0 mb-[4px]">Covered in some versions, not others</h2>
               <p className="text-ink-soft m-0 mb-[16px] max-w-[62ch] text-[14px]">
                 Linked concepts one version mentions and another never does. Computed by set
-                arithmetic over Wikidata identifiers, so no model reads a word of this.
+                arithmetic over Wikidata identifiers, so no model reads a word of this — click a
+                concept to jump to where its own version mentions it.
               </p>
-              <div className="gaps flex flex-wrap gap-[6px]">
-                {data.coverage.map((gap) => (
-                  <span
-                    key={gap.qid}
-                    className="gap font-mono text-[11px] px-[9px] py-[4px] border border-rule bg-paper-raised"
-                  >
-                    {gap.label} <b className="font-semibold text-ink-soft">{gap.presentIn.join("+")} only</b>
-                  </span>
+              <div
+                className="gap-cols grid gap-x-[24px] gap-y-[20px] max-cols:grid-cols-1"
+                style={narrow ? undefined : { gridTemplateColumns: `repeat(${coverageColumns.length}, minmax(0, 1fr))` }}
+              >
+                {coverageColumns.map(({ lang, gaps }) => (
+                  <div key={lang} className="gap-col min-w-0">
+                    <h3 className="font-mono text-[11px] tracking-[0.09em] uppercase text-ink-soft m-0 mb-[9px] pb-[6px] border-b border-rule">
+                      {LANG_META[lang].label}
+                    </h3>
+                    <div className="gaps flex flex-wrap gap-[6px]">
+                      {gaps.map((gap) => (
+                        <button
+                          key={gap.qid}
+                          className="gap font-mono text-[11px] px-[9px] py-[4px] border border-rule bg-paper-raised text-start cursor-pointer hover:bg-ink-wash"
+                          onClick={() => jumpToLink(lang, gap.qid)}
+                          title={`Not in ${gap.missingFrom.map((l) => LANG_META[l].label).join(", ")}`}
+                        >
+                          {gap.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
-              {/* Disabled for now — grouping this by language and making each pill
-                  jump to its mention needs more design work before it's ready to
-                  show. The full version is at commit fbabb9e:
-                  <div
-                    className="gap-cols grid gap-x-[24px] gap-y-[20px] max-cols:grid-cols-1"
-                    style={narrow ? undefined : { gridTemplateColumns: `repeat(${coverageColumns.length}, minmax(0, 1fr))` }}
-                  >
-                    {coverageColumns.map(({ lang, gaps }) => (
-                      <div key={lang} className="gap-col min-w-0">
-                        <h3 className="font-mono text-[11px] tracking-[0.09em] uppercase text-ink-soft m-0 mb-[9px] pb-[6px] border-b border-rule">
-                          {LANG_META[lang].label}
-                        </h3>
-                        <div className="gaps flex flex-wrap gap-[6px]">
-                          {gaps.map((gap) => (
-                            <button
-                              key={gap.qid}
-                              className="gap font-mono text-[11px] px-[9px] py-[4px] border border-rule bg-paper-raised text-start cursor-pointer hover:bg-ink-wash"
-                              onClick={() => jumpToLink(lang, gap.qid)}
-                              title={`Not in ${gap.missingFrom.map((l) => LANG_META[l].label).join(", ")}`}
-                            >
-                              {gap.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-              */}
             </div>
           )}
+          */}
         </>
       )}
 
