@@ -172,21 +172,9 @@ export function screenGroups(groups: SectionGroup[], langs: Lang[], limit = 8): 
     .map(({ score: _score, ...group }) => group);
 }
 
-/**
- * How much of each article a free preview reads, in characters of body text.
- *
- * One number, applied identically to every language, which is the whole of the
- * idea. The previous budget was counted in paragraphs of a reference version and
- * spent on whole aligned sections, so how much of the Hebrew and Arabic articles
- * a preview actually read was decided by how their section structure happened to
- * line up against the English one: the same setting read three paragraphs of one
- * version beside fifteen of another, and the free preview was worth several times
- * more on some articles than on others. Cutting every version at the same
- * character count is cruder — the three prefixes do not cover quite the same
- * material, and a section can be cut in half — but it is the same everywhere, it
- * is what the fade in the columns can honestly describe, and it prices a preview
- * at a predictable number of tokens.
- */
+/** How much of each article a free preview reads, in characters of body text —
+ *  the same budget for every language, so no version is favoured by how its
+ *  section structure happens to line up against the others. */
 export const PREVIEW_CHARS = 3000;
 
 /** Below this much budget left, stop at the section boundary instead. A heading
