@@ -41,15 +41,24 @@ interface Props {
 export default function Hero({ query, setQuery, onSearch, onPick, busy, sentinel }: Props) {
   return (
     <div className="relative">
-      {/* The sphere, centred above the headline and turning on its own —
-          idly, the way something sitting on a desk turns, not the way the
+      {/* The sphere, set off to the right of the headline and turning on its
+          own — idly, the way something sitting on a desk turns, not the way the
           loading panel's does when it has a wait to fill. It is the same
           object that panel turns, which is the point: the reader meets it
           here and recognises it later. Cells light up across the grid as it
           goes, in the site's own three colours for disagreement, so the
           shape reads as somewhere with a great many tellings in it before a
-          word of the headline is read. */}
-      <div className="animate-reveal-in pt-[max(1.8vh,14px)]" style={{ animationDelay: "10ms" }}>
+          word of the headline is read.
+
+          Pulled up into its own band on wide windows, so the headline passes
+          under the sphere's lower edge rather than queueing below it — which is
+          what lets the globe be drawn this large without walking the search
+          field off the foot of a short screen. Only on `md`: under that the
+          headline runs the full measure and would meet the sphere head-on. */}
+      <div
+        className="animate-reveal-in pt-[max(4vh,20px)] md:mb-[calc(min(13vh,130px)*-1)]"
+        style={{ animationDelay: "10ms" }}
+      >
         <GlobeWithLanguages />
       </div>
 
@@ -141,20 +150,25 @@ function LanguageMark({ lang, align }: { lang: Lang; align: string }) {
 }
 
 /**
- * The globe with the three Wikipedias set around it, after the language portal
- * at wikipedia.org: the sphere in the middle, the editions ringed around it
- * rather than listed under it.
+ * The globe with the three Wikipedias ringed around it, after the language
+ * portal at wikipedia.org: the sphere in the middle, the editions set around
+ * its edge rather than listed under it.
  *
- * A grid rather than absolute polar positioning. The ring only has three points
- * on it, and three points placed by `left`/`top` percentages have to be re-tuned
- * every time the type or the globe changes size — a grid puts them beside and
- * below by construction and cannot drift or collide. English and Hebrew are
- * centred against the sphere's middle and Arabic sits under it, which is the
- * same triangle `Loading` arranges its chips in.
+ * Polar rather than a grid. The three do not sit at the compass points —
+ * English is off the west edge a little above the equator, Hebrew high on the
+ * east, Arabic tucked beneath the south-east — and a grid can only put things
+ * beside and below. Every offset here is a percentage of `--globe`, the
+ * sphere's own box, so the ring keeps its shape at every size the globe is
+ * drawn at and there is nothing to re-tune when that size changes.
  *
  * The inner edges align towards the globe — English ends at it, Hebrew starts
- * at it — so the three read as facing the sphere rather than as a column of
- * left-aligned labels that happens to have a picture in it.
+ * at it — so the three read as facing the sphere rather than as labels that
+ * happen to have a picture between them.
+ *
+ * Arabic overhangs the bottom of the box on purpose, and the sphere sits right
+ * of the page's centre: both put the cluster out in the margin beside the
+ * headline rather than stacked above it, which is what lets it be drawn this
+ * large without pushing the search field off the foot of a short window.
  *
  * They are left as type. `Loading` earns its chips and strands by having a wait
  * to fill; nothing is in progress here, and a second moving thing this close to
@@ -162,18 +176,21 @@ function LanguageMark({ lang, align }: { lang: Lang; align: string }) {
  */
 function GlobeWithLanguages() {
   return (
-    <div className="mx-auto grid w-fit grid-cols-[auto_auto_auto] items-center justify-center gap-x-[clamp(10px,2.6vw,26px)]">
-      <LanguageMark lang="en" align="items-end text-end" />
-      {/* Nudged right of the column's own centre, so the sphere leans towards
-          "He" rather than sitting dead-equidistant between the two — the same
-          bias the reference layout was drawn with. */}
-      <div className="flex translate-x-[clamp(8px,2.4vw,22px)] justify-center">
-        <GlobeMark />
+    <div
+      // The offset is capped further out than the sphere is: both grow with the
+      // window, and a cap reached first by the offset would walk the headline
+      // back into the globe on the widest screens.
+      className="relative mx-auto h-[var(--globe)] w-[var(--globe)] md:translate-x-[min(11vw,240px)]"
+      style={{ "--globe": "clamp(150px,min(30vw,46vh),460px)" } as React.CSSProperties}
+    >
+      <GlobeMark />
+      <div className="absolute top-[36%] right-[102%] -translate-y-1/2">
+        <LanguageMark lang="en" align="items-end text-end" />
       </div>
-      <LanguageMark lang="he" align="items-start text-start" />
-      {/* Same measure as the column gap, so the three sit at an equal distance
-          from the sphere rather than the one underneath tucking in closer. */}
-      <div className="col-span-3 flex justify-center pt-[clamp(10px,2.6vw,26px)]">
+      <div className="absolute top-[26%] left-[102%] -translate-y-1/2">
+        <LanguageMark lang="he" align="items-start text-start" />
+      </div>
+      <div className="absolute top-[104%] left-[87%] -translate-x-1/2">
         <LanguageMark lang="ar" align="items-center text-center" />
       </div>
     </div>
@@ -343,13 +360,10 @@ function GlobeMark() {
 
   return (
     <svg
-      // Sized against the shorter side of the window, not the width alone. At
-      // 33vw a 1440x700 laptop drew a 336px sphere, and the sphere is only the
-      // top of a stack that also has two lines of display type and the search
-      // field under it: the field went off the bottom of the screen on the one
-      // page whose whole job is to be searched from. Height is the binding
-      // constraint on that window and the min() lets it bind.
-      className="pointer-events-none h-auto w-[clamp(160px,min(32vw,23vh),340px)]"
+      // Fills the box its cluster sizes. The ring of languages is placed off
+      // that same `--globe`, so the sphere and the three labels can only ever
+      // be scaled together.
+      className="pointer-events-none h-full w-full"
       viewBox="92 64 136 136"
       aria-hidden="true"
     >
