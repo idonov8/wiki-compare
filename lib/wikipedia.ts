@@ -351,8 +351,8 @@ const COMMONS = "https://commons.wikimedia.org/w/api.php";
 /** Licence names that permit reuse. Commons membership already implies this, so
  *  the list is a second opinion rather than the decision — it exists to catch a
  *  file that slipped in under a rationale Commons should not have accepted. */
-const FREE_LICENSE = /^(cc[ -]|public domain|pd|gfdl|fal\b|attribution\b|no restrictions)/i;
-const NON_FREE = /fair use|non-?free|copyright(ed)? free use|all rights reserved/i;
+const FREE_LICENSE = /^(cc[ \-0-9]|cc0|public domain|pd|gfdl|fal\b|attribution\b|copyrighted free use|no restrictions)/i;
+const NON_FREE = /fair use|non-?free|all rights reserved/i;
 
 /** Wikimedia returns `Artist` and friends as HTML — a linked username, often
  *  wrapped in spans. The credit line wants the name it renders to. */
