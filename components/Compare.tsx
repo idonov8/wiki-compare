@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ArticlesSkeleton from "./ArticlesSkeleton";
 import Columns from "./Columns";
 import { comparePath } from "./Highlighted";
 import CreditBar from "./CreditBar";
@@ -812,6 +813,15 @@ export default function Compare() {
           )}
         </div>
       )}
+
+      {/* The second or so before `/api/articles` answers, when the page would
+          otherwise be a masthead and a loading panel over nothing. All three
+          editions are drawn because which ones this subject actually has is
+          one of the things the fetch is about to say; a column for an edition
+          that turns out not to exist simply doesn't arrive. Below `cols` only
+          the language that will be on screen first is drawn — `active` is what
+          `solo` resolves to whenever the article has it. */}
+      {comparing && !hasColumns && <ArticlesSkeleton langs={narrow ? [active] : [...LANGS]} />}
 
       {langSwitch && <LangSwitch langs={available} active={solo!} onChange={readIn} />}
 
