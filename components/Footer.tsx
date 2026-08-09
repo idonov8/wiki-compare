@@ -34,7 +34,7 @@ export default function Footer({
           marked difference as a pointer to check the sources, not a finding. 
           <br />
           If a comparison says something false about you,{" "}
-          <a href={`mailto:${CONTACT}?subject=${encodeURIComponent("Wiki Narratives: correction")}`} className="text-ink hover:underline">
+          <a href={`mailto:${CONTACT}?subject=${encodeURIComponent("Wiki Compare: correction")}`} className="text-ink hover:underline">
             write to us.
           </a>{" "}
         </p>
