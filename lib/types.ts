@@ -44,11 +44,15 @@ export interface Claim {
 }
 
 /** A Wikipedia-internal link, as a character range into a section's `text`.
- *  `title` is the linked article's title in that section's own language. */
+ *  `title` is the linked article's title in that section's own language.
+ *  `qid` is the linked article's Wikidata item, when it resolved to one — the
+ *  same id a coverage gap is keyed on, so a gap pill can find the span of the
+ *  concept it names. */
 export interface LinkSpan {
   start: number;
   end: number;
   title: string;
+  qid?: string;
 }
 
 export interface Section {
