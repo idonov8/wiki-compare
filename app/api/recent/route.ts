@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   try {
-    return NextResponse.json({ items: await recentComparisons(12) });
+    return NextResponse.json({ items: await recentComparisons() });
   } catch {
     return NextResponse.json({ items: [] });
   }
