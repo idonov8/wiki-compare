@@ -69,7 +69,7 @@ const SearchBox = forwardRef<HTMLInputElement, Props>(function SearchBox(
         } text-inherit placeholder:text-ink-soft ${FIELD[variant]}`}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Article title, or paste a Wikipedia URL"
+        placeholder="Search for an article, or paste a Wikipedia URL"
         aria-label="Article title"
         autoComplete="off"
         spellCheck={false}
