@@ -11,7 +11,7 @@ import { KEY_FACTS_HEADING, LANGS, LEAD_HEADING } from "./types";
  * the stale snapshot keeps being served, and the fix appears not to work. Also
  * folded into the comparison key, since a comparison is downstream of a parse.
  */
-export const PARSER_VERSION = "v5";
+export const PARSER_VERSION = "v6";
 
 /**
  * Wikimedia's rate limits are tiered by how well a client identifies itself: a
@@ -354,11 +354,22 @@ const COMMONS = "https://commons.wikimedia.org/w/api.php";
 const FREE_LICENSE = /^(cc[ \-0-9]|cc0|public domain|pd|gfdl|fal\b|attribution\b|copyrighted free use|no restrictions)/i;
 const NON_FREE = /fair use|non-?free|all rights reserved/i;
 
-/** Wikimedia returns `Artist` and friends as HTML — a linked username, often
- *  wrapped in spans. The credit line wants the name it renders to. */
-function plainText(html: string | undefined): string | undefined {
+/**
+ * Wikimedia returns `Artist` and friends as HTML — a linked username, often
+ * wrapped in spans. The credit line wants the name it renders to.
+ *
+ * The author field is a fragment of the Commons file page, so it arrives with
+ * that page's TemplateStyles attached: an author credited through a userbox
+ * template comes back as `<style>…</style>Wereon`. `textContent` counts the
+ * rules inside a `<style>` as text, which printed a stylesheet in front of the
+ * photographer's name — so the stylesheet is dropped from the tree first.
+ */
+export function plainText(html: string | undefined): string | undefined {
   if (!html) return undefined;
-  const text = parse(html).textContent.replace(/\s+/g, " ").trim();
+  const root = parse(html);
+  for (const node of root.querySelectorAll("style")) node.remove();
+  for (const node of root.querySelectorAll("script")) node.remove();
+  const text = root.textContent.replace(/\s+/g, " ").trim();
   return text || undefined;
 }
 
