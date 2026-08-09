@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Wiki Narratives",
+  title: "Wiki Compare",
   description: "Read the English, Hebrew and Arabic Wikipedia on one subject side by side, with the disagreements marked.",
 };
 
