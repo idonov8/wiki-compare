@@ -87,7 +87,12 @@ export default function Columns({
             // would promise a card that never opens.
             // Both spellings of the mask: Safari still wants the prefix, and
             // dropping it would cut the remainder off flat rather than fading it.
-            "columns columns-faded grid max-cols:block items-stretch bg-wiki-page [-webkit-mask-image:linear-gradient(to_bottom,black_0,transparent_340px)] [mask-image:linear-gradient(to_bottom,black_0,transparent_340px)] pointer-events-none"
+            // The height is capped where the fade reaches transparent, so the
+            // document ends with the fade and the footer follows it. Everything
+            // past that point was invisible anyway, and scrolling through it —
+            // or having a script hold the page back from it — made the article
+            // feel broken rather than paywalled.
+            "columns columns-faded grid max-cols:block items-stretch bg-wiki-page [-webkit-mask-image:linear-gradient(to_bottom,black_0,transparent_340px)] [mask-image:linear-gradient(to_bottom,black_0,transparent_340px)] pointer-events-none max-h-[340px] overflow-hidden"
           : "columns grid max-cols:block items-stretch bg-wiki-page"
       }
       aria-hidden={part === "tail" ? true : undefined}
