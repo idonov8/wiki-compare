@@ -10,10 +10,10 @@ import type {
   Usage,
 } from "./types";
 import { KEY_FACTS_HEADING, LANG_META, LEAD_HEADING } from "./types";
-import { previewGroups, screenGroups, type SectionGroup } from "./deterministic";
+import { PREVIEW_CHARS, previewOf, screenGroups, type SectionGroup } from "./deterministic";
 import { costOfUsage, FALLBACK_PRICING_MODEL } from "./pricing";
 
-export const PROMPT_VERSION = "v1";
+export const PROMPT_VERSION = "v2";
 
 const ALIGN_MODEL = process.env.ALIGN_MODEL || "claude-haiku-4-5-20251001";
 // The default is FALLBACK_PRICING_MODEL rather than a second copy of the same
@@ -168,10 +168,20 @@ Rules:
 Reply with JSON only, no prose, no code fences:
 {"claims":[{"type":"contradiction","summary":"...","explanation":"...","spans":{"en":"...","he":"...","ar":"..."}}]}`;
 
-async function diffGroups(groups: SectionGroup[], langs: Lang[], usage: Usage): Promise<Claim[]> {
+async function diffGroups(
+  groups: SectionGroup[],
+  langs: Lang[],
+  usage: Usage,
+  // A preview overrides both: its whole input is bounded by PREVIEW_CHARS per
+  // language, so it goes in one call — the model sees the entire prefix at once
+  // — and the per-section cap has to be the preview budget rather than a lower
+  // number that would silently read less than the columns say was read.
+  { perCall = GROUPS_PER_CALL, maxChars = MAX_CHARS_PER_SECTION } = {},
+): Promise<Claim[]> {
+  const size = Math.max(1, perCall);
   const batches: SectionGroup[][] = [];
-  for (let i = 0; i < groups.length; i += GROUPS_PER_CALL) {
-    batches.push(groups.slice(i, i + GROUPS_PER_CALL));
+  for (let i = 0; i < groups.length; i += size) {
+    batches.push(groups.slice(i, i + size));
   }
 
   const results = await Promise.all(
@@ -183,7 +193,7 @@ async function diffGroups(groups: SectionGroup[], langs: Lang[], usage: Usage): 
             .map(
               (l) =>
                 `<${l} heading="${group.headings[l] ?? ""}">\n` +
-                `${group.sections[l]!.text.slice(0, MAX_CHARS_PER_SECTION)}\n</${l}>`,
+                `${group.sections[l]!.text.slice(0, maxChars)}\n</${l}>`,
             )
             .join("\n\n");
           const note = group.reasons.length ? `\nAutomated pre-scan noted: ${group.reasons.join("; ")}.` : "";
@@ -303,43 +313,6 @@ function verifySpans(
   return { claims: verified, report };
 }
 
-/**
- * Where the preview stopped, per language, as an index the client can slice at.
- *
- * The number counts sections as `Columns` lays them out — `article.sections` with
- * the key-facts block removed, lead included — because slicing is all the client
- * does with it, and an index measured against anything else would fade the wrong
- * paragraph. It is computed from the `Section` objects themselves rather than
- * from the indices the alignment model returned: those are positions in an array
- * that drops the lead as well, so every one of them would have needed a correction
- * that is off by one exactly when the article has no lead, which is the case
- * nobody would have tested. Identity works because the groups hold the very
- * objects the snapshot holds.
- *
- * Highest covered index plus one, not the count of covered sections: a group the
- * model aligned across a gap can leave an unread section behind it, and that
- * section is above the boundary and has to be shown. Erring the other way would
- * fade out text the reader can see was compared.
- */
-function processedThrough(
-  articles: ArticleSnapshot[],
-  selected: SectionGroup[],
-): Partial<Record<Lang, number>> {
-  const through: Partial<Record<Lang, number>> = {};
-  for (const article of articles) {
-    const body = article.sections.filter((s) => s.heading !== KEY_FACTS_HEADING);
-    let last = -1;
-    for (const group of selected) {
-      const section = group.sections[article.lang];
-      // The key-facts group is not in `body` at all and lands here as -1, which
-      // is what it should contribute: it sits above the columns, not in them.
-      if (section) last = Math.max(last, body.indexOf(section));
-    }
-    through[article.lang] = last + 1;
-  }
-  return through;
-}
-
 export async function runComparison(
   articles: ArticleSnapshot[],
   scope: ScopeKind = "full",
@@ -347,17 +320,29 @@ export async function runComparison(
   const usage: Usage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
   const langs = articles.map((a) => a.lang);
 
-  const groups = await alignHeadings(articles, usage);
-  // A preview reads a prefix and a full run reads whatever diverges most; see
-  // `previewGroups` for why the two cannot be the same selection with different
-  // limits.
-  // The paragraph budget is measured against English when it is one of the
-  // versions — it is the column readers of this site are anchored to — and
-  // otherwise against whichever version came first.
-  const refLang = langs.includes("en") ? "en" : langs[0];
-  const selected =
-    scope === "preview" ? previewGroups(groups, refLang) : screenGroups(groups, langs);
-  const raw = await diffGroups(selected, langs, usage);
+  // A preview compares the same first PREVIEW_CHARS characters of every version
+  // against each other, so it is run against truncated copies of the snapshots
+  // and everything downstream is the ordinary path. A full run reads whatever
+  // diverges most; see `previewOf` for why the two cannot be one selection with
+  // different limits.
+  const previews = scope === "preview" ? articles.map((a) => previewOf(a)) : null;
+  const read = previews ? previews.map((p) => p.article) : articles;
+
+  const groups = await alignHeadings(read, usage);
+  const selected = previews
+    ? // Everything the prefix contains, in document order: it is already the
+      // budget, so there is nothing left for screening to decide.
+      [...groups].sort((a, b) => a.order - b.order)
+    : screenGroups(groups, langs);
+  const raw = await diffGroups(
+    selected,
+    langs,
+    usage,
+    previews ? { perCall: selected.length, maxChars: PREVIEW_CHARS } : {},
+  );
+  // Verified against the full articles, not the truncated copies: a span quoted
+  // out of a prefix is a substring of the section the columns actually render,
+  // which is what the highlighter has to find it in.
   const { claims, report } = verifySpans(raw, articles);
 
   // Priced here, once, while the model ids that spent the tokens are still in
@@ -372,6 +357,18 @@ export async function runComparison(
       `tokens=${usage.inputTokens}in/${usage.outputTokens}out/${usage.cachedInputTokens}cached ` +
       `cost=$${usage.costUsd.toFixed(4)}`,
   );
+  if (previews) {
+    // The point of the character budget is that these three numbers are within
+    // a line of each other whatever the articles look like, so print them.
+    const depth = ({ article }: { article: ArticleSnapshot }) =>
+      article.sections
+        .filter((s) => s.heading !== KEY_FACTS_HEADING)
+        .reduce((n, s) => n + s.text.length, 0);
+    console.log(
+      `[compare]   preview budget ${PREVIEW_CHARS}: ` +
+        previews.map((p) => `${p.article.lang}=${depth(p)}`).join(" "),
+    );
+  }
   for (const miss of report.samples) {
     console.log(`[compare]   unmatched ${miss.lang}: ${JSON.stringify(miss.snippet)}`);
   }
@@ -380,9 +377,11 @@ export async function runComparison(
     claims,
     usage,
     spans: report,
-    scope:
-      scope === "preview"
-        ? { kind: "preview", processedThrough: processedThrough(articles, selected) }
-        : { kind: "full" },
+    scope: previews
+      ? {
+          kind: "preview",
+          processedThrough: Object.fromEntries(previews.map((p) => [p.article.lang, p.cut])),
+        }
+      : { kind: "full" },
   };
 }

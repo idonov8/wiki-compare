@@ -5,17 +5,16 @@
  *   npm run check:deterministic
  */
 import {
-  PREVIEW_PARAGRAPHS,
-  PREVIEW_SECTIONS,
+  PREVIEW_CHARS,
   coverageGaps,
   extractNumbers,
   normaliseDigits,
-  previewGroups,
+  previewOf,
   screenGroups,
   type SectionGroup,
 } from "../lib/deterministic";
 import { articlesFor, costOfUsage, formatCost, ratesFor } from "../lib/pricing";
-import type { Lang, Section, Usage } from "../lib/types";
+import { KEY_FACTS_HEADING, LEAD_HEADING, type ArticleSnapshot, type Lang, type Section, type Usage } from "../lib/types";
 import { fixtureLabels, fixtureSnapshots, listFixtures, loadFixture } from "../fixtures/loader";
 
 let failures = 0;
@@ -132,81 +131,153 @@ check(
 
 console.log("\nPreview scoping");
 
-// The preview is a prefix of the article, not the most divergent parts of it.
-// The fade in the columns starts where this stops, and a fade is only coherent
-// if everything above it was read — so the assertion that matters is
-// contiguity, not which groups happen to score highest.
-const previewed = previewGroups(groups);
-const previewKeys = previewed.map((g) => g.key);
-console.log(`    previewed: ${previewKeys.join(", ")}`);
+/** `n` characters of plausible prose: word breaks to clip at, paragraph breaks
+ *  every so often, and exactly the length asked for. */
+const prose = (n: number) =>
+  // Nine characters a word, plus a couple spare so the slice below always has
+  // enough to take.
+  Array.from({ length: Math.ceil(n / 9) + 2 }, (_, i) => `word${String(i % 10000).padStart(4, "0")}`)
+    .join(" ")
+    .slice(0, n)
+    .replace(/(.{700})/g, "$1\n")
+    .slice(0, n);
 
-check(previewKeys.includes("lead"), "the lead is always in the preview");
-check(previewKeys.includes("key-facts"), "key facts are always in the preview");
+const article = (lang: Lang, sections: Section[]): ArticleSnapshot => ({
+  lang,
+  title: `t-${lang}`,
+  revid: 1,
+  url: "",
+  sections,
+  linkQids: [],
+});
+
+/** The sections `Columns` lays out, which is what a cut is an index into. */
+const bodyOf = (sections: Section[]) => sections.filter((s) => s.heading !== KEY_FACTS_HEADING);
+const chars = (sections: Section[]) => sections.reduce((n, s) => n + s.text.length, 0);
+const named = (heading: string, text: string): Section => ({ heading, level: 2, text });
+
+// The three editions are never written to the same shape: one opens at length
+// and continues in a handful of long sections, another says the same in twenty
+// short ones. The whole point of a character budget is that all three are cut at
+// the same depth anyway — the previous paragraph budget read a screenful of one
+// and half the article of another, which is what made the previews inconsistent.
+const shapes: Record<Lang, Section[]> = {
+  en: [
+    named(LEAD_HEADING, prose(1200)),
+    named(KEY_FACTS_HEADING, prose(900)),
+    ...Array.from({ length: 6 }, (_, i) => named(`en-${i}`, prose(1800))),
+  ],
+  he: [named(LEAD_HEADING, prose(400)), ...Array.from({ length: 30 }, (_, i) => named(`he-${i}`, prose(220)))],
+  ar: [named(LEAD_HEADING, prose(9000))],
+};
+
+const previews = (Object.keys(shapes) as Lang[]).map((lang) =>
+  previewOf(article(lang, shapes[lang])),
+);
+for (const { article: a, cut } of previews) {
+  console.log(
+    `    ${a.lang}: ${chars(bodyOf(a.sections))} chars, stops at section ${cut.section}+${cut.chars}`,
+  );
+}
+
+const readChars = previews.map((p) => chars(bodyOf(p.article.sections)));
 check(
-  previewed.filter((g) => g.order >= 0).length <= PREVIEW_SECTIONS,
-  `at most ${PREVIEW_SECTIONS} ordinary sections are previewed`,
+  readChars.every((n) => n <= PREVIEW_CHARS),
+  `no version is read past the ${PREVIEW_CHARS}-character budget`,
+  readChars.join(", "),
 );
 check(
-  previewed.every((g, i) => i === 0 || g.order >= previewed[i - 1].order),
-  "the previewed groups come back in document order",
-);
-const ordinary = previewed.filter((g) => g.order >= 0).map((g) => g.order);
-check(
-  ordinary.every((o, i) => i === 0 || o === ordinary[i - 1] + 1),
-  "the previewed sections are contiguous, with no gap for the fade to start inside",
-);
-// The shared fixture has only four scoring groups, so a preview of it is the
-// whole thing and proves nothing. Truncation only means anything on an article
-// long enough to be truncated.
-const longArticle: SectionGroup[] = [
-  groups[0],
-  groups[1],
-  ...Array.from({ length: 8 }, (_, i) => ({
-    key: `s${i}`,
-    headings: {},
-    sections: { en: sec("z".repeat(400)), he: sec("z".repeat(400)) },
-    reasons: [],
-    order: i,
-  })),
-];
-check(
-  previewGroups(longArticle).length < screenGroups(longArticle, langs, 8).length,
-  "on a long article a preview reads strictly less than a full run",
-  `preview ${previewGroups(longArticle).length}, full ${screenGroups(longArticle, langs, 8).length}`,
+  Math.max(...readChars) - Math.min(...readChars) <= PREVIEW_CHARS / 10,
+  "every version is read to within a tenth of the same depth, whatever its shape",
+  readChars.join(", "),
 );
 check(
-  previewGroups(longArticle).filter((g) => g.order >= 0).every((g) => g.order < PREVIEW_SECTIONS),
-  "the preview stops at the boundary rather than sampling past it",
+  previews.every(({ article: a }) => a.sections[0].heading === LEAD_HEADING),
+  "the preview is a prefix: it starts at the lead",
+);
+check(
+  previews.every(
+    ({ article: a, cut }) => bodyOf(a.sections).length === cut.section + (cut.chars > 0 ? 1 : 0),
+  ),
+  "the cut names the last section the preview reached",
 );
 
-// Sections are counted in paragraphs, not in sections: an article that says as
-// much in one section as another says in three has to be cut off at the same
-// depth, or the free preview is worth several times more on one than the other.
-const para = (n: number) => sec(Array.from({ length: n }, (_, i) => `line ${i}`).join("\n"));
-const wordy: SectionGroup[] = [
-  { key: "lead", headings: {}, sections: { en: para(3), he: para(3) }, reasons: [], order: -2 },
-  groups[1],
-  { key: "s0", headings: {}, sections: { en: para(6), he: para(6) }, reasons: [], order: 0 },
-  { key: "s1", headings: {}, sections: { en: para(6), he: para(6) }, reasons: [], order: 1 },
-];
-const wordyKeys = previewGroups(wordy).map((g) => g.key);
-console.log(`    previewed (long sections): ${wordyKeys.join(", ")}`);
+// The key-facts block sits above the columns rather than in them, so it is
+// carried whole and costs the budget nothing — otherwise a long infobox could
+// spend a preview before the lead had been read.
+const withFacts = previews.find((p) => p.article.lang === "en")!;
 check(
-  wordyKeys.includes("s0") && !wordyKeys.includes("s1"),
-  `a section past the ${PREVIEW_PARAGRAPHS}-paragraph budget is not previewed`,
+  withFacts.article.sections.some((s) => s.heading === KEY_FACTS_HEADING && s.text.length === 900),
+  "key facts are carried whole and outside the budget",
 );
 
-// The lead spends the budget too, so an article that opens at length is
-// previewed on its opening alone rather than on its opening plus two sections.
-const longLead: SectionGroup[] = [
-  { key: "lead", headings: {}, sections: { en: para(9), he: para(9) }, reasons: [], order: -2 },
-  groups[1],
-  { key: "s0", headings: {}, sections: { en: para(4), he: para(4) }, reasons: [], order: 0 },
-];
-check(
-  previewGroups(longLead).every((g) => g.order < 0),
-  "a lead that already exceeds the budget is the whole preview",
-);
+// The fade in the columns starts exactly where the preview stopped, and `Columns`
+// draws it by slicing the same section at `chars`. So the two halves have to be
+// the article: nothing dropped at the seam, nothing shown twice.
+const seam = previews.find((p) => p.cut.chars > 0)!;
+{
+  const { cut } = seam;
+  const full = bodyOf(shapes[seam.article.lang]);
+  const straddled = full[cut.section];
+  const head = [
+    ...full.slice(0, cut.section).map((s) => s.text),
+    straddled.text.slice(0, cut.chars),
+  ].join("");
+  const tail = [
+    straddled.text.slice(cut.chars),
+    ...full.slice(cut.section + 1).map((s) => s.text),
+  ].join("");
+
+  check(
+    head + tail === full.map((s) => s.text).join(""),
+    "head and tail rejoin into the article with nothing lost or repeated at the seam",
+  );
+  check(
+    head === bodyOf(seam.article.sections).map((s) => s.text).join(""),
+    "what renders above the gate is exactly what the model was given",
+  );
+  check(
+    /\s/.test(straddled.text.charAt(cut.chars)),
+    "the cut lands on a word or paragraph break, never mid-word",
+    JSON.stringify(straddled.text.slice(Math.max(0, cut.chars - 12), cut.chars + 4)),
+  );
+}
+
+// A section cut in half must not keep links that reach past the cut: their
+// offsets index text this copy no longer has.
+{
+  const long = prose(5000);
+  const linked = previewOf(
+    article("en", [
+      { heading: LEAD_HEADING, level: 1, text: long, links: [
+        { start: 5, end: 9, title: "near" },
+        { start: 4500, end: 4504, title: "far" },
+      ] },
+    ]),
+  );
+  const kept = linked.article.sections[0].links ?? [];
+  check(
+    kept.length === 1 && kept[0].title === "near",
+    "a link past the cut is dropped, one before it survives",
+    kept.map((l) => l.title).join(","),
+  );
+  check(
+    kept.every((l) => l.end <= linked.article.sections[0].text.length),
+    "every surviving link still points inside the truncated text",
+  );
+}
+
+// An article shorter than the budget is read whole, and says so — the columns
+// must not fade out text the comparison actually covered.
+{
+  const short = previewOf(article("en", [named(LEAD_HEADING, prose(300)), named("s0", prose(400))]));
+  check(
+    short.cut.section === 2 && short.cut.chars === 0,
+    "a short article is read whole and the cut says so",
+    `${short.cut.section}+${short.cut.chars}`,
+  );
+  check(chars(bodyOf(short.article.sections)) === 700, "and none of it is truncated");
+}
 
 console.log("\nPricing");
 
