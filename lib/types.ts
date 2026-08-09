@@ -58,11 +58,34 @@ export interface Section {
   links?: LinkSpan[];
 }
 
+/**
+ * Who made a photograph and on what terms, as its Wikimedia file page states.
+ *
+ * Not optional decoration: CC BY-SA is a permission conditional on naming the
+ * author and the licence, so a photo shown without this is a photo shown
+ * without permission. `lib/wikipedia.ts` drops any image it cannot resolve one
+ * of these for, which is why the renderer can treat its presence as given.
+ */
+export interface ImageCredit {
+  /** The author as the file page names them, tags stripped. Absent on the
+   *  occasional file whose page states terms but no author. */
+  artist?: string;
+  /** Short licence name, as Wikimedia writes it: "CC BY-SA 4.0", "Public domain". */
+  license: string;
+  licenseUrl?: string;
+  /** The file description page, which carries the full terms. */
+  fileUrl: string;
+}
+
 export interface ArticleImage {
   src: string;
   alt?: string;
   width?: number;
   height?: number;
+  /** Canonical "File:…" title on Commons, which is what the credit is looked
+   *  up by and what makes a cached snapshot re-checkable. */
+  file: string;
+  credit?: ImageCredit;
 }
 
 export interface ArticleSnapshot {
@@ -176,6 +199,19 @@ export interface DonateRequest {
   /** Which surface sent them here, for the funnel. */
   from?: string;
 }
+
+/**
+ * The exact proposition somebody agrees to by pressing the button on the reveal.
+ *
+ * Lives here because both sides need the same string and neither may own it: the
+ * button renders it in the browser, and `/api/email-consent` stores it as the
+ * evidence of what was agreed to. s.30A consent is consent to a particular
+ * wording, so a log holding different words from the ones on the screen attests
+ * to something that never happened. Changing this sentence changes what future
+ * rows mean — old rows keep the words they were given, which is the point of
+ * storing them per row rather than looking them up.
+ */
+export const EMAIL_CONSENT_WORDING = "Send me an email once payments are available";
 
 /** What the pay button submits to redeem. Case and spacing are the server's problem. */
 export interface CouponRequest {
