@@ -207,6 +207,39 @@ CREATE TABLE IF NOT EXISTS spends (
 CREATE INDEX IF NOT EXISTS donations_user_idx ON donations (user_id);
 CREATE INDEX IF NOT EXISTS spends_user_idx    ON spends (user_id);
 
+-- Permission to send somebody a commercial message, and its withdrawal.
+--
+-- Section 30A of the Communications Law makes an advertisement anything sent to
+-- promote a monetary expenditure, and requires prior consent given in writing
+-- before one is sent. "We'll email you when payments open" and "we'll email
+-- before each monthly charge" are both that. The statutory damages are NIS 1,000
+-- per message with no proof of damage required, so the thing that matters here
+-- is not holding a flag but being able to show, per message, that permission
+-- existed when it was sent.
+--
+-- Which is why this is an append-only log of decisions rather than a boolean on
+-- the user row. A boolean answers "may we write to them now"; only the log
+-- answers "were we allowed to send the one we sent in March", which is the
+-- question a claim actually asks. `granted = false` rows are withdrawals, and
+-- they are kept for the same reason: proof of when the permission stopped is
+-- worth as much as proof of when it started.
+--
+-- `source` records which surface asked, and `evidence` the exact words consented
+-- to. Consent to a specific wording is what the section requires; a row saying
+-- only "true" cannot show what was agreed to.
+CREATE TABLE IF NOT EXISTS email_consents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  email TEXT NOT NULL,
+  granted BOOLEAN NOT NULL,
+  source TEXT NOT NULL,
+  evidence TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- The lookup is always "the newest decision for this account", never a scan.
+CREATE INDEX IF NOT EXISTS email_consents_user_idx ON email_consents (user_id, created_at DESC);
+
 -- Who paid for a cached comparison, and how many people have read it since.
 -- Together they are what a donor is shown in return: not "you spent $2" but
 -- "ten articles, read ninety times". Defaulting served_count to 0 rather than 1
