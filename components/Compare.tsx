@@ -136,6 +136,9 @@ const CARD_WIDTH = 340;
 const CARD_MARGIN = 8;
 /** Enough room to place the card below a mark without it running off-screen. */
 const CARD_CLEARANCE = 190;
+/** Room left above a mark scrolled to from the coverage panel, so it isn't
+ *  flush against the viewport edge. Same clearance DiffNav's jump-to uses. */
+const SCROLL_CLEARANCE = 96;
 
 /** How far the incoming column slides in from when the language changes. Enough
  *  to read as the article having moved sideways, not as a new page. */
@@ -171,6 +174,10 @@ export default function Compare() {
    *  from the side the reader pulled it in from. */
   const [enterFrom, setEnterFrom] = useState(0);
   const [card, setCard] = useState<CardState | null>(null);
+  /** A coverage pill just clicked: which language's column to jump to, and
+   *  which concept's mark to land on there. Cleared once the jump has run, or
+   *  once it's given up looking — see the effect below. */
+  const [pendingLink, setPendingLink] = useState<{ lang: Lang; qid: string } | null>(null);
   const [recent, setRecent] = useState<RecentArticle[]>([]);
   /** True until the first `/api/recent` response lands, so the ledger can
    *  show a skeleton instead of popping in from nothing once it does. Never
@@ -354,6 +361,17 @@ export default function Compare() {
     () => LANGS.filter((l) => articles[l]),
     [articles],
   );
+  /** The coverage panel, one column per edition that has anything to show —
+   *  an edition with nothing unique to it drops out rather than sitting there
+   *  empty. A gap present in two editions appears in both their columns, once
+   *  each, since each occurrence is a different span to jump to. */
+  const coverageColumns = useMemo(
+    () =>
+      available
+        .map((lang) => ({ lang, gaps: (data?.coverage ?? []).filter((g) => g.presentIn.includes(lang)) }))
+        .filter((col) => col.gaps.length > 0),
+    [available, data?.coverage],
+  );
   const narrow = useNarrow();
   /** The language being read on a narrow screen. `active` survives opening
    *  another article — following a link out of the Arabic column should land in
@@ -456,6 +474,50 @@ export default function Compare() {
           : current
         : [...current, lang].sort((a, b) => LANGS.indexOf(a) - LANGS.indexOf(b)),
     );
+
+  /** A coverage pill's promise: bring that language's column on screen — solo
+   *  it on a phone, toggle it back into `shown` on a wide one, or do neither
+   *  if it's already there — and queue the jump for the effect below, which
+   *  waits for the column to actually be `visible` before it goes looking. */
+  const jumpToLink = (lang: Lang, qid: string) => {
+    if (narrow) readIn(lang);
+    else if (!shown.includes(lang)) toggle(lang);
+    setPendingLink({ lang, qid });
+  };
+
+  // Runs the jump queued above once its column is on screen. The mark itself
+  // may not exist the instant that happens — bringing a column back into
+  // `shown` re-triggers `Columns`' band layout, which settles over a few
+  // frames — so this polls rather than reading the DOM once. It gives up
+  // silently past a budget: a concept linked only from the infobox has no mark
+  // in the body at all, the key-facts block having flattened its links to
+  // plain text, and no amount of waiting finds one.
+  useEffect(() => {
+    if (!pendingLink) return;
+    if (!visible.includes(pendingLink.lang)) return;
+    const { lang, qid } = pendingLink;
+    let attempts = 0;
+    let frame = requestAnimationFrame(function tick() {
+      const el = document.querySelector<HTMLElement>(
+        `section[data-edition="${lang}"] [data-qid="${qid}"]`,
+      );
+      if (el) {
+        const y = el.getBoundingClientRect().top + window.scrollY - SCROLL_CLEARANCE;
+        window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+        el.classList.remove("diff-flash", "animate-diff-flash");
+        void el.offsetWidth; // restart the animation if the same mark is re-targeted
+        el.classList.add("diff-flash", "animate-diff-flash");
+        setPendingLink(null);
+        return;
+      }
+      if (++attempts > 30) {
+        setPendingLink(null);
+        return;
+      }
+      frame = requestAnimationFrame(tick);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [pendingLink, visible]);
 
   const onEnter = (claim: Claim, event: React.MouseEvent | React.FocusEvent) => {
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
@@ -762,16 +824,35 @@ export default function Compare() {
               <h2 className="font-display font-normal text-[24px] m-0 mb-[4px]">Covered in some versions, not others</h2>
               <p className="text-ink-soft m-0 mb-[16px] max-w-[62ch] text-[14px]">
                 Linked concepts one version mentions and another never does. Computed by set
-                arithmetic over Wikidata identifiers, so no model reads a word of this.
+                arithmetic over Wikidata identifiers, so no model reads a word of this — click a
+                concept to jump to where its own version mentions it.
               </p>
-              <div className="gaps flex flex-wrap gap-[6px]">
-                {data.coverage.map((gap) => (
-                  <span
-                    key={gap.qid}
-                    className="gap font-mono text-[11px] px-[9px] py-[4px] border border-rule bg-paper-raised"
-                  >
-                    {gap.label} <b className="font-semibold text-ink-soft">{gap.presentIn.join("+")} only</b>
-                  </span>
+              <div
+                className="gap-cols grid gap-x-[24px] gap-y-[20px] max-cols:grid-cols-1"
+                // Stacked below `cols` regardless of how many editions have gaps: an
+                // inline column count would out-specificity the `max-cols:` class
+                // that stacks them, the same way `Columns` only writes its own
+                // `gridTemplateColumns` above that breakpoint.
+                style={narrow ? undefined : { gridTemplateColumns: `repeat(${coverageColumns.length}, minmax(0, 1fr))` }}
+              >
+                {coverageColumns.map(({ lang, gaps }) => (
+                  <div key={lang} className="gap-col min-w-0">
+                    <h3 className="font-mono text-[11px] tracking-[0.09em] uppercase text-ink-soft m-0 mb-[9px] pb-[6px] border-b border-rule">
+                      {LANG_META[lang].label}
+                    </h3>
+                    <div className="gaps flex flex-wrap gap-[6px]">
+                      {gaps.map((gap) => (
+                        <button
+                          key={gap.qid}
+                          className="gap font-mono text-[11px] px-[9px] py-[4px] border border-rule bg-paper-raised text-start cursor-pointer hover:bg-ink-wash"
+                          onClick={() => jumpToLink(lang, gap.qid)}
+                          title={`Not in ${gap.missingFrom.map((l) => LANG_META[l].label).join(", ")}`}
+                        >
+                          {gap.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>

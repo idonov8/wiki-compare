@@ -94,6 +94,10 @@ export default function Highlighted({
         <a
           href={comparePath(link.title, lang)}
           className="wikilink text-wiki-link no-underline hover:underline"
+          // The coverage panel below the columns targets a concept's first
+          // mention by this id — undefined for a link that never resolved to a
+          // Wikidata item, which React renders as no attribute at all.
+          data-qid={link.qid}
           onClick={(e) => {
             // Let modifier/middle clicks open a new tab; take over the plain one.
             if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;

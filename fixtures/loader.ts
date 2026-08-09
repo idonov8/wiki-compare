@@ -46,6 +46,7 @@ export function fixtureSnapshots(fixture: Fixture): ArticleSnapshot[] {
   const out: ArticleSnapshot[] = [];
   for (const [lang, page] of Object.entries(fixture.pages) as [Lang, ParsedPage][]) {
     const qids = fixture.qidByTitle[lang] ?? {};
+    const qidByTitle = new Map(Object.entries(qids));
     const linkQids = [
       ...new Set(
         linkTitlesOf(page)
@@ -53,7 +54,7 @@ export function fixtureSnapshots(fixture: Fixture): ArticleSnapshot[] {
           .filter((qid): qid is string => Boolean(qid)),
       ),
     ];
-    out.push(snapshotOf(lang, page, linkQids));
+    out.push(snapshotOf(lang, page, linkQids, qidByTitle));
   }
   return out;
 }
