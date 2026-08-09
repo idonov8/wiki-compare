@@ -420,7 +420,10 @@ await page.waitForSelector("mark.claim", { timeout: 30000 });
 
 const marks = await page.evaluate(() => {
   const out: { lang: string; gap: number; rects: number; sample: string }[] = [];
-  for (const col of document.querySelectorAll("section.column")) {
+  // Continuation columns too: a mark in the band where one edition runs on alone
+  // is set at a width nothing else on the page uses, which is exactly where a
+  // span that breaks at a direction boundary would go unnoticed.
+  for (const col of document.querySelectorAll("section.column, section.column-more")) {
     const lang = col.getAttribute("lang") ?? "?";
     for (const mark of col.querySelectorAll("mark.claim")) {
       const rects = [...mark.getClientRects()];
@@ -451,6 +454,132 @@ for (const lang of ["en", "he", "ar"]) {
   const n = marks.filter((m) => m.lang === lang).length;
   if (n) console.log(`        ${lang}: ${n} marks, max intra-line gap ${Math.max(...marks.filter((m) => m.lang === lang).map((m) => m.gap)).toFixed(1)}px`);
 }
+
+// ---- the page a lopsided set of editions leaves behind ----------------------
+
+// The three articles are never the same length, so the row of columns runs out
+// one column at a time — and it used to run out into a page that was a single
+// narrow column of Hebrew beside two thirds of nothing, for as long as the
+// longest edition kept going. The article is laid out in bands now: each band
+// carries only the editions that still have text and shares the whole width
+// between them, so the page is spent rather than left blank.
+const bands = await page.evaluate(() => {
+  const page = document.querySelector<HTMLElement>(".columns-flow")!.getBoundingClientRect();
+  const unit = document
+    .querySelector<HTMLElement>('[data-band="0"] [data-edition]')!
+    .getBoundingClientRect().width;
+  return [...document.querySelectorAll<HTMLElement>("[data-band]")].map((band) => {
+    const cols = [...band.querySelectorAll<HTMLElement>("[data-edition]")];
+    const box = band.getBoundingClientRect();
+    const ends = cols.filter((col) => col.querySelector(".column-ends"));
+    return {
+      langs: cols.map((col) => col.getAttribute("data-edition") ?? "?"),
+      // As a multiple of a starting column, which is the width the reader met
+      // the article at.
+      width: cols[0].getBoundingClientRect().width / unit,
+      // The widest line this band sets, in pixels — the figure a measure has to
+      // be judged in, since a starting column is itself only a third of however
+      // wide the window happens to be.
+      measure: Math.max(...cols.map((col) => col.getBoundingClientRect().width)),
+      margins: [
+        Math.round(box.left - page.left),
+        Math.round(page.right - box.right),
+      ],
+      ends: ends.length,
+      // What the colophon on an ending column says, flattened.
+      said: ends.map((col) => col.querySelector(".column-ends")!.textContent ?? ""),
+      rule: ends.map((col) =>
+        parseFloat(getComputedStyle(col.querySelector(".column-ends")!).borderTopWidth),
+      ),
+    };
+  });
+});
+
+check(bands.length > 1, "a lopsided article is laid out in bands, not one row of columns",
+  `${bands.length} band(s)`);
+check(
+  bands.every((band, i) => i === 0 || band.langs.length < bands[i - 1].langs.length),
+  "each band carries fewer editions than the one above it",
+  bands.map((b) => b.langs.join("+")).join(" → "),
+);
+// The point of the whole arrangement: the width an edition gives up when it ends
+// goes to the ones still running, rather than to the margin.
+check(
+  bands.every((band, i) => i === 0 || band.width > bands[i - 1].width + 0.1),
+  "and the editions still running take the width the finished ones gave up",
+  bands.map((b) => `${b.width.toFixed(2)}×`).join(" → "),
+);
+// Reclaiming the width must not cost the line length. One edition across a
+// 1440px window is a 150-character line, so the last one standing stops at the
+// measure Wikipedia sets an article at and lets the paper show either side —
+// which is also the page a reader arriving from the source article knows.
+const solo = bands[bands.length - 1];
+check(
+  bands.every((band) => band.measure <= 1000),
+  "no band sets a line wider than a Wikipedia article's own measure",
+  bands.map((b) => `${Math.round(b.measure)}px`).join(", "),
+);
+check(
+  solo.langs.length > 1 || (solo.margins[0] > 40 && solo.margins[0] === solo.margins[1]),
+  "the last edition standing sits in a page of its own, margins either side",
+  `${solo.langs.join("+")} at ${solo.margins.join(" / ")}`,
+);
+// An edition that simply stopped beside one that did not would read as text we
+// had dropped, so the ending is the one thing here still written out — as a
+// colophon, on a rule in full ink, naming the edition in its own script.
+check(
+  bands.slice(0, -1).every((band, i) => band.ends === band.langs.length - bands[i + 1].langs.length),
+  "every edition that stops says where it ended",
+  bands.map((b) => `${b.ends} of ${b.langs.length}`).join("; "),
+);
+check(
+  bands.every((band) =>
+    band.said.every((said, i) => /end of the \w+ article/i.test(said) && band.rule[i] >= 2),
+  ),
+  "and says it as a colophon, named and ruled off",
+  bands.flatMap((b) => b.said).join(" | "),
+);
+// A band drops languages and never takes one back: an edition that ended two
+// bands ago reappearing below would mean the article was being re-ordered.
+check(
+  bands.every((band, i) => i === 0 || band.langs.every((l) => bands[i - 1].langs.includes(l))),
+  "no edition comes back after it has ended",
+  bands.map((b) => b.langs.join("+")).join(" → "),
+);
+
+// The change of shape is drawn rather than written: every rule the band above
+// stands on travels, across one joint, to where the band below stands it. That
+// only says anything if the curves actually arrive at the rules — a bend landing
+// two hundred pixels from the seam it is supposed to be explaining is a squiggle.
+// So the paths are read back and their feet compared against where the columns
+// below really are.
+const joints = await page.evaluate(() => {
+  return [...document.querySelectorAll<SVGSVGElement>("svg.bend")].map((svg) => {
+    const box = svg.getBoundingClientRect();
+    const span = Number(svg.getAttribute("viewBox")!.split(" ")[2]);
+    const feet = [...svg.querySelectorAll("path[stroke]")].map((path) => {
+      const [, x] = path.getAttribute("d")!.match(/([\d.]+) 100$/)!;
+      return box.left + (Number(x) / span) * box.width;
+    });
+    const cols = [...svg.nextElementSibling!.querySelectorAll<HTMLElement>("[data-edition]")];
+    const rules = cols.map((col) => col.getBoundingClientRect().left);
+    rules.push(cols[cols.length - 1].getBoundingClientRect().right);
+    return {
+      feet,
+      // The furthest any curve lands from the nearest rule below it.
+      drift: Math.max(
+        ...feet.map((foot) => Math.min(...rules.map((rule) => Math.abs(foot - rule)))),
+      ),
+    };
+  });
+});
+check(joints.length === bands.length - 1, "a bend is drawn at every change of shape",
+  `${joints.length} for ${bands.length} bands`);
+check(
+  joints.every((joint) => joint.feet.length > 0 && joint.drift <= 1.5),
+  "and every rule it carries lands on a rule of the band below",
+  joints.map((j) => `${j.feet.length} rules, ${j.drift.toFixed(1)}px off`).join("; "),
+);
 
 // ---- lead image + collapsible key facts -------------------------------------
 
