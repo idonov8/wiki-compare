@@ -137,12 +137,26 @@ export interface Usage extends TokenCount {
 /** How much of the article a comparison actually read. */
 export type ScopeKind = "preview" | "full";
 
+/**
+ * Where a preview stopped in one language.
+ *
+ * A preview reads a fixed number of characters off the top of every version, and
+ * a character budget does not respect section boundaries — so the boundary is a
+ * position, not an index: `section` counts body sections (the article's sections
+ * with the key-facts block removed, as `Columns` renders them) and `chars` says
+ * how far into that section the reading got. `chars: 0` means the budget ran out
+ * on the boundary and `section` was not read at all; anything else means it was
+ * read that far and the remainder belongs below the gate.
+ */
+export interface PreviewCut {
+  section: number;
+  chars: number;
+}
+
 export interface ComparisonScope {
   kind: ScopeKind;
-  /** Per language, the index into the body sections (the article's sections with
-   *  the key-facts block removed, as `Columns` renders them) of the first section
-   *  this comparison did not read. Absent on a full run. */
-  processedThrough?: Partial<Record<Lang, number>>;
+  /** Per language, where this comparison stopped reading. Absent on a full run. */
+  processedThrough?: Partial<Record<Lang, PreviewCut>>;
 }
 
 export interface ComparisonResult {

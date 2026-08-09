@@ -10,6 +10,7 @@ import {
   type Claim,
   type Lang,
   type LinkSpan,
+  type PreviewCut,
   type Section,
 } from "@/lib/types";
 
@@ -209,6 +210,24 @@ function grow(root: HTMLElement | null, bands: Band[]): Band[] | null {
 }
 
 /**
+ * A section reduced to a character range of its own text, links carried along.
+ *
+ * The preview's boundary is a character count and lands wherever it lands, so a
+ * section can be cut in half and its two halves rendered on opposite sides of
+ * the gate. Links whose span straddles the cut are dropped rather than clipped:
+ * half an anchor is not a link to anything.
+ */
+function sliceSection(section: Section, from: number, to = section.text.length): Section {
+  return {
+    ...section,
+    text: section.text.slice(from, to),
+    links: section.links
+      ?.filter((l) => l.start >= from && l.end <= to)
+      .map((l) => ({ ...l, start: l.start - from, end: l.end - from })),
+  };
+}
+
+/**
  * The articles, side by side. Rendered as soon as the text exists — before any
  * comparison — so the reader confirms they picked the right subject by reading
  * it, and so the wait is spent on the article rather than on a spinner.
@@ -235,15 +254,14 @@ export default function Columns({
   ghost?: boolean;
   activeId?: string | null;
   /**
-   * Per language, the body-section index this comparison read up to, exclusive.
-   * Absent means the whole article was read and there is nothing to split.
+   * Per language, where this comparison stopped reading. Absent means the whole
+   * article was read and there is nothing to split.
    *
-   * It is per language rather than one number because the aligned sections sit
-   * at different positions in each edition — the English article can reach the
-   * same subject two sections earlier than the Arabic one — so a single cut
-   * would fall in the wrong place in two columns out of three.
+   * It is per language rather than one number because the editions are written
+   * at different lengths: the same character budget reaches the fourth section
+   * of one and stops half way through the second of another.
    */
-  processedThrough?: Partial<Record<Lang, number>>;
+  processedThrough?: Partial<Record<Lang, PreviewCut>>;
   /**
    * `whole` is the ordinary render. A funded comparison never needs anything
    * else. A preview renders twice — `head`, then the gate, then `tail` — so the
@@ -334,8 +352,26 @@ export default function Columns({
     const article = articles[lang];
     if (!article) return [];
     const all = article.sections.filter((s) => s.heading !== KEY_FACTS_HEADING);
-    const cut = processedThrough?.[lang] ?? all.length;
-    return part === "head" ? all.slice(0, cut) : part === "tail" ? all.slice(cut) : all;
+    const cut = processedThrough?.[lang];
+    if (!cut || part === "whole") return all;
+
+    // `chars` is how far into `section` the preview got, so that section belongs
+    // to both halves: its opening above the gate and its remainder below.
+    const straddled = cut.chars > 0 ? all[cut.section] : undefined;
+    if (part === "head") {
+      const head = all.slice(0, cut.section);
+      if (straddled) head.push(sliceSection(straddled, 0, cut.chars));
+      return head;
+    }
+
+    const tail = all.slice(straddled ? cut.section + 1 : cut.section);
+    // The remainder keeps its text and loses its heading — LEAD_HEADING is how a
+    // block says it has none — because the heading was printed above the gate,
+    // and printing it again would read as the section having started over.
+    if (straddled) {
+      tail.unshift({ ...sliceSection(straddled, cut.chars), heading: LEAD_HEADING });
+    }
+    return tail;
   };
 
   return (
