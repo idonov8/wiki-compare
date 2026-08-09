@@ -9,6 +9,14 @@ import type { CouponCheck, DonateResponse, MeResponse } from "@/lib/types";
 const PRESETS = [100, 300, 500, 1000];
 
 /** About a sixth of the gift, rounded to a quarter, as an opening suggestion. */
+/**
+ * The exact proposition the opt-in box puts, kept as a constant because
+ * app/api/donate/route.ts stores this same sentence as the evidence of what was
+ * agreed to. If the two drift, the consent log starts attesting to words nobody
+ * was shown, which is worse than having no log.
+ */
+const EMAIL_OPT_IN_WORDING = "Email me when payments are ready.";
+
 function suggestedMaintenance(amountCents: number): number {
   return Math.round((amountCents * 0.15) / 25) * 25;
 }
@@ -73,6 +81,7 @@ export default function Donate() {
   const [custom, setCustom] = useState("");
   const [maintenance, setMaintenance] = useState(String(suggestedMaintenance(500) / 100));
   const [monthly, setMonthly] = useState(false);
+  const [emailOptIn, setEmailOptIn] = useState(false);
   const [coupon, setCoupon] = useState("");
   // No state for "redeemed": the moment that happens, this page is leaving.
   const [checking, setChecking] = useState(false);
@@ -378,7 +387,29 @@ export default function Donate() {
               <span>
                 Repeat this every month
                 <small className="block text-[12.5px] text-ink-soft">
-                  Cancel whenever. We&apos;ll email before each one.
+                  Cancel whenever, from your account.
+                </small>
+              </span>
+            </label>
+
+            {/* Unticked, and stays unticked. The row is separate from the
+                monthly one above rather than folded into it because s.30A wants
+                consent to being advertised to, given on its own — a box that
+                also means "charge me every month" is not that, and a donation is
+                not consent to anything. The wording is duplicated verbatim in
+                app/api/donate/route.ts, which stores it alongside the answer. */}
+            <label className="donate-email-optin flex items-baseline gap-[10px] py-[14px] border-t border-rule text-[14px]">
+              <input
+                type="checkbox"
+                checked={emailOptIn}
+                onChange={(e) => setEmailOptIn(e.target.checked)}
+                className="flex-none w-[15px] h-[15px] accent-ink relative top-[2px]"
+              />
+              <span>
+                {EMAIL_OPT_IN_WORDING}
+                <small className="block text-[12.5px] text-ink-soft">
+                  One message, when there is something to say. Nothing else, and you can stop it
+                  at any time.
                 </small>
               </span>
             </label>
@@ -553,7 +584,7 @@ export default function Donate() {
                   method: "POST",
                   headers: { "content-type": "application/json" },
                   // No coupon here: this button redeems one directly, above.
-                  body: JSON.stringify({ amountCents, maintenanceCents, monthly, from }),
+                  body: JSON.stringify({ amountCents, maintenanceCents, monthly, from, emailOptIn }),
                 });
                 // Same read as above: a bodyless 500 here had the same bug.
                 const json = await readJson(res);

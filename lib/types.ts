@@ -58,11 +58,34 @@ export interface Section {
   links?: LinkSpan[];
 }
 
+/**
+ * Who made a photograph and on what terms, as its Wikimedia file page states.
+ *
+ * Not optional decoration: CC BY-SA is a permission conditional on naming the
+ * author and the licence, so a photo shown without this is a photo shown
+ * without permission. `lib/wikipedia.ts` drops any image it cannot resolve one
+ * of these for, which is why the renderer can treat its presence as given.
+ */
+export interface ImageCredit {
+  /** The author as the file page names them, tags stripped. Absent on the
+   *  occasional file whose page states terms but no author. */
+  artist?: string;
+  /** Short licence name, as Wikimedia writes it: "CC BY-SA 4.0", "Public domain". */
+  license: string;
+  licenseUrl?: string;
+  /** The file description page, which carries the full terms. */
+  fileUrl: string;
+}
+
 export interface ArticleImage {
   src: string;
   alt?: string;
   width?: number;
   height?: number;
+  /** Canonical "File:…" title on Commons, which is what the credit is looked
+   *  up by and what makes a cached snapshot re-checkable. */
+  file: string;
+  credit?: ImageCredit;
 }
 
 export interface ArticleSnapshot {
@@ -175,6 +198,15 @@ export interface DonateRequest {
   monthly: boolean;
   /** Which surface sent them here, for the funnel. */
   from?: string;
+  /**
+   * Whether they ticked the box asking to be told when payments open.
+   *
+   * Separate from `monthly` and from the donation itself on purpose: s.30A wants
+   * consent to receiving advertisements specifically, and a donation is not it.
+   * Absent and false mean the same thing — nobody is written to — which is what
+   * makes an unticked box the safe default rather than an ambiguous one.
+   */
+  emailOptIn?: boolean;
 }
 
 /** What the pay button submits to redeem. Case and spacing are the server's problem. */
