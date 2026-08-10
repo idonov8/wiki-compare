@@ -191,6 +191,25 @@ export interface ComparePayload extends ComparisonResult {
   cache?: CacheInfo;
 }
 
+/**
+ * One line of a streaming comparison, newest first as the run produces them.
+ *
+ * `done` carries the same `ComparisonResult` the non-streaming response returns,
+ * and is always the last line of a successful run. The lines before it are
+ * progress a client may render early and may equally ignore — which is what
+ * keeps the streaming and plain-JSON paths from becoming two contracts.
+ *
+ * `error` replaces `done` when a run fails partway. It travels in the body
+ * rather than in the status code because by the time the model fails the
+ * response has been open, and 200, for a minute.
+ */
+export type CompareEvent =
+  | { event: "articles"; qid: string; articles: Record<string, ArticleSnapshot> }
+  | { event: "coverage"; coverage: CoverageGap[] }
+  | { event: "claim"; claim: Claim }
+  | { event: "done"; result: ComparisonResult; fromCache: boolean; cache?: CacheInfo }
+  | { event: "error"; error: string };
+
 /* ---- accounts and credits ---- */
 
 /**

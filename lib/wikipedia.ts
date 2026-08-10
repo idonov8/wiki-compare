@@ -604,46 +604,55 @@ export function splitSections(html: string, qidByTitle?: Map<string, string>): S
  */
 async function titlesToQids(lang: Lang, titles: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  for (let i = 0; i < titles.length; i += 50) {
-    const batch = titles.slice(i, i + 50);
-    try {
-      const res = await api<{
-        query?: {
-          normalized?: { from: string; to: string }[];
-          redirects?: { from: string; to: string }[];
-          pages?: { title?: string; missing?: boolean; pageprops?: { wikibase_item?: string } }[];
-        };
-      }>(wiki(lang), {
-        action: "query",
-        prop: "pageprops",
-        ppprop: "wikibase_item",
-        titles: batch.join("|"),
-        redirects: "1",
-      });
 
-      const qidByTitle = new Map<string, string>();
-      for (const page of res.query?.pages ?? []) {
-        const qid = page.pageprops?.wikibase_item;
-        if (page.title && qid && !page.missing) qidByTitle.set(page.title, qid);
-      }
+  const batches: string[][] = [];
+  for (let i = 0; i < titles.length; i += 50) batches.push(titles.slice(i, i + 50));
 
-      // Follow the normalisation/redirect chains back so callers can look up by
-      // the title they actually passed in.
-      const hops = [...(res.query?.normalized ?? []), ...(res.query?.redirects ?? [])];
-      for (const title of batch) {
-        let resolved = title;
-        for (let hop = 0; hop < 4; hop++) {
-          const next = hops.find((h) => h.from === resolved);
-          if (!next) break;
-          resolved = next.to;
+  // In parallel for the same reason as `fetchLabels`: eight round trips per
+  // language, each independent of the last, ran end to end on every cold
+  // article and every one of them was in front of the model call.
+  await Promise.all(
+    batches.map(async (batch) => {
+      try {
+        const res = await api<{
+          query?: {
+            normalized?: { from: string; to: string }[];
+            redirects?: { from: string; to: string }[];
+            pages?: { title?: string; missing?: boolean; pageprops?: { wikibase_item?: string } }[];
+          };
+        }>(wiki(lang), {
+          action: "query",
+          prop: "pageprops",
+          ppprop: "wikibase_item",
+          titles: batch.join("|"),
+          redirects: "1",
+        });
+
+        const qidByTitle = new Map<string, string>();
+        for (const page of res.query?.pages ?? []) {
+          const qid = page.pageprops?.wikibase_item;
+          if (page.title && qid && !page.missing) qidByTitle.set(page.title, qid);
         }
-        const qid = qidByTitle.get(resolved) ?? qidByTitle.get(title);
-        if (qid) out.set(title, qid);
+
+        // Follow the normalisation/redirect chains back so callers can look up
+        // by the title they actually passed in.
+        const hops = [...(res.query?.normalized ?? []), ...(res.query?.redirects ?? [])];
+        for (const title of batch) {
+          let resolved = title;
+          for (let hop = 0; hop < 4; hop++) {
+            const next = hops.find((h) => h.from === resolved);
+            if (!next) break;
+            resolved = next.to;
+          }
+          const qid = qidByTitle.get(resolved) ?? qidByTitle.get(title);
+          if (qid) out.set(title, qid);
+        }
+      } catch {
+        // A failed batch costs coverage detail, not correctness. Keep going.
       }
-    } catch {
-      // A failed batch costs coverage detail, not correctness. Keep going.
-    }
-  }
+    }),
+  );
+
   return out;
 }
 
@@ -758,23 +767,40 @@ export async function fetchArticle(lang: Lang, title: string): Promise<ArticleSn
 
 export { titlesToQids };
 
+/**
+ * English labels for Wikidata items, 50 at a time and all batches at once.
+ *
+ * The batches were sequential, which on a first-ever article is the single
+ * slowest thing in the request: three editions contribute up to `MAX_LINKS`
+ * concepts each, so over a thousand ids is ordinary, and twenty-odd round trips
+ * end to end is most of a minute spent waiting on a call that has no dependency
+ * on the one before it. They are independent by construction — each answers for
+ * its own ids — so they go together. Labels are cached in the database after the
+ * first read, which is why this is only ever paid once per concept.
+ */
 export async function fetchLabels(qids: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  for (let i = 0; i < qids.length; i += 50) {
-    const batch = qids.slice(i, i + 50);
-    try {
-      const res = await api<{ entities?: Record<string, { labels?: Record<string, { value: string }> }> }>(WIKIDATA, {
-        action: "wbgetentities",
-        ids: batch.join("|"),
-        props: "labels",
-        languages: "en",
-      });
-      for (const [qid, entity] of Object.entries(res.entities ?? {})) {
-        const label = entity.labels?.en?.value;
-        if (label) out.set(qid, label);
+  const batches: string[][] = [];
+  for (let i = 0; i < qids.length; i += 50) batches.push(qids.slice(i, i + 50));
+
+  const results = await Promise.all(
+    batches.map(async (batch) => {
+      try {
+        return await api<{ entities?: Record<string, { labels?: Record<string, { value: string }> }> }>(
+          WIKIDATA,
+          { action: "wbgetentities", ids: batch.join("|"), props: "labels", languages: "en" },
+        );
+      } catch {
+        // Same as above: labels are a nicety.
+        return null;
       }
-    } catch {
-      // Same as above: labels are a nicety.
+    }),
+  );
+
+  const out = new Map<string, string>();
+  for (const res of results) {
+    for (const [qid, entity] of Object.entries(res?.entities ?? {})) {
+      const label = entity.labels?.en?.value;
+      if (label) out.set(qid, label);
     }
   }
   return out;
