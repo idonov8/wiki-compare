@@ -10,8 +10,11 @@ const BETA_GROUP_URL = "https://chat.whatsapp.com/L8T9rwmdALzJD8IqYZ292y?s=cl&p=
  * the entire product, so the mark says that before a reader has run a single
  * comparison, in the site's own colour vocabulary rather than a borrowed one.
  * At rest the bars sit close and tilted, like a folded ribbon; on hover or
- * keyboard focus they fan out level, the way the columns themselves fan out
- * into three tellings of one article.
+ * keyboard focus they drop onto a baseline and step down in height — the same
+ * shape `LangBars` draws under the search field once a comparison is running,
+ * where three editions of one article turn out to be nothing like the same
+ * length. The mark makes the site's argument twice: three colours for three
+ * readings, and a lopsided chart for how unevenly they are written.
  *
  * `beta` rides low on the baseline, the way a trademark mark sits off a
  * wordmark rather than floating centred beside it, and is its own link —
@@ -56,19 +59,29 @@ function BetaBadge() {
 
 /** Decorative only — the link's accessible name comes from the `aria-label` above. */
 function Strand() {
+  // Anchored at the bottom rather than the top, because a bar that shortens
+  // from a shared baseline is a chart and one that shortens from a shared
+  // ceiling is not. Widening as they land too: 4px on an 8px pitch is the same
+  // half-filled rhythm the real chart has at 22px on 44px.
   const bar =
-    "absolute top-0 h-full w-[3px] rounded-[1px] transition-[left,transform] duration-200 ease-out";
+    "absolute bottom-0 h-[18px] w-[3px] rounded-[1px] transition-[left,width,height,transform] duration-200 ease-out group-hover:w-[4px] group-focus-visible:w-[4px]";
   return (
     <span
       aria-hidden="true"
       className="strand relative mx-[5px] inline-block h-[18px] w-[15px] align-middle"
     >
+      {/* The axis, drawn before the bars settle onto it — a chart plots its
+          baseline first, and the 30/70/110ms stagger below is the three bars
+          arriving on it in the order the chart sorts them. */}
+      <i className="absolute bottom-[-2px] left-[-2px] h-px w-[20px] origin-left scale-x-0 bg-ink opacity-0 transition-[transform,opacity] duration-200 ease-out group-hover:scale-x-100 group-hover:opacity-100 group-focus-visible:scale-x-100 group-focus-visible:opacity-100" />
       <i
-        className={`${bar} left-[1px] rotate-[-10deg] bg-framing group-hover:left-[-3px] group-hover:rotate-0 group-focus-visible:left-[-3px] group-focus-visible:rotate-0`}
+        className={`${bar} left-[1px] rotate-[-10deg] bg-framing delay-[30ms] group-hover:left-[-2px] group-hover:rotate-0 group-focus-visible:left-[-2px] group-focus-visible:rotate-0`}
       />
-      <i className={`${bar} left-[6px] bg-contradiction`} />
       <i
-        className={`${bar} left-[11px] rotate-[10deg] bg-unique group-hover:left-[15px] group-hover:rotate-0 group-focus-visible:left-[15px] group-focus-visible:rotate-0`}
+        className={`${bar} left-[6px] bg-contradiction delay-[70ms] group-hover:h-[10px] group-focus-visible:h-[10px]`}
+      />
+      <i
+        className={`${bar} left-[11px] rotate-[10deg] bg-unique delay-[110ms] group-hover:left-[14px] group-hover:h-[7px] group-hover:rotate-0 group-focus-visible:left-[14px] group-focus-visible:h-[7px] group-focus-visible:rotate-0`}
       />
     </span>
   );
