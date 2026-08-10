@@ -19,6 +19,7 @@ import { useSwipe } from "./useSwipe";
 import Wordmark from "./Wordmark";
 import { initAnalytics, track } from "@/lib/analytics";
 import { formatCost, storedCost } from "@/lib/pricing";
+import { readNdjson } from "@/lib/ndjson";
 import {
   CACHE_WINDOW_DAYS,
   LANGS,
@@ -26,6 +27,7 @@ import {
   type ArticleSnapshot,
   type CacheInfo,
   type Claim,
+  type CompareEvent,
   type ComparePayload,
   type Lang,
   type MeResponse,
@@ -166,6 +168,12 @@ export default function Compare() {
   const [target, setTarget] = useState<Hit | null>(null);
   const [articles, setArticles] = useState<Record<string, ArticleSnapshot>>({});
   const [data, setData] = useState<ComparePayload | null>(null);
+  /** Differences that have arrived so far on a run still in progress. The model
+   *  writes them one at a time and each is independently displayable, so they go
+   *  on the page as they land rather than a minute later all at once. `data`
+   *  supersedes this the moment the run finishes — same claims, but with the
+   *  usage and scope that only the finished run knows. */
+  const [liveClaims, setLiveClaims] = useState<Claim[]>([]);
   const [shown, setShown] = useState<Lang[]>([...LANGS]);
   /** The one language on screen where three columns do not fit. Kept apart from
    *  `shown` rather than folded into it: the two are different questions — which
@@ -218,48 +226,84 @@ export default function Compare() {
    *  look like a navigation to re-apply. */
   const appliedUrl = useRef<string | null>(null);
 
+  /** Bumped at the top of every `open`. A streaming read outlives the article
+   *  it was started for — following a link or pressing back begins another one
+   *  while the first is still arriving — so each read stamps its id here and
+   *  ignores any event once a later read has taken over. Without this the stale
+   *  run's claims blend into the new page and its `done` line replaces it. */
+  const runId = useRef(0);
+
   /**
-   * Open an article: the comparison and the articles alone are requested at the
-   * same time. `/api/articles` answers in about a second and fills the columns;
-   * `/api/compare` takes a minute and only adds the marks — and it reads the
-   * same cache the first request just warmed, so the pair costs one fetch.
+   * Open an article: one streaming request that reports as it goes.
+   *
+   * This used to be two requests — `/api/articles` for the columns and
+   * `/api/compare` for the marks — on the theory that the second would find the
+   * article cache the first had warmed. It did not: nothing dedupes them, so on
+   * a cold article both fetched all three editions from Wikipedia and both ran
+   * the link-to-Wikidata resolution, doubling the work and the rate-limit
+   * exposure to save nothing. The stream sends the articles on the same line
+   * budget as the old separate call, and then the differences as they are found.
    */
   const open = useCallback(async (hit: Hit) => {
+    // This read supersedes any still arriving from an article the reader has
+    // moved on from. Every state write below is gated on the id still being
+    // current, so a stale stream's claims and `done` line land on the floor.
+    const id = ++runId.current;
+    const current = () => runId.current === id;
+
     reset();
     setTarget(hit);
     setArticles({});
     setData(null);
+    setLiveClaims([]);
     setPhase("comparing");
 
-    const compare = fetch(
-      `/api/compare?title=${encodeURIComponent(hit.title)}&lang=${encodeURIComponent(hit.lang)}`,
-    ).then(async (res) => {
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? "Comparison failed.");
-      return json as ComparePayload;
-    });
-    compare.catch(() => {}); // handled below; this only keeps an early reject quiet
+    const showArticles = (articles: Record<string, ArticleSnapshot> | undefined) => {
+      if (!articles) return;
+      setArticles(articles);
+      setShown(LANGS.filter((l) => articles[l]));
+    };
 
     try {
       const res = await fetch(
-        `/api/articles?title=${encodeURIComponent(hit.title)}&lang=${encodeURIComponent(hit.lang)}`,
+        `/api/compare?title=${encodeURIComponent(hit.title)}&lang=${encodeURIComponent(hit.lang)}&stream=1`,
       );
-      const json = await res.json();
-      if (res.ok) {
-        setArticles(json.articles ?? {});
-        setShown(LANGS.filter((l) => json.articles?.[l]));
+      // A failure before the first line is still an ordinary JSON error body.
+      if (!res.ok || !res.body) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error ?? "Comparison failed.");
       }
-      // A failure here isn't fatal: the comparison returns the articles too, and
-      // its own error is the one worth showing.
-    } catch {}
 
-    try {
-      const json = await compare;
-      setData(json);
-      setArticles(json.articles ?? {});
-      setShown(LANGS.filter((l) => json.articles?.[l]));
+      let final: ComparePayload | null = null;
+      let failed: string | null = null;
+
+      await readNdjson<CompareEvent>(res.body, (event) => {
+        if (!current()) return;
+        switch (event.event) {
+          case "articles":
+            showArticles(event.articles);
+            break;
+          case "claim":
+            setLiveClaims((claims) => [...claims, event.claim]);
+            break;
+          case "done":
+            final = { ...event.result, fromCache: event.fromCache, cache: event.cache };
+            break;
+          case "error":
+            failed = event.error;
+            break;
+        }
+      });
+
+      if (!current()) return;
+      if (failed) throw new Error(failed);
+      if (!final) throw new Error("The comparison ended without returning a result.");
+
+      setData(final);
+      showArticles((final as ComparePayload).articles);
       setPhase("done");
     } catch (e) {
+      if (!current()) return;
       setError(e instanceof Error ? e.message : "Comparison failed.");
       setPhase(hits.length ? "results" : "idle");
     }
@@ -384,6 +428,11 @@ export default function Compare() {
   const visible = narrow ? (solo ? [solo] : []) : shown.filter((l) => available.includes(l));
   const badged = !!data?.cache && data.cache.edited.length > 0;
   const preview = data?.scope?.kind === "preview";
+  /** What is marked on the page right now: the finished run's claims, or the
+   *  ones that have arrived so far while it is still reading. The finished run
+   *  supersedes rather than merges — it is the same list, and it is the copy
+   *  that got stored. */
+  const claims = data?.claims ?? liveClaims;
 
   const goDonate = useCallback((from: string) => {
     void track("gate_cta_clicked", { from });
@@ -628,9 +677,13 @@ export default function Compare() {
                 "cached" in its own right, so the sentence never repeats it. */}
             {data ? (
               <span title={tokenNote(data)}>
-                {data.qid} · {data.claims.length} marked
+                {data.qid} · {claims.length} marked
                 {costNote(data) ? ` · ${costNote(data)}` : ""}
               </span>
+            ) : claims.length ? (
+              // Mid-run: the qid and the cost are not known yet, but the count
+              // is, and it is climbing on the page beside this line.
+              `${claims.length} marked so far…`
             ) : (
               "reading all three…"
             )}
@@ -774,7 +827,7 @@ export default function Compare() {
               <Columns
                 articles={articles}
                 visible={visible}
-                claims={data.claims}
+                claims={claims}
                 activeId={card?.claim.id ?? null}
                 processedThrough={data.scope?.processedThrough}
                 part="head"
@@ -793,7 +846,7 @@ export default function Compare() {
               <Columns
                 articles={articles}
                 visible={visible}
-                claims={data.claims}
+                claims={claims}
                 processedThrough={data.scope?.processedThrough}
                 part="tail"
                 onLink={navigate}
@@ -803,8 +856,11 @@ export default function Compare() {
             <Columns
               articles={articles}
               visible={visible}
-              claims={data?.claims ?? []}
-              ghost={comparing}
+              claims={claims}
+              // Ghosts stand in for marks nobody has yet. The first real
+              // difference retires them: drifting placeholders beside located
+              // claims read as though the located ones were still moving.
+              ghost={comparing && claims.length === 0}
               activeId={card?.claim.id ?? null}
               onEnter={onEnter}
               onLeave={() => setCard(null)}
@@ -825,11 +881,26 @@ export default function Compare() {
 
       {langSwitch && <LangSwitch langs={available} active={solo!} onChange={readIn} />}
 
-      {comparing && <Loading title={target?.title ?? ""} />}
+      {/* The panel hands over to the stepper the moment there is something to
+          step through. Until then it is the only thing that can say what is
+          happening; after, it would be prose about work the reader can watch. */}
+      {comparing && claims.length === 0 && <Loading title={target?.title ?? ""} reading={hasColumns} />}
+
+      {/* Outside the `done` block, because the stepper is now live during the
+          read as well: differences stream in, and the ones that have arrived
+          are already worth jumping between. `busy` also covers the wait after
+          donating, which buys the rest of the article on the same page. */}
+      {claims.length > 0 && (comparing || funding || phase === "done") && (
+        <DiffNav
+          // The claim count is in the signature because each one that lands
+          // renders new marks, and the rail plots marks it has measured.
+          signature={`${data?.qid ?? target?.title ?? ""}:${visible.join("")}:${claims.length}`}
+          busy={comparing || funding}
+        />
+      )}
 
       {phase === "done" && data && (
         <>
-          {data.claims.length > 0 && <DiffNav signature={`${data.qid}:${visible.join("")}`} />}
 
           {/* "Covered in some versions, not others" is disabled for now — the
               flat pill list this section used to show wasn't worth reviving,
