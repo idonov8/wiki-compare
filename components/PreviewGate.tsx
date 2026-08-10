@@ -85,7 +85,7 @@ export default function PreviewGate({
           </>
         ) : signedIn ? (
           <>
-            Or wait till sombody else does :) You can see processed articles in the <a href="/?full=true#recently-compared" className="text-ink">home page</a>.
+            You can find processed articles in the <a href="/?full=true#recently-compared" className="text-ink">home page</a>.
           </>
         ) : (
           <>
