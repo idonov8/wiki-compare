@@ -6,4 +6,8 @@ Open a PR when you finish working on a feature.
 
 ## Code comments
 
-No explanatory comments for self-evident code. Avoid over-commenting — only comment where the code's intent genuinely isn't clear from reading it.
+No explanatory comments for self-evident code. Avoid over-commenting — only comment where the code's intent isn't clear from reading it.
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.

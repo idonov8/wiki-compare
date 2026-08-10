@@ -29,6 +29,11 @@ Not yet verified — needs `ANTHROPIC_API_KEY` and `DATABASE_URL`:
   not been demonstrated against a real database; the check worth running first is two simultaneous
   debits against a single article's worth of credit, which must leave the balance at zero rather
   than below it.
+- The sign-up grant. The `create.before` hook sets `creditCents` on the row Better Auth inserts,
+  which the adapter writes because `input: false` only closes the HTTP endpoints, not the
+  adapter — but no account has actually been created against a database to prove it. The check
+  worth running first is a fresh magic-link sign-up: the masthead should read $1.00 immediately,
+  with the note beside it.
 - That `creditCents` really is unreachable through Better Auth's own update endpoint. It is
   declared `input: false`, which should make it server-owned; the flag is one word long and the
   failure it prevents is anyone minting themselves credit, so it deserves a deliberate attempt to
@@ -251,6 +256,18 @@ a `curl`. Balance changes go through one statement in `lib/credits.ts` with the 
 in the `WHERE` clause, rather than through the ORM, because a read-modify-write lets two tabs
 spend the same twenty cents.
 
+A new account is created holding `SIGNUP_GRANT_CENTS` — $1.00, which is five articles. It is
+written by a `databaseHooks.user.create.before` hook, into the same `INSERT` that creates the row
+rather than by an `UPDATE` just after it, so there is no moment where a fresh account can be asked
+to top up. That grant is what the whole flow is arranged around: the masthead asks a signed-out
+reader to log in rather than to donate, the gate at the end of a preview does the same, and the
+payment page is reached only by somebody who has actually run out. Signed in with credit, the gate
+says "Donate this article" and names what pressing it spends and who gets it; the thanks appear on
+the press, for nine seconds, because the run they paid for takes about a minute and a thank-you at
+the end of it would be thanking somebody for waiting. `/api/me` reports `newcomer` — this balance
+is still the sign-up grant, untouched — which is what raises the note beside the meter explaining
+where the credit came from.
+
 Payment is a mock. The pay button records the amount, the running-costs contribution and whether
 it was meant to repeat monthly, then admits it cannot take the money and grants $5 anyway. The row
 it writes is the entire point: the count of people who tried to give money to something that could
@@ -392,6 +409,7 @@ app/api/donate/route.ts    the mock payment, and the ledger row that is its real
 app/api/coupon/route.ts    redeeming a code, for credit that is not a mock
 lib/coupons.ts             which codes exist and what each one is worth
 app/donate/page.tsx        the payment page that cannot take a payment
+app/login/page.tsx         where the masthead and the gate send a signed-out reader
 lib/auth.ts                Better Auth setup; credits declared server-owned
 lib/credits.ts             debit, grant and the ledger, in single statements
 lib/pricing.ts             tokens to dollars, and dollars to articles
@@ -405,8 +423,10 @@ lib/db.ts                  Neon cache layer
 db/schema.sql              all ten tables, ours and Better Auth's, every one idempotent
 components/Compare.tsx     search → choose → compare, hover card
 components/SignIn.tsx      the sign-in screen: Google, or a link by email
+components/LogIn.tsx       that screen as a page, with the way back in `?next=`
 components/PreviewGate.tsx the seam between what was read and what wasn't
-components/CreditBar.tsx   balance in the masthead, and the thank-you on hover
+components/ThankYou.tsx    nine seconds of thanks, raised when credit is spent
+components/CreditBar.tsx   balance in the masthead, the welcome note, the thank-you on hover
 components/Donate.tsx      amounts, running costs, monthly, the Redeem button, and the reveal
 components/Columns.tsx     the articles side by side, with or without a comparison
 components/Highlighted.tsx span location and marking

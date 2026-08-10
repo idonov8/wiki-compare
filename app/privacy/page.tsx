@@ -148,6 +148,36 @@ export default function Page() {
             </p>
           </Block>
 
+          <Block heading="Wikipedia text and photographs">
+            <p>
+              The article prose and the lead photographs in the columns are the work of
+              Wikipedia&apos;s contributors, excerpted and abridged for comparison rather than
+              reproduced whole, and reused under{" "}
+              <a
+                href="https://creativecommons.org/licenses/by-sa/4.0/"
+                target="_blank"
+                rel="license noopener noreferrer"
+                className="text-ink underline"
+              >
+                CC BY-SA 4.0
+              </a>
+              , which this site and anything drawn from it carry too. Each column links the exact
+              revision it was read from, and each photograph names its author and licence.
+            </p>
+          </Block>
+
+          <Block heading="If a comparison is wrong about you">
+            <p>
+              Comparisons are written by a language model from the articles, so they can be wrong or
+              incomplete, and a marked difference is a pointer to check the sources rather than a
+              finding. If one says something false about you, write to{" "}
+              <a href={`mailto:${CONTACT}`} className="text-ink underline">
+                {CONTACT}
+              </a>{" "}
+              and the comparison comes down while it is looked at.
+            </p>
+          </Block>
+
           <Block heading="Changes">
             <p>
               If this notice changes in a way that matters, the date at the top changes with it.

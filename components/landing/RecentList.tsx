@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Section from "./Section";
 import { LANG_META, type RecentArticle } from "@/lib/types";
 
@@ -35,7 +35,16 @@ const SKELETON_ROWS = Array.from({ length: 12 }, (_, i) => i);
  * gallery.
  */
 export default function RecentList({ recent, onOpen, relative, loading }: Props) {
+  // A link into the ledger can ask for the full-only filter up front, e.g.
+  // `/?full=true#recently-compared` from the preview gate. `window` isn't
+  // there yet during server prerendering, so the initial state stays `false`
+  // and this only runs once the component is mounted in the browser.
   const [fullOnly, setFullOnly] = useState(false);
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("full") === "true") {
+      setFullOnly(true);
+    }
+  }, []);
 
   if (!loading && !recent.length) return null;
 
@@ -45,6 +54,7 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
     <Section
       heading="Recently compared:"
       className="py-[max(7vh,52px)]"
+      id="recently-compared"
       action={
         !loading && (
           <div className="flex shrink-0 items-baseline gap-[12px]">
