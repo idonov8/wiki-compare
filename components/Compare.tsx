@@ -178,12 +178,6 @@ export default function Compare() {
    *  supersedes this the moment the run finishes — same claims, but with the
    *  usage and scope that only the finished run knows. */
   const [liveClaims, setLiveClaims] = useState<Claim[]>([]);
-  /** How far this run intends to read, known long before it finishes — the
-   *  preview cut is sent the moment the articles arrive, not held for `done`.
-   *  Without it the gate could only appear once the whole read was over, which
-   *  meant a preview showed as an ordinary, ungated article for the entire
-   *  minute its claims took to stream in. `data` supersedes this the same way
-   *  it supersedes `liveClaims`, once the run finishes. */
   const [liveScope, setLiveScope] = useState<ComparisonScope | null>(null);
   const [shown, setShown] = useState<Lang[]>([...LANGS]);
   /** The one language on screen where three columns do not fit. Kept apart from
