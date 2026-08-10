@@ -205,6 +205,7 @@ export interface ComparePayload extends ComparisonResult {
  */
 export type CompareEvent =
   | { event: "articles"; qid: string; articles: Record<string, ArticleSnapshot> }
+  | { event: "scope"; scope: ComparisonScope }
   | { event: "coverage"; coverage: CoverageGap[] }
   | { event: "claim"; claim: Claim }
   | { event: "done"; result: ComparisonResult; fromCache: boolean; cache?: CacheInfo }

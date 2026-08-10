@@ -18,7 +18,7 @@ import {
   putComparison,
   putLabels,
 } from "@/lib/db";
-import { coverageGaps } from "@/lib/deterministic";
+import { coverageGaps, previewOf } from "@/lib/deterministic";
 import { PROMPT_VERSION, runComparison } from "@/lib/compare";
 import { getSessionUser } from "@/lib/auth";
 import { debit, grant, recordSpend } from "@/lib/credits";
@@ -81,6 +81,22 @@ async function computeAndStore(
       event: "articles",
       qid,
       articles: Object.fromEntries(articles.map((a) => [a.lang, a])),
+    });
+
+    // The cut itself is a character count, not a model finding, so it is known
+    // the instant the articles are — no need to wait for `runComparison` to
+    // recompute the same thing on its way to the model. Sent now rather than
+    // folded into `done` so the gate can appear while the run is still reading,
+    // not only once it has finished.
+    send({
+      event: "scope",
+      scope:
+        scope === "preview"
+          ? {
+              kind: "preview",
+              processedThrough: Object.fromEntries(articles.map((a) => [a.lang, previewOf(a).cut])),
+            }
+          : { kind: "full" },
     });
 
     // Coverage diff: no tokens involved, only set arithmetic over Wikidata ids.

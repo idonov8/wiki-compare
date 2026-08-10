@@ -32,6 +32,7 @@ import {
   type Claim,
   type CompareEvent,
   type ComparePayload,
+  type ComparisonScope,
   type Lang,
   type MeResponse,
   type RecentArticle,
@@ -177,6 +178,7 @@ export default function Compare() {
    *  supersedes this the moment the run finishes — same claims, but with the
    *  usage and scope that only the finished run knows. */
   const [liveClaims, setLiveClaims] = useState<Claim[]>([]);
+  const [liveScope, setLiveScope] = useState<ComparisonScope | null>(null);
   const [shown, setShown] = useState<Lang[]>([...LANGS]);
   /** The one language on screen where three columns do not fit. Kept apart from
    *  `shown` rather than folded into it: the two are different questions — which
@@ -261,6 +263,7 @@ export default function Compare() {
     setArticles({});
     setData(null);
     setLiveClaims([]);
+    setLiveScope(null);
     setPhase("comparing");
 
     const showArticles = (articles: Record<string, ArticleSnapshot> | undefined) => {
@@ -287,6 +290,9 @@ export default function Compare() {
         switch (event.event) {
           case "articles":
             showArticles(event.articles);
+            break;
+          case "scope":
+            setLiveScope(event.scope);
             break;
           case "claim":
             setLiveClaims((claims) => [...claims, event.claim]);
@@ -432,7 +438,12 @@ export default function Compare() {
   const solo = available.includes(active) ? active : available[0];
   const visible = narrow ? (solo ? [solo] : []) : shown.filter((l) => available.includes(l));
   const badged = !!data?.cache && data.cache.edited.length > 0;
-  const preview = data?.scope?.kind === "preview";
+  /** How far the run on screen means to read: the finished run's own scope, or
+   *  — while it is still reading — the cut it announced the moment the
+   *  articles arrived. Same relationship as `claims`/`liveClaims`: `data`
+   *  supersedes rather than merges, once there is a `data` to supersede with. */
+  const scope = data?.scope ?? liveScope;
+  const preview = scope?.kind === "preview";
   /** What is marked on the page right now: the finished run's claims, or the
    *  ones that have arrived so far while it is still reading. The finished run
    *  supersedes rather than merges — it is the same list, and it is the copy
@@ -859,14 +870,14 @@ export default function Compare() {
           style={narrow ? ({ "--lang-from": `${enterFrom * SLIDE_PX}px` } as React.CSSProperties) : undefined}
           {...(narrow ? swipe : null)}
         >
-          {preview && data ? (
+          {preview ? (
             <>
               <Columns
                 articles={articles}
                 visible={visible}
                 claims={claims}
                 activeId={card?.claim.id ?? null}
-                processedThrough={data.scope?.processedThrough}
+                processedThrough={scope?.processedThrough}
                 part="head"
                 onEnter={onEnter}
                 onLeave={() => setCard(null)}
@@ -885,7 +896,7 @@ export default function Compare() {
                 articles={articles}
                 visible={visible}
                 claims={claims}
-                processedThrough={data.scope?.processedThrough}
+                processedThrough={scope?.processedThrough}
                 part="tail"
                 onLink={navigate}
               />
