@@ -21,12 +21,38 @@ const SCROLL_OFFSET = 96;
  *  reader wants to jump between.
  *
  *  `signature` changes whenever the rendered set of marks might have — a new
- *  comparison, a toggled column — and forces a re-measure. */
-export default function DiffNav({ signature }: { signature: string }) {
+ *  comparison, a toggled column, another difference streaming in — and forces a
+ *  re-measure.
+ *
+ *  `busy` says the comparison is still running, and turns the controls into the
+ *  progress indicator for it: an arc of ink travels the border, changing plate
+ *  every revolution. It is the right thing to put a loader on because it is
+ *  already reporting the work — the count climbs as differences are found, and
+ *  the arrows step through the ones that have arrived while the rest are still
+ *  being read. */
+export default function DiffNav({ signature, busy = false }: { signature: string; busy?: boolean }) {
   const [ticks, setTicks] = useState<Tick[]>([]);
   const [view, setView] = useState({ top: 0, height: 100 });
   const [current, setCurrent] = useState(0);
   const marksRef = useRef<HTMLElement[]>([]);
+
+  /** True for the length of the finishing animation, and only for a run that
+   *  was actually watched finishing. A comparison served from the cache arrives
+   *  complete and was never busy, so it has nothing to announce — it should sit
+   *  there as though it had always been there. */
+  const [settled, setSettled] = useState(false);
+  const wasBusy = useRef(busy);
+
+  useEffect(() => {
+    const finishing = wasBusy.current && !busy;
+    wasBusy.current = busy;
+    if (!finishing) return;
+    setSettled(true);
+    // Comfortably past the longer of the two animations, so the attribute is
+    // gone before anything could restart it.
+    const t = setTimeout(() => setSettled(false), 900);
+    return () => clearTimeout(t);
+  }, [busy]);
 
   const measure = useCallback(() => {
     // Marks inside a collapsed <details> (the folded Key facts block) have no
@@ -171,9 +197,17 @@ export default function DiffNav({ signature }: { signature: string }) {
       <div
         // Lifted clear of the floating language switch below `cols`, which owns
         // the bottom of the viewport there.
+        // The sweeping ring positions against this box directly: `fixed` is
+        // already a positioned ancestor, and adding `relative` for it would not
+        // stack — Tailwind emits both as `position`, and whichever it happens to
+        // print last wins. `relative` won, and the pill stopped being fixed.
         className="diffnav-controls pointer-events-auto fixed right-[34px] bottom-[22px] z-[41] flex items-center gap-0.5 rounded-[3px] border border-ink bg-paper-raised p-1 font-mono text-[12px] shadow-offset max-cols:right-[14px] max-cols:bottom-[76px]"
         role="group"
-        aria-label="Jump between differences"
+        data-busy={busy}
+        data-settled={settled}
+        aria-label={
+          busy ? "Jump between differences found so far; still reading" : "Jump between differences"
+        }
       >
         <button
           className="h-[26px] w-[26px] border-0 bg-transparent text-[15px] leading-none text-ink hover:bg-ink-wash-strong"

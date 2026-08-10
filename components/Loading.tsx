@@ -44,10 +44,14 @@ const LANDINGS: Record<Lang, [x: number, y: number]> = {
 // the same sphere at rest.
 
 /**
- * What the route is doing, in the order it does it. The endpoint answers with a
- * single JSON body rather than a progress stream, so these advance on elapsed
- * time: the order is real, the moment each one starts is an estimate. The last
- * stage holds until the response actually arrives.
+ * What the route is doing, in the order it does it.
+ *
+ * These advance on elapsed time, which used to be all there was: the endpoint
+ * answered with one JSON body and the client could not know which stage it was
+ * in. It streams now, so the two stages that have a real signal behind them —
+ * the articles arriving, and the first difference being found — are driven by
+ * that signal instead, and the clock only fills the gaps between. An estimate
+ * that gets overtaken by the truth is corrected rather than left running.
  */
 const STAGES: [afterMs: number, label: string][] = [
   [0, "Resolving the article across languages"],
@@ -57,10 +61,23 @@ const STAGES: [afterMs: number, label: string][] = [
   [6000, "Reading all three for disagreements"],
 ];
 
+/** The stage the articles landing puts us at, whatever the clock says. */
+const READING = 4;
+
 /** Past this, say so rather than leaving a spinner to imply something is stuck. */
 const PATIENCE_MS = 20_000;
 
-export default function Loading({ title }: { title: string }) {
+export default function Loading({
+  title,
+  /** True once the columns are on screen: the read has reached the model. */
+  reading = false,
+  /** Differences found so far. Counted up as the model writes them. */
+  found = 0,
+}: {
+  title: string;
+  reading?: boolean;
+  found?: number;
+}) {
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -69,7 +86,8 @@ export default function Loading({ title }: { title: string }) {
     return () => clearInterval(id);
   }, []);
 
-  const stage = STAGES.filter(([at]) => elapsed >= at).length - 1;
+  const guessed = STAGES.filter(([at]) => elapsed >= at).length - 1;
+  const stage = reading ? Math.max(guessed, READING) : guessed;
 
   return (
     // Bottom centre, over the articles rather than in place of them: the columns
@@ -187,14 +205,21 @@ export default function Loading({ title }: { title: string }) {
       <div className="loading-text max-w-[44ch] text-center">
         <h2 className="mb-[2px] font-display text-[19px] font-normal">{title}</h2>
         <p className="stage font-mono text-[12px] text-ink-soft" role="status" aria-live="polite">
-          {STAGES[Math.min(stage, STAGES.length - 1)][1]}
+          {/* Once differences are landing, the count is the more useful thing to
+              say: it is the one number that proves the wait is producing
+              something, and it is already marked on the page behind this panel. */}
+          {found > 0
+            ? `${found} difference${found === 1 ? "" : "s"} found so far`
+            : STAGES[Math.min(stage, STAGES.length - 1)][1]}
           <span className="ellipsis" aria-hidden="true">
             <i className="inline-block w-1 not-italic animate-ellipsis-fade">.</i>
             <i className="inline-block w-1 not-italic animate-ellipsis-fade [animation-delay:0.5s]">.</i>
             <i className="inline-block w-1 not-italic animate-ellipsis-fade [animation-delay:1s]">.</i>
           </span>
         </p>
-        {elapsed > PATIENCE_MS && (
+        {/* The invitation to race the model only makes sense while it is still
+            behind: once its findings are on the page, they are the answer. */}
+        {elapsed > PATIENCE_MS && found === 0 && (
           <p className="waited mt-[10px] font-mono text-[11px] text-ink-soft opacity-70">
             All three articles are being processed. <br />
             Can you find the differences first?
