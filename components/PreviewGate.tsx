@@ -1,6 +1,6 @@
 "use client";
 
-import { PRICE_PER_ARTICLE_CENTS, formatCents } from "@/lib/pricing";
+import { PRICE_PER_ARTICLE_CENTS, SIGNUP_GRANT_CENTS, articlesFor, formatCents } from "@/lib/pricing";
 
 /**
  * The seam between what has been read and what hasn't.
@@ -14,20 +14,33 @@ import { PRICE_PER_ARTICLE_CENTS, formatCents } from "@/lib/pricing";
  * Funding this does not buy the donor a private article; it buys the article for
  * whoever opens it next, and that is the whole argument for paying at all, so it
  * is the sentence that has to land.
+ *
+ * Three states, and each one asks for exactly the next thing:
+ *
+ *  - signed out: log in. Not "donate" — there is nothing to attach a donation
+ *    to yet, and an account arrives with five articles in it, so for most people
+ *    this is the only step there ever is.
+ *  - signed in with credit: donate this article, and a line saying what that
+ *    spends and what it buys, since the credit is the reader's and spending it
+ *    should never be a surprise.
+ *  - signed in with nothing left: top up. The one case where the ask really is
+ *    money, and the only one that goes to the payment page.
  */
 export default function PreviewGate({
   busy,
   signedIn,
   creditCents,
   onFund,
-  onDonate,
+  onLogIn,
+  onTopUp,
   error,
 }: {
   busy: boolean;
   signedIn: boolean;
   creditCents: number;
   onFund: () => void;
-  onDonate: () => void;
+  onLogIn: () => void;
+  onTopUp: () => void;
   error?: string | null;
 }) {
   const affordable = creditCents >= PRICE_PER_ARTICLE_CENTS;
@@ -44,33 +57,42 @@ export default function PreviewGate({
         The rest of this article hasn&apos;t been processed yet
       </h2>
       <p className="mx-auto mb-[18px] max-w-[56ch] text-[14px] text-ink-soft">
-        Each article costs about{" "}{formatCents(PRICE_PER_ARTICLE_CENTS)} to process. 
+        Each article costs about{" "}{formatCents(PRICE_PER_ARTICLE_CENTS)} to process.
         <br />
         Once it&apos;s done it becomes available for everyone.
       </p>
-      {canFund ? (
-        <button
-          className="gate-cta border border-ink bg-ink px-[22px] py-[10px] text-paper-raised disabled:cursor-progress disabled:opacity-45"
-          onClick={onFund}
-          disabled={busy}
-        >
-          {busy ? "Reading the rest…" : "Process the rest of this article"}
-        </button>
-      ) : (
-        <button
-          className="gate-cta border border-ink bg-ink px-[22px] py-[10px] text-paper-raised disabled:cursor-progress disabled:opacity-45"
-          onClick={onDonate}
-          disabled={busy}
-        >
-          {signedIn ? "Add credit to process this" : "Donate to process this"}
-        </button>
-      )}
-      {signedIn && !affordable && (
-        <p className="gate-note mt-[12px] font-mono text-[11px] text-ink-soft">
-          You have {formatCents(creditCents)} left — an article costs{" "}
-          {formatCents(PRICE_PER_ARTICLE_CENTS)}.
-        </p>
-      )}
+      <button
+        className="gate-cta border border-ink bg-ink px-[22px] py-[10px] text-paper-raised disabled:cursor-progress disabled:opacity-45"
+        onClick={canFund ? onFund : signedIn ? onTopUp : onLogIn}
+        disabled={busy}
+      >
+        {busy
+          ? "Reading the rest…"
+          : canFund
+            ? "Donate this article"
+            : signedIn
+              ? "Top up credit to donate this article"
+              : "Log in to process this article"}
+      </button>
+
+      {/* What pressing it means, under the button rather than in it. The button
+          says the act; this says the cost and who gets it. */}
+      <p className="gate-note mt-[12px] font-mono text-[11px] leading-[1.6] text-ink-soft">
+        {canFund ? (
+          <>
+            This spends ~{formatCents(PRICE_PER_ARTICLE_CENTS)} of your{" "}
+            {formatCents(creditCents)} credit
+          </>
+        ) : signedIn ? (
+          <>
+            You can find processed articles in the <a href="/?full=true#recently-compared" className="text-ink">home page</a>.
+          </>
+        ) : (
+          <>
+            Get {articlesFor(SIGNUP_GRANT_CENTS)} articles for free
+          </>
+        )}
+      </p>
       {error && <p className="gate-note gate-error mt-[12px] font-mono text-[11px] text-ink-soft">{error}</p>}
     </div>
   );

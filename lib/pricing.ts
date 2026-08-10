@@ -143,6 +143,17 @@ export const PRICE_PER_ARTICLE_CENTS = 20;
 /** What the mock payment grants, once, per account. */
 export const MOCK_GRANT_CENTS = 500;
 
+/**
+ * What a new account is given the moment it is created: five articles.
+ *
+ * The gate asks somebody to log in, and an account that arrives empty would send
+ * them straight on to a payment page that cannot take a payment — so the first
+ * donation is one they can actually make. Written in cents because that is what
+ * the balance is in; `articlesFor` turns it back into the promise the copy makes,
+ * so the two can never drift apart.
+ */
+export const SIGNUP_GRANT_CENTS = 100;
+
 export function articlesFor(cents: number): number {
   return Math.floor(Math.max(0, cents) / PRICE_PER_ARTICLE_CENTS);
 }
