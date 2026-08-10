@@ -307,27 +307,19 @@
    The difference stepper, while the comparison is still running.
    ========================================================================= */
 
-/* Registered so they can be animated at all: a plain custom property is a
-   string to the animation engine and jumps between keyframes. Typed, the angle
-   sweeps continuously and the colour holds flat between plate changes. */
-@property --diffnav-angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
-}
-
-/* Inherited, unlike the angle, so the count can be set in whichever ink is
-   currently on the press without running a second animation to track it. */
+/* Registered so it can be animated at all: a plain custom property is a string
+   to the animation engine and jumps between keyframes. Typed, the colour holds
+   flat between plate changes. */
 @property --diffnav-ink {
   syntax: "<color>";
   inherits: true;
   initial-value: #a8322b;
 }
 
-/* One revolution of the arc, one plate. */
-@keyframes diffnav-sweep {
+/* One lap of the edge, one plate. */
+@keyframes diffnav-run {
   to {
-    --diffnav-angle: 360deg;
+    offset-distance: 100%;
   }
 }
 
@@ -350,63 +342,49 @@
 }
 
 /*
- * A single arc of ink travelling the edge of the stepper.
+ * A dash of ink running the inside edge of the stepper.
  *
  * The stepper becomes the loader once the first difference lands, because by
  * then it is the honest one: it counts what has been found and jumps to it,
  * which is the work being reported. A panel describing the same work in prose
  * would be narrating something the reader can already watch.
  *
- * The arc rides two pixels outside the printed rule rather than replacing it,
- * so the control never stops looking like the control — the border, the offset
- * shadow and the numerals are all exactly where they were when it was idle.
+ * It runs inside the printed rule rather than replacing it, so the control
+ * never stops looking like the control.
  */
 .diffnav-controls[data-busy="true"] {
-  animation:
-    diffnav-sweep 1.5s linear infinite,
-    diffnav-plate 4.5s linear infinite;
+  animation: diffnav-plate 4.5s linear infinite;
+  /* The dash is a straight bar; at the corners it would otherwise overhang. */
+  overflow: hidden;
 }
 
-.diffnav-controls[data-busy="true"]::before {
-  content: "";
-  position: absolute;
-  /* Two pixels out and two thick, so the ring sits proud of the 3px corner
-     without crowding it: 5px keeps the two radii concentric. */
-  inset: -2px;
-  border-radius: 5px;
-  padding: 2px;
-  pointer-events: none;
+/* No motion path, no loader: the count still climbs, which is the actual
+   report. */
+@supports (offset-path: padding-box) {
+  .diffnav-controls[data-busy="true"]::before {
+    content: "";
+    position: absolute;
+    width: 22px;
+    height: 5px;
+    /* Behind the glyphs rather than over them. The pill is already a stacking
+       context, so this still clears its own background. */
+    z-index: -1;
+    pointer-events: none;
 
-  /* Brightest at the leading edge and trailing off behind, so the arc has a
-     direction. The hard cut just past the head is what makes it read as a
-     printing head rather than as a glow going round. */
-  background: conic-gradient(
-    from var(--diffnav-angle),
-    transparent 0deg,
-    color-mix(in srgb, var(--diffnav-ink) 18%, transparent) 34deg,
-    color-mix(in srgb, var(--diffnav-ink) 52%, transparent) 70deg,
-    var(--diffnav-ink) 96deg,
-    transparent 101deg,
-    transparent 360deg
-  );
+    /* Travels the edge itself, so the speed is constant the whole way round
+       instead of stalling on the long sides the way a rotating gradient does.
+       Anchored by its outer edge, which lays it just inside the rule. */
+    offset-path: padding-box;
+    offset-anchor: 50% 0%;
+    animation: diffnav-run 1.5s linear infinite;
 
-  /* Punch the middle out so only the ring survives: fill the padding box, fill
-     the border box, keep the difference. */
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
-
-/* The running total takes the ink currently on the press. The one number that
-   is still changing is the one the colour is describing. */
-.diffnav-controls[data-busy="true"] .diffnav-count b {
-  color: var(--diffnav-ink);
-  transition: color 120ms ease;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--diffnav-ink) 30%, transparent) 62%,
+      var(--diffnav-ink) 100%
+    );
+  }
 }
 
 /*
