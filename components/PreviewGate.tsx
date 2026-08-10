@@ -1,6 +1,8 @@
 "use client";
 
+import Outage from "./Outage";
 import { PRICE_PER_ARTICLE_CENTS, SIGNUP_GRANT_CENTS, articlesFor, formatCents } from "@/lib/pricing";
+import { OUT_OF_CREDIT } from "@/lib/types";
 
 /**
  * The seam between what has been read and what hasn't.
@@ -45,6 +47,17 @@ export default function PreviewGate({
 }) {
   const affordable = creditCents >= PRICE_PER_ARTICLE_CENTS;
   const canFund = signedIn && affordable;
+
+  // Pressing the button gave the reader's credit back and read nothing, because
+  // the site itself cannot pay the model. Offering the button again below that
+  // sentence would only be inviting them to watch it fail a second time.
+  if (error === OUT_OF_CREDIT) {
+    return (
+      <div className="gate border-t border-b border-rule bg-paper-raised px-[24px] py-[8px] max-tight:px-[18px]">
+        <Outage from="preview-gate-outage" />
+      </div>
+    );
+  }
 
   return (
     // Raised paper, ruled top and bottom, no shadow and no accent colour: this
