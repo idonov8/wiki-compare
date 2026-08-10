@@ -226,6 +226,13 @@ export default function Compare() {
    *  look like a navigation to re-apply. */
   const appliedUrl = useRef<string | null>(null);
 
+  /** Bumped at the top of every `open`. A streaming read outlives the article
+   *  it was started for — following a link or pressing back begins another one
+   *  while the first is still arriving — so each read stamps its id here and
+   *  ignores any event once a later read has taken over. Without this the stale
+   *  run's claims blend into the new page and its `done` line replaces it. */
+  const runId = useRef(0);
+
   /**
    * Open an article: one streaming request that reports as it goes.
    *
@@ -238,6 +245,12 @@ export default function Compare() {
    * budget as the old separate call, and then the differences as they are found.
    */
   const open = useCallback(async (hit: Hit) => {
+    // This read supersedes any still arriving from an article the reader has
+    // moved on from. Every state write below is gated on the id still being
+    // current, so a stale stream's claims and `done` line land on the floor.
+    const id = ++runId.current;
+    const current = () => runId.current === id;
+
     reset();
     setTarget(hit);
     setArticles({});
@@ -265,6 +278,7 @@ export default function Compare() {
       let failed: string | null = null;
 
       await readNdjson<CompareEvent>(res.body, (event) => {
+        if (!current()) return;
         switch (event.event) {
           case "articles":
             showArticles(event.articles);
@@ -281,6 +295,7 @@ export default function Compare() {
         }
       });
 
+      if (!current()) return;
       if (failed) throw new Error(failed);
       if (!final) throw new Error("The comparison ended without returning a result.");
 
@@ -288,6 +303,7 @@ export default function Compare() {
       showArticles((final as ComparePayload).articles);
       setPhase("done");
     } catch (e) {
+      if (!current()) return;
       setError(e instanceof Error ? e.message : "Comparison failed.");
       setPhase(hits.length ? "results" : "idle");
     }
