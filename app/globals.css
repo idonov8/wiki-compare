@@ -304,6 +304,198 @@
 }
 
 /* ============================================================================
+   The difference stepper, while the comparison is still running.
+   ========================================================================= */
+
+/* Registered so they can be animated at all: a plain custom property is a
+   string to the animation engine and jumps between keyframes. Typed, the angle
+   sweeps continuously and the colour holds flat between plate changes. */
+@property --diffnav-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* Inherited, unlike the angle, so the count can be set in whichever ink is
+   currently on the press without running a second animation to track it. */
+@property --diffnav-ink {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #a8322b;
+}
+
+/* One revolution of the arc, one plate. */
+@keyframes diffnav-sweep {
+  to {
+    --diffnav-angle: 360deg;
+  }
+}
+
+/* The three signature inks in the order the legend prints them. Each holds flat
+   for its third and changes over the remaining fraction of a percent, so the
+   swap reads as a plate being changed rather than as a colour fading. */
+@keyframes diffnav-plate {
+  0%,
+  32.9% {
+    --diffnav-ink: var(--color-contradiction);
+  }
+  33.3%,
+  66.2% {
+    --diffnav-ink: var(--color-unique);
+  }
+  66.6%,
+  100% {
+    --diffnav-ink: var(--color-framing);
+  }
+}
+
+/*
+ * A single arc of ink travelling the edge of the stepper.
+ *
+ * The stepper becomes the loader once the first difference lands, because by
+ * then it is the honest one: it counts what has been found and jumps to it,
+ * which is the work being reported. A panel describing the same work in prose
+ * would be narrating something the reader can already watch.
+ *
+ * The arc rides two pixels outside the printed rule rather than replacing it,
+ * so the control never stops looking like the control — the border, the offset
+ * shadow and the numerals are all exactly where they were when it was idle.
+ */
+.diffnav-controls[data-busy="true"] {
+  animation:
+    diffnav-sweep 1.5s linear infinite,
+    diffnav-plate 4.5s linear infinite;
+}
+
+.diffnav-controls[data-busy="true"]::before {
+  content: "";
+  position: absolute;
+  /* Two pixels out and two thick, so the ring sits proud of the 3px corner
+     without crowding it: 5px keeps the two radii concentric. */
+  inset: -2px;
+  border-radius: 5px;
+  padding: 2px;
+  pointer-events: none;
+
+  /* Brightest at the leading edge and trailing off behind, so the arc has a
+     direction. The hard cut just past the head is what makes it read as a
+     printing head rather than as a glow going round. */
+  background: conic-gradient(
+    from var(--diffnav-angle),
+    transparent 0deg,
+    color-mix(in srgb, var(--diffnav-ink) 18%, transparent) 34deg,
+    color-mix(in srgb, var(--diffnav-ink) 52%, transparent) 70deg,
+    var(--diffnav-ink) 96deg,
+    transparent 101deg,
+    transparent 360deg
+  );
+
+  /* Punch the middle out so only the ring survives: fill the padding box, fill
+     the border box, keep the difference. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* The running total takes the ink currently on the press. The one number that
+   is still changing is the one the colour is describing. */
+.diffnav-controls[data-busy="true"] .diffnav-count b {
+  color: var(--diffnav-ink);
+  transition: color 120ms ease;
+}
+
+/*
+ * Finished: the plate comes down once.
+ *
+ * The whole pill takes an impression — it travels into its own offset shadow,
+ * the shadow closing to nothing underneath it, and comes back up as the ink
+ * spreads out past the edge and fades. One gesture, about three-quarters of a
+ * second, and no text: the count is already on the control and has stopped
+ * climbing, which is the fact being announced. Saying "done" beside a number
+ * that visibly settled would be labelling something the reader just watched.
+ *
+ * Distinct from the sweep by construction. The sweep runs forever, travels, and
+ * is one ink at a time; this happens once, moves outward rather than around,
+ * and carries all three at once.
+ */
+@keyframes diffnav-press {
+  0% {
+    transform: none;
+    box-shadow: var(--shadow-offset);
+  }
+  30% {
+    transform: translate(3px, 3px);
+    box-shadow: 0 0 0 rgb(22 24 28 / 0.14);
+  }
+  100% {
+    transform: none;
+    box-shadow: var(--shadow-offset);
+  }
+}
+
+@keyframes diffnav-impression {
+  0% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.32);
+  }
+}
+
+.diffnav-controls[data-settled="true"] {
+  animation: diffnav-press 0.42s cubic-bezier(0.3, 0.7, 0.2, 1) both;
+}
+
+.diffnav-controls[data-settled="true"]::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 5px;
+  padding: 2px;
+  pointer-events: none;
+
+  /* All three inks at once, and stationary: the press has stopped. */
+  background: conic-gradient(
+    from -90deg,
+    var(--color-contradiction),
+    var(--color-unique),
+    var(--color-framing),
+    var(--color-contradiction)
+  );
+
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+
+  animation: diffnav-impression 0.72s cubic-bezier(0.2, 0.6, 0.25, 1) both;
+}
+
+/* With motion off there is no sweep to watch, so the ring states the same fact
+   without moving: still working, in all three inks at once. */
+@media (prefers-reduced-motion: reduce) {
+  .diffnav-controls[data-busy="true"]::before {
+    background: conic-gradient(
+      var(--color-contradiction),
+      var(--color-unique),
+      var(--color-framing),
+      var(--color-contradiction)
+    );
+  }
+}
+
+/* ============================================================================
    Element defaults. Everything that applies before a class does — and nothing
    that a class could say instead.
    ========================================================================= */

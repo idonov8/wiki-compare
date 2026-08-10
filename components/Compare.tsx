@@ -865,13 +865,26 @@ export default function Compare() {
 
       {langSwitch && <LangSwitch langs={available} active={solo!} onChange={readIn} />}
 
-      {comparing && (
-        <Loading title={target?.title ?? ""} reading={hasColumns} found={claims.length} />
+      {/* The panel hands over to the stepper the moment there is something to
+          step through. Until then it is the only thing that can say what is
+          happening; after, it would be prose about work the reader can watch. */}
+      {comparing && claims.length === 0 && <Loading title={target?.title ?? ""} reading={hasColumns} />}
+
+      {/* Outside the `done` block, because the stepper is now live during the
+          read as well: differences stream in, and the ones that have arrived
+          are already worth jumping between. `busy` also covers the wait after
+          donating, which buys the rest of the article on the same page. */}
+      {claims.length > 0 && (comparing || funding || phase === "done") && (
+        <DiffNav
+          // The claim count is in the signature because each one that lands
+          // renders new marks, and the rail plots marks it has measured.
+          signature={`${data?.qid ?? target?.title ?? ""}:${visible.join("")}:${claims.length}`}
+          busy={comparing || funding}
+        />
       )}
 
       {phase === "done" && data && (
         <>
-          {claims.length > 0 && <DiffNav signature={`${data.qid}:${visible.join("")}`} />}
 
           {/* "Covered in some versions, not others" is disabled for now — the
               flat pill list this section used to show wasn't worth reviving,
