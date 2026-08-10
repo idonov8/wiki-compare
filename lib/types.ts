@@ -205,6 +205,12 @@ export interface ComparePayload extends ComparisonResult {
  */
 export type CompareEvent =
   | { event: "articles"; qid: string; articles: Record<string, ArticleSnapshot> }
+  /** How far this run intends to read, known the moment the articles are in
+   *  hand — the preview cut is a character count, not a model finding — and
+   *  sent well before the first `claim` line. Lets the gate (and the fade it
+   *  sits above) appear while the run is still reading, rather than waiting
+   *  for `done` to say the run was only ever going to be a preview. */
+  | { event: "scope"; scope: ComparisonScope }
   | { event: "coverage"; coverage: CoverageGap[] }
   | { event: "claim"; claim: Claim }
   | { event: "done"; result: ComparisonResult; fromCache: boolean; cache?: CacheInfo }
