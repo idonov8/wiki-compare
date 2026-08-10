@@ -85,6 +85,10 @@ await page.route("**/api/recent", (route) =>
 //   silent  — nothing usable. Says nothing about cost at all.
 type Stored = "priced" | "legacy" | "silent";
 let stored: Stored = "priced";
+/** Whether the fixture is being re-served as a preview, which is the only way
+ *  the gate at the foot of a part-read article renders. Switched on by the
+ *  donation-flow section near the bottom of this file. */
+let asPreview = false;
 const USAGE: Record<Stored, Record<string, number>> = {
   // 14,203 in and 5,110 out at the diff model's $3/$15 per Mtok is $0.119259,
   // so `legacy` must land on "about $0.12" and never on the exact figure below.
@@ -100,11 +104,21 @@ await page.route(
     const response = await route.fetch();
     const json = await response.json();
     const usage = USAGE[stored];
+    // A preview stops part-way through every edition, so each one carries a cut.
+    const scope = asPreview
+      ? {
+          kind: "preview",
+          processedThrough: Object.fromEntries(
+            Object.keys(json.articles ?? {}).map((lang) => [lang, { section: 1, chars: 400 }]),
+          ),
+        }
+      : json.scope;
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         ...json,
         usage,
+        scope,
         fromCache: true,
         cache: {
           computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
@@ -709,6 +723,151 @@ check(!!(await page.$(".card")), "focusing a highlight opens the card");
 await page.keyboard.press("Escape");
 await page.waitForTimeout(150);
 check(!(await page.$(".card")), "Escape dismisses the card");
+
+// ---- the gate at the end of a preview ---------------------------------------
+
+// What the gate asks for depends entirely on who is reading, and the three
+// answers are three different asks: log in, spend the credit you already have,
+// or top up. Getting one of them wrong sends somebody to a payment page they did
+// not need, which is the failure this whole flow was rearranged to avoid — so
+// each state is opened here with `/api/me` stubbed to that reader.
+{
+  let me: unknown = null;
+  await page.route("**/api/me", (route) =>
+    route.fulfill({ contentType: "application/json", body: JSON.stringify(me) }),
+  );
+  asPreview = true;
+
+  const openGate = async () => {
+    await page.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".gate", { timeout: 30000 });
+  };
+  const gate = async () => ({
+    cta: (await page.textContent(".gate-cta")) ?? "",
+    note: (await page.textContent(".gate-note")) ?? "",
+  });
+
+  await openGate();
+  check(
+    (await page.textContent(".credit-cta")) === "Log in",
+    "signed out, the masthead asks for a login rather than a donation",
+    (await page.textContent(".credit-cta")) ?? "",
+  );
+  {
+    const { cta, note } = await gate();
+    check(/^Log in to process this article$/.test(cta), "and so does the gate", cta);
+    check(/\$1\.00 of credit/.test(note) && /5 articles/.test(note),
+      "which says what an account arrives with", note);
+  }
+  // The gate has to reach the login screen and come back to this article, or a
+  // reader loses the page they were on to sign in for it.
+  await page.click(".gate-cta");
+  await page.waitForFunction(() => location.pathname === "/login", null, { timeout: 5000 })
+    .catch(() => {});
+  check(
+    /\/login\?next=%2F%3Ftitle%3Ddemo/.test(page.url()),
+    "pressing it goes to the login screen, carrying the way back",
+    page.url(),
+  );
+
+  // Signed in, with the sign-up credit untouched.
+  me = {
+    email: "reader@example.com",
+    creditCents: 100,
+    peakCreditCents: 100,
+    articlesProcessed: 0,
+    readsOfThoseArticles: 0,
+    newcomer: true,
+  };
+  await openGate();
+  {
+    const { cta, note } = await gate();
+    check(/^Donate this article$/.test(cta), "with credit, the gate asks for the donation", cta);
+    check(/\$0\.20 of your \$1\.00 credit/.test(note) && /everyone/.test(note),
+      "and says what it spends and who gets it", note);
+  }
+  // The note beside the meter, which is the only thing that explains where the
+  // credit came from. It opens itself, and it takes the anchor exclusively.
+  check(!!(await page.$(".credit-welcome")), "a new account is told about its credit");
+  check(
+    /5 articles/.test((await page.textContent(".credit-welcome-text")) ?? ""),
+    "the note says how many articles that is",
+    (await page.textContent(".credit-welcome-text")) ?? "",
+  );
+  check(
+    await page.$eval(".credit-detail", (el) => getComputedStyle(el).display === "none"),
+    "and the hover panel stands aside while it is up",
+  );
+  await page.click(".credit-welcome-ok");
+  await page.waitForTimeout(150);
+  check((await page.$(".credit-welcome")) === null, "dismissing it puts it away");
+  await page.hover(".credit");
+  await page.waitForTimeout(200);
+  check(
+    await page.$eval(".credit-detail", (el) => getComputedStyle(el).visibility === "visible"),
+    "and gives the hover panel its anchor back",
+  );
+  await page.mouse.move(0, 0);
+
+  // The donation itself: the fixture served back as a full read, so the gate is
+  // replaced by the rest of the article — and the thanks land on the press
+  // rather than on the reply, then leave on their own.
+  await page.route(
+    (url) => url.pathname === "/api/compare",
+    async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      // The fixture, fetched as the GET it is: a POST re-served without a
+      // querystring answers "add a ?title=", and a comparison-shaped hole is
+      // what the client would then try to render.
+      const json = await (
+        await route.fetch({
+          method: "GET",
+          url: `${BASE}/api/compare?title=${encodeURIComponent(`demo:${FIXTURE}`)}&lang=en`,
+          postData: undefined,
+        })
+      ).json();
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ ...json, scope: { kind: "full" }, fromCache: false, charged: true }),
+      });
+    },
+  );
+  await page.click(".gate-cta");
+  await page.waitForSelector(".thanks", { timeout: 5000 }).catch(() => {});
+  check(!!(await page.$(".thanks")), "donating raises a thank-you");
+  check(
+    /Thank you/.test((await page.textContent(".thanks")) ?? ""),
+    "which says so in as many words",
+    (await page.textContent(".thanks")) ?? "",
+  );
+  await page.waitForTimeout(5200);
+  check((await page.$(".thanks")) === null, "and takes itself away after five seconds");
+  check((await page.$(".gate")) === null, "the funded article no longer carries a gate");
+  await page.unroute((url) => url.pathname === "/api/compare");
+
+  // Out of credit: the one state where the ask really is money.
+  me = {
+    email: "reader@example.com",
+    creditCents: 0,
+    peakCreditCents: 500,
+    articlesProcessed: 25,
+    readsOfThoseArticles: 90,
+    newcomer: false,
+  };
+  await openGate();
+  {
+    const { cta, note } = await gate();
+    check(/^Top up credit to donate this article$/.test(cta),
+      "an empty balance is asked to top up, not to log in", cta);
+    check(/\$0\.00 left/.test(note), "and is told what it has left", note);
+  }
+  check((await page.$(".credit-welcome")) === null,
+    "and is not welcomed as a new account");
+
+  asPreview = false;
+  me = null;
+  await page.unroute("**/api/me");
+}
 
 // ---- one language at a time, on a phone ------------------------------------
 
