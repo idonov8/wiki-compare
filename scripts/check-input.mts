@@ -11,6 +11,7 @@
 import assert from "node:assert/strict";
 import { guessLang, parseWikipediaUrl } from "../lib/wikipedia.js";
 import { ghostRanges } from "../lib/ghost.js";
+import { isOutOfCredit } from "../lib/compare.js";
 
 let failures = 0;
 const check = (label: string, fn: () => void) => {
@@ -108,6 +109,30 @@ check("a long article section gets marks to animate", () => {
   const long = SAMPLES[0].repeat(6);
   assert.ok(ghostRanges(long).length >= 3);
 });
+
+console.log("\nThe site's own balance");
+
+check("Anthropic's empty-balance 400 is recognised", () =>
+  assert.equal(
+    isOutOfCredit(
+      new Error(
+        '400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit ' +
+          'balance is too low to access the Anthropic API. Please go to Plans & Billing to ' +
+          'upgrade or purchase credits."},"request_id":"req_1"}',
+      ),
+    ),
+    true,
+  ),
+);
+
+for (const other of [
+  '400 {"type":"error","error":{"type":"invalid_request_error","message":"max_tokens: must be greater than 0"}}',
+  "fetch failed",
+]) {
+  check(`an ordinary failure is not: ${other.slice(0, 32)}…`, () =>
+    assert.equal(isOutOfCredit(new Error(other)), false),
+  );
+}
 
 console.log(failures ? `\n${failures} check(s) failed\n` : "\nall checks passed\n");
 process.exit(failures ? 1 : 0);
