@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import {
   CACHE_WINDOW_DAYS,
+  type ArticleSnapshot,
+  type CacheInfo,
+  type Claim,
+  type CompareEvent,
   type ComparisonResult,
+  type CoverageGap,
   type Lang,
   type ScopeKind,
 } from "@/lib/types";
@@ -54,10 +59,26 @@ interface Target {
 async function computeAndStore(
   target: Target,
   scope: ScopeKind,
-  { overwrite = false, fundedBy = null }: { overwrite?: boolean; fundedBy?: string | null } = {},
+  {
+    overwrite = false,
+    fundedBy = null,
+    onArticles,
+    onCoverage,
+    onClaim,
+  }: {
+    overwrite?: boolean;
+    fundedBy?: string | null;
+    /** Called as each stage becomes available, for the streaming path. The
+     *  articles land in about a second and the coverage diff costs no tokens, so
+     *  both are worth sending long before the model has finished. */
+    onArticles?: (articles: ArticleSnapshot[]) => void;
+    onCoverage?: (coverage: CoverageGap[]) => void;
+    onClaim?: (claim: Claim) => void;
+  } = {},
 ): Promise<{ result: ComparisonResult; cacheKey: string }> {
   const { qid, titles, revids, langs } = target;
   const articles = await snapshotsFor(langs, titles, revids);
+  onArticles?.(articles);
 
   // Coverage diff: no tokens involved, only set arithmetic over Wikidata ids.
   // It runs on a preview too — it is free, and it describes the whole article
@@ -71,8 +92,9 @@ async function computeAndStore(
     for (const [qid_, label] of fetched) known.set(qid_, label);
   }
   const coverage = coverageGaps(articles, known);
+  onCoverage?.(coverage);
 
-  const run = await runComparison(articles, scope);
+  const run = await runComparison(articles, scope, onClaim);
 
   const result: ComparisonResult = {
     qid,
@@ -111,6 +133,55 @@ function cacheInfo(result: ComparisonResult, computedAt: string, target: Target)
   };
 }
 
+/**
+ * One JSON object per line, flushed as the comparison produces it.
+ *
+ * NDJSON rather than server-sent events: there is nothing to reconnect to and no
+ * event-name routing to do, so `text/event-stream`'s framing would be ceremony
+ * around a `\n`. The reader is `fetch` plus a line split, which is a dozen lines
+ * on the client and needs no EventSource.
+ *
+ * The last line is always `done` or `error`, and `done` carries the whole
+ * `ComparisonResult` — the same object the non-streaming path returns. Everything
+ * before it is an optimisation the client may render early, so a reader that only
+ * waits for the last line is correct, just slower. That is what keeps the two
+ * paths from drifting: the stream is the JSON response with progress in front of
+ * it, not a second contract.
+ */
+function ndjson(run: (emit: (event: CompareEvent) => void) => Promise<void>): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let closed = false;
+      const emit = (event: CompareEvent) => {
+        if (closed) return;
+        controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+      };
+      try {
+        await run(emit);
+      } catch (error) {
+        emit({
+          event: "error",
+          error: error instanceof Error ? error.message : "Comparison failed.",
+        });
+      } finally {
+        closed = true;
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store, no-transform",
+      // Nginx and friends buffer a proxied response by default, which would hold
+      // every line back until the last one and undo the entire point.
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
+
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const title = params.get("title")?.trim();
@@ -120,32 +191,50 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Add a ?title= parameter." }, { status: 400 });
   }
 
+  const streaming = params.get("stream") === "1";
+
   // Render a recorded fixture instead of calling anything. Development only —
   // it exists so the rendering layer can be worked on without a database, an
   // API key, or spending tokens, and it is dead code in production.
   if (process.env.NODE_ENV !== "production" && title.startsWith("demo:")) {
+    let result: ComparisonResult;
     try {
       const { demoComparison } = await import("@/fixtures/demo");
-      return NextResponse.json({ ...demoComparison(title.slice(5)), fromCache: false });
+      result = demoComparison(title.slice(5));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      // A fixture that does not exist is a 404 in both shapes: nothing has been
+      // written to the stream yet, so the status code can still say so.
       return NextResponse.json({ error: `No such fixture. ${message}` }, { status: 404 });
     }
+    // A fixture is a finished comparison, so the stream is one `done` line. It
+    // still has to be a stream: the client asked for one, and a fixture that
+    // answered in a different shape would exercise a path nothing else uses.
+    return streaming
+      ? ndjson(async (emit) => emit({ event: "done", result, fromCache: false }))
+      : NextResponse.json({ ...result, fromCache: false });
   }
 
-  try {
+  // ?fresh=1 recomputes and overwrites rather than reading the comparison
+  // cache. An explicit, narrow bypass for iterating on the prompt — it leaves
+  // the caching logic and the article cache intact, so debugging never means
+  // deleting rows or commenting out the check and forgetting to restore it.
+  // It stays a development affordance: in production a re-read is bought
+  // through POST, not asked for in a query string.
+  const bypassCache = params.get("fresh") === "1" && process.env.NODE_ENV !== "production";
+
+  /**
+   * The read itself, reporting progress to `emit` if anyone is listening.
+   *
+   * Shared by both response shapes so there is one description of what a read
+   * does. `emit` is a no-op for the plain JSON caller, which reduces this to
+   * precisely the sequence it ran before.
+   */
+  const serve = async (emit: (event: CompareEvent) => void) => {
     const target = await resolveTarget(title, sourceLang);
     const { qid, revids } = target;
     const fullKey = comparisonKey(qid, revids, PROMPT_VERSION, PARSER_VERSION, "full");
     const previewKey = comparisonKey(qid, revids, PROMPT_VERSION, PARSER_VERSION, "preview");
-
-    // ?fresh=1 recomputes and overwrites rather than reading the comparison
-    // cache. An explicit, narrow bypass for iterating on the prompt — it leaves
-    // the caching logic and the article cache intact, so debugging never means
-    // deleting rows or commenting out the check and forgetting to restore it.
-    // It stays a development affordance: in production a re-read is bought
-    // through POST, not asked for in a query string.
-    const bypassCache = params.get("fresh") === "1" && process.env.NODE_ENV !== "production";
 
     const cached = bypassCache
       ? null
@@ -160,17 +249,23 @@ export async function GET(request: Request) {
         scope: cached.result.scope?.kind ?? "full",
         costUsd: 0,
       });
-      return NextResponse.json({
-        ...cached.result,
-        fromCache: true,
-        cache: cacheInfo(cached.result, cached.computedAt, target),
-      });
+      const cache = cacheInfo(cached.result, cached.computedAt, target);
+      emit({ event: "done", result: cached.result, fromCache: true, cache });
+      return { ...cached.result, fromCache: true, cache };
     }
 
     // Nothing stored: read the top of the article and stop. The columns fade out
     // below what this covered, and funding it through POST reads the rest.
     const { result } = await computeAndStore(target, bypassCache ? "full" : "preview", {
       overwrite: bypassCache,
+      onArticles: (articles) =>
+        emit({
+          event: "articles",
+          qid,
+          articles: Object.fromEntries(articles.map((a) => [a.lang, a])),
+        }),
+      onCoverage: (coverage) => emit({ event: "coverage", coverage }),
+      onClaim: (claim) => emit({ event: "claim", claim }),
     });
     void capture("comparison_served", {
       qid,
@@ -178,7 +273,21 @@ export async function GET(request: Request) {
       scope: result.scope?.kind ?? "full",
       costUsd: result.usage.costUsd ?? 0,
     });
-    return NextResponse.json({ ...result, fromCache: false });
+    emit({ event: "done", result, fromCache: false });
+    return { ...result, fromCache: false };
+  };
+
+  if (streaming) {
+    // Errors travel as a final `error` line on a 200, because the status line is
+    // long gone by the time the model fails — the articles were sent a minute
+    // earlier. The client reads the last line either way.
+    return ndjson(async (emit) => {
+      await serve(emit);
+    });
+  }
+
+  try {
+    return NextResponse.json(await serve(() => {}));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Comparison failed.";
     return NextResponse.json({ error: message }, { status: 500 });
