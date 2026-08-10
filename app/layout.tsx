@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Wiki Compare",
-  description: "Read the English, Hebrew and Arabic Wikipedia on one subject side by side, with the disagreements marked.",
+  description: "Explore differences between narratives through Wikipedia articles",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

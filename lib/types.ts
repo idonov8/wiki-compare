@@ -205,10 +205,22 @@ export interface ComparePayload extends ComparisonResult {
  */
 export type CompareEvent =
   | { event: "articles"; qid: string; articles: Record<string, ArticleSnapshot> }
+  | { event: "scope"; scope: ComparisonScope }
   | { event: "coverage"; coverage: CoverageGap[] }
   | { event: "claim"; claim: Claim }
   | { event: "done"; result: ComparisonResult; fromCache: boolean; cache?: CacheInfo }
   | { event: "error"; error: string };
+
+/**
+ * The site's own Anthropic balance is empty, so nothing can be read at all.
+ *
+ * It travels as the ordinary `error` string rather than as a field of its own,
+ * so a client that knows nothing about it still shows a sentence that is true.
+ * The one that does matches it exactly and offers the way out — donating and
+ * telling me — which is the only thing a reader can do about it.
+ */
+export const OUT_OF_CREDIT =
+  "Sorry, my account is literally empty and can't process anything at the moment.";
 
 /* ---- accounts and credits ---- */
 

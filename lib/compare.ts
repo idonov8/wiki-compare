@@ -9,7 +9,7 @@ import type {
   TokenCount,
   Usage,
 } from "./types";
-import { KEY_FACTS_HEADING, LANG_META, LEAD_HEADING } from "./types";
+import { KEY_FACTS_HEADING, LANG_META, LEAD_HEADING, OUT_OF_CREDIT } from "./types";
 import { PREVIEW_CHARS, previewOf, screenGroups, type SectionGroup } from "./deterministic";
 import { costOfUsage, FALLBACK_PRICING_MODEL } from "./pricing";
 import { ClaimStream } from "./stream-json";
@@ -377,6 +377,32 @@ function spanVerifier(articles: ArticleSnapshot[]): {
 export async function runComparison(
   articles: ArticleSnapshot[],
   scope: ScopeKind = "full",
+  onClaim?: (claim: Claim) => void,
+): Promise<{ claims: Claim[]; usage: Usage; spans: SpanReport; scope: ComparisonScope }> {
+  try {
+    return await compare(articles, scope, onClaim);
+  } catch (error) {
+    if (!isOutOfCredit(error)) throw error;
+    console.error("[compare] the Anthropic account is out of credit; no article can be read.");
+    throw new Error(OUT_OF_CREDIT);
+  }
+}
+
+/**
+ * The site's own balance, not the reader's.
+ *
+ * The SDK puts the API's JSON body in `message`, so the sentence Anthropic
+ * sends is what there is to match on. Matched on the prose rather than on the
+ * status: 400 is also what a malformed request gets, and the two want opposite
+ * things said to the reader.
+ */
+export function isOutOfCredit(error: unknown): boolean {
+  return error instanceof Error && /credit balance is too low/i.test(error.message);
+}
+
+async function compare(
+  articles: ArticleSnapshot[],
+  scope: ScopeKind,
   onClaim?: (claim: Claim) => void,
 ): Promise<{ claims: Claim[]; usage: Usage; spans: SpanReport; scope: ComparisonScope }> {
   const usage: Usage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };

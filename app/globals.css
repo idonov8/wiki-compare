@@ -307,106 +307,128 @@
    The difference stepper, while the comparison is still running.
    ========================================================================= */
 
-/* Registered so they can be animated at all: a plain custom property is a
-   string to the animation engine and jumps between keyframes. Typed, the angle
-   sweeps continuously and the colour holds flat between plate changes. */
-@property --diffnav-angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
-}
-
-/* Inherited, unlike the angle, so the count can be set in whichever ink is
-   currently on the press without running a second animation to track it. */
+/* Registered so it can be animated at all: a plain custom property is a string
+   to the animation engine and jumps between keyframes. Typed, the colour holds
+   flat between plate changes. */
 @property --diffnav-ink {
   syntax: "<color>";
   inherits: true;
   initial-value: #a8322b;
 }
 
-/* One revolution of the arc, one plate. */
-@keyframes diffnav-sweep {
-  to {
+/* Same reason: a plain custom property can't be interpolated, and an
+   interpolated angle is what lets the wedge below turn instead of jump. */
+@property --diffnav-angle {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 0deg;
+}
+
+/* One lap of the edge, one plate.
+ *
+ * A conic gradient turning at a constant angular rate crosses the rule's
+ * short ends in a blink and the long sides at a crawl — the corners are
+ * much further from the box's centre than the midpoints of the long sides
+ * are, so the same turn covers far more ground there. Uneven stops damp
+ * that swing to a mild alternation instead of removing it: still a wedge
+ * turning, not a dot pacing the edge at one speed.
+ */
+@keyframes diffnav-spin {
+  0% {
+    --diffnav-angle: 0deg;
+  }
+  12.5% {
+    --diffnav-angle: 60deg;
+  }
+  25% {
+    --diffnav-angle: 90deg;
+  }
+  37.5% {
+    --diffnav-angle: 150deg;
+  }
+  50% {
+    --diffnav-angle: 180deg;
+  }
+  62.5% {
+    --diffnav-angle: 240deg;
+  }
+  75% {
+    --diffnav-angle: 270deg;
+  }
+  87.5% {
+    --diffnav-angle: 330deg;
+  }
+  100% {
     --diffnav-angle: 360deg;
   }
 }
 
-/* The three signature inks in the order the legend prints them. Each holds flat
-   for its third and changes over the remaining fraction of a percent, so the
-   swap reads as a plate being changed rather than as a colour fading. */
+/* The three signature inks in the order the legend prints them, each given an
+   equal third and no hold — the typed property interpolates across the whole
+   span, so one ink is always dissolving into the next. The loop closes back
+   to contradiction at 100%, so the wrap is a fade too, not a cut. */
 @keyframes diffnav-plate {
-  0%,
-  32.9% {
+  0% {
     --diffnav-ink: var(--color-contradiction);
   }
-  33.3%,
-  66.2% {
+  33.3% {
     --diffnav-ink: var(--color-unique);
   }
-  66.6%,
-  100% {
+  66.6% {
     --diffnav-ink: var(--color-framing);
+  }
+  100% {
+    --diffnav-ink: var(--color-contradiction);
   }
 }
 
 /*
- * A single arc of ink travelling the edge of the stepper.
+ * A dash of ink running the inside edge of the stepper.
  *
  * The stepper becomes the loader once the first difference lands, because by
  * then it is the honest one: it counts what has been found and jumps to it,
  * which is the work being reported. A panel describing the same work in prose
  * would be narrating something the reader can already watch.
  *
- * The arc rides two pixels outside the printed rule rather than replacing it,
- * so the control never stops looking like the control — the border, the offset
- * shadow and the numerals are all exactly where they were when it was idle.
+ * It runs inside the printed rule rather than replacing it, so the control
+ * never stops looking like the control.
  */
 .diffnav-controls[data-busy="true"] {
-  animation:
-    diffnav-sweep 1.5s linear infinite,
-    diffnav-plate 4.5s linear infinite;
+  animation: diffnav-plate 4.5s linear infinite;
 }
 
-.diffnav-controls[data-busy="true"]::before {
-  content: "";
-  position: absolute;
-  /* Two pixels out and two thick, so the ring sits proud of the 3px corner
-     without crowding it: 5px keeps the two radii concentric. */
-  inset: -2px;
-  border-radius: 5px;
-  padding: 2px;
-  pointer-events: none;
+/* No wedge, no loader: the count still climbs, which is the actual report. */
+@supports (background: conic-gradient(#000, #000)) {
+  .diffnav-controls[data-busy="true"]::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    /* Behind the glyphs rather than over them. The pill is already a stacking
+       context, so this still clears its own background. */
+    z-index: -1;
+    pointer-events: none;
 
-  /* Brightest at the leading edge and trailing off behind, so the arc has a
-     direction. The hard cut just past the head is what makes it read as a
-     printing head rather than as a glow going round. */
-  background: conic-gradient(
-    from var(--diffnav-angle),
-    transparent 0deg,
-    color-mix(in srgb, var(--diffnav-ink) 18%, transparent) 34deg,
-    color-mix(in srgb, var(--diffnav-ink) 52%, transparent) 70deg,
-    var(--diffnav-ink) 96deg,
-    transparent 101deg,
-    transparent 360deg
-  );
+    /* A ring wider than the printed rule, so the wedge reads as its own
+       stroke rather than tracing the rule's existing line. */
+    padding: 4px;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
 
-  /* Punch the middle out so only the ring survives: fill the padding box, fill
-     the border box, keep the difference. */
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
-
-/* The running total takes the ink currently on the press. The one number that
-   is still changing is the one the colour is describing. */
-.diffnav-controls[data-busy="true"] .diffnav-count b {
-  color: var(--diffnav-ink);
-  transition: color 120ms ease;
+    /* A short wedge, not a full sweep: it reads as a gradient turning past
+       the rule rather than a spinner overtaking it. */
+    background: conic-gradient(
+      from var(--diffnav-angle),
+      transparent 0deg,
+      transparent 300deg,
+      color-mix(in srgb, var(--diffnav-ink) 35%, transparent) 336deg,
+      var(--diffnav-ink) 354deg,
+      transparent 360deg
+    );
+    animation: diffnav-spin 3.2s linear infinite;
+  }
 }
 
 /*
