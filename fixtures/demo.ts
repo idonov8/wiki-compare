@@ -1,5 +1,5 @@
 import type { ArticleSnapshot, Claim, ComparisonResult, Lang } from "../lib/types";
-import { coverageGaps } from "../lib/deterministic";
+import { coverageDiff } from "../lib/deterministic";
 import { fixtureLabels, fixtureSnapshots, loadFixture } from "./loader";
 
 /**
@@ -96,6 +96,7 @@ const DRAFTS: Record<string, Draft[]> = {
 export function demoComparison(slug: string): ComparisonResult {
   const fixture = loadFixture(slug);
   const snaps = fixtureSnapshots(fixture);
+  const coverage = coverageDiff(snaps, fixtureLabels(fixture));
 
   const claims: Claim[] = [];
   for (const [i, draft] of (DRAFTS[slug] ?? []).entries()) {
@@ -113,7 +114,8 @@ export function demoComparison(slug: string): ComparisonResult {
     qid: fixture.qid,
     articles: Object.fromEntries(snaps.map((s) => [s.lang, s])),
     claims,
-    coverage: coverageGaps(snaps, fixtureLabels(fixture)),
+    coverage: coverage.gaps,
+    coverageOnly: coverage.only,
     promptVersion: "fixture",
     parserVersion: "fixture",
     computedAt: fixture.capturedAt,

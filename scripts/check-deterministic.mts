@@ -6,7 +6,7 @@
  */
 import {
   PREVIEW_CHARS,
-  coverageGaps,
+  coverageDiff,
   extractNumbers,
   normaliseDigits,
   previewOf,
@@ -34,10 +34,23 @@ const METADATA = /^(Virtual International Authority File|WorldCat|Integrated Aut
 for (const slug of listFixtures()) {
   const fixture = loadFixture(slug);
   const snaps = fixtureSnapshots(fixture);
-  const gaps = coverageGaps(snaps, fixtureLabels(fixture));
-  console.log(`\n${fixture.query}: ${gaps.length} coverage gaps`);
+  const { gaps, only } = coverageDiff(snaps, fixtureLabels(fixture));
+  const sole = Object.entries(only).map(([lang, n]) => `${lang} ${n}`).join(" · ");
+  console.log(`\n${fixture.query}: ${gaps.length} coverage gaps, only-in counts: ${sole}`);
 
   check(gaps.length > 0, "produces gaps");
+  // The summary above the columns is written from `only`, so it must describe
+  // the article and not the cap on the list beside it — every fixture saturates
+  // the default limit, which is exactly when counting the list would lie.
+  check(
+    JSON.stringify(coverageDiff(snaps, fixtureLabels(fixture), 5).only) === JSON.stringify(only),
+    "only-in counts survive the limit on the gap list",
+  );
+  check(
+    Object.values(only).reduce((n, c) => n + c, 0) > gaps.length,
+    "and count past it",
+    `${Object.values(only).reduce((n, c) => n + c, 0)} vs ${gaps.length} listed`,
+  );
   check(!gaps.some((g) => CALENDAR.test(g.label)), "no calendar labels",
     gaps.filter((g) => CALENDAR.test(g.label)).map((g) => g.label).join(", "));
   check(!gaps.some((g) => METADATA.test(g.label)), "no authority-control labels",

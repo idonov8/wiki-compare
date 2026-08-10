@@ -15,7 +15,7 @@ import {
   putComparison,
   putLabels,
 } from "@/lib/db";
-import { coverageGaps } from "@/lib/deterministic";
+import { coverageDiff } from "@/lib/deterministic";
 import { PROMPT_VERSION, runComparison } from "@/lib/compare";
 import { getSessionUser } from "@/lib/auth";
 import { debit, grant, recordSpend } from "@/lib/credits";
@@ -70,7 +70,7 @@ async function computeAndStore(
     await putLabels(fetched);
     for (const [qid_, label] of fetched) known.set(qid_, label);
   }
-  const coverage = coverageGaps(articles, known);
+  const coverage = coverageDiff(articles, known);
 
   const run = await runComparison(articles, scope);
 
@@ -78,7 +78,8 @@ async function computeAndStore(
     qid,
     articles: Object.fromEntries(articles.map((a) => [a.lang, a])),
     claims: run.claims,
-    coverage,
+    coverage: coverage.gaps,
+    coverageOnly: coverage.only,
     promptVersion: PROMPT_VERSION,
     parserVersion: PARSER_VERSION,
     computedAt: new Date().toISOString(),

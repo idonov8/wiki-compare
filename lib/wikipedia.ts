@@ -512,7 +512,7 @@ function articleTitleFromHref(href: string, cls: string): string | null {
  *
  * `qidByTitle` is optional and, when given, stamps each span with the Wikidata
  * item its title resolved to — the same id the coverage diff groups on, so a
- * gap pill can find the one span that is its evidence.
+ * span can be matched to the concept that diff counted it as.
  *
  * ponytail: a forward-moving cursor binds each anchor to the first occurrence
  * of its label at or after the previous one — document order, so it is right in
@@ -692,7 +692,7 @@ export async function fetchParsedPage(lang: Lang, title: string): Promise<Parsed
  *
  * Reading the tree also gives a usable ordering. Position is a rough proxy for
  * prominence — a concept linked from the lead outranks one linked from the last
- * section — which is what breaks ties in `coverageGaps` once the limit bites.
+ * section — which is what breaks ties in `coverageDiff` once the limit bites.
  */
 export function linkTitlesOf(page: ParsedPage): string[] {
   const root = parse(page.text);

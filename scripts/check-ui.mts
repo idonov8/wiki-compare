@@ -240,6 +240,43 @@ const reopen = async (as: Stored) => {
 
 await reopen("priced");
 
+// ---- the coverage line ------------------------------------------------------
+
+// The one line on the page nothing read: set arithmetic over Wikidata ids,
+// above the columns because it is a fact about the whole article. Two things
+// are worth asserting — that it is above them, since a summary under the fold
+// is not a summary, and that it still says it was computed, since every other
+// sentence on this page came out of a model and an unmarked number among them
+// inherits their provenance.
+{
+  const line = await page.$eval(".coverage", (el) => ({
+    text: (el as HTMLElement).innerText.replace(/\s+/g, " ").trim(),
+    bottom: el.getBoundingClientRect().bottom,
+  }));
+  const columnsTop = await page.$eval(".columns", (el) => el.getBoundingClientRect().top);
+
+  check(
+    /\d[\d,]* linked concepts appear only in \w+/.test(line.text),
+    "the coverage line counts the concepts only one edition links",
+    line.text,
+  );
+  // Named editions are a subset of the ones on screen, not all of them: an
+  // edition with nothing unique to it drops out of the sentence rather than
+  // reading "0 only in Arabic".
+  const named = (line.text.match(/only in ([A-Z]\w+)/g) ?? []).map((m) => m.replace("only in ", ""));
+  const onScreen = await page.$$eval("section.column", (els) =>
+    els.map((el) => el.getAttribute("lang") ?? "?"),
+  );
+  check(
+    named.length > 0 && named.length <= onScreen.length,
+    "and names the editions it counted, never more than the article has",
+    `${named.join(", ")} against ${onScreen.join(", ")}`,
+  );
+  check(line.bottom <= columnsTop + 1, "it sits above the columns it describes",
+    `${Math.round(line.bottom)} vs ${Math.round(columnsTop)}`);
+  check(/not read by a model/.test(line.text), "and says it was computed rather than read", line.text);
+}
+
 // ---- how long each edition is ----------------------------------------------
 
 // The strip's `EN`/`HE`/`AR` boxes are a bar chart now: how much text each

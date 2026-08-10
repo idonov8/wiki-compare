@@ -46,9 +46,8 @@ export interface Claim {
 /** A Wikipedia-internal link, as a character range into a section's `text`.
  *  `title` is the linked article's title in that section's own language.
  *  `qid` is the linked article's Wikidata item, when it resolved to one — the
- *  same id a coverage gap is keyed on, so a gap pill can find the span of the
- *  concept it names. Unread for now: the coverage-panel jump that was going to
- *  use it is disabled in `Compare.tsx` pending a redesign. */
+ *  same id a coverage gap is keyed on, so a span can be matched to the concept
+ *  the coverage diff counted it as. */
 export interface LinkSpan {
   start: number;
   end: number;
@@ -164,6 +163,16 @@ export interface ComparisonResult {
   articles: Record<string, ArticleSnapshot>;
   claims: Claim[];
   coverage: CoverageGap[];
+  /**
+   * Per edition, how many linked concepts only it has — the figures the summary
+   * above the columns is written from.
+   *
+   * Counted over every gap, not over the capped `coverage` list, so it reports
+   * the article rather than the limit. Absent on rows stored before the summary
+   * existed: those show no summary at all, rather than one counted off sixty
+   * gaps and wrong by an order of magnitude.
+   */
+  coverageOnly?: Partial<Record<Lang, number>>;
   promptVersion: string;
   parserVersion?: string;
   computedAt: string;

@@ -20,11 +20,27 @@ const CALENDAR_LABEL = new RegExp(
   "i",
 );
 
-export function coverageGaps(
+/**
+ * The coverage diff: the gaps themselves, and the count the summary is written
+ * from.
+ *
+ * `only` is counted over every gap rather than over the returned ones. The list
+ * is capped because it is stored; the counts are not, and a summary reading
+ * "211 concepts appear only in English" — the coffee article's real figure —
+ * off a list of sixty would be reporting the limit rather than the article.
+ */
+export interface CoverageDiff {
+  /** The most lopsided gaps, capped at `limit`. */
+  gaps: CoverageGap[];
+  /** Per edition, how many concepts only that edition links. */
+  only: Partial<Record<Lang, number>>;
+}
+
+export function coverageDiff(
   articles: ArticleSnapshot[],
   labels: Map<string, string>,
   limit = 60,
-): CoverageGap[] {
+): CoverageDiff {
   const langs = articles.map((a) => a.lang);
   const presence = new Map<string, Set<Lang>>();
 
@@ -54,20 +70,27 @@ export function coverageGaps(
     });
   }
 
+  const only: Partial<Record<Lang, number>> = {};
+  for (const gap of gaps) {
+    if (gap.presentIn.length !== 1) continue;
+    const lang = gap.presentIn[0];
+    only[lang] = (only[lang] ?? 0) + 1;
+  }
+
   // Concepts only one version mentions are the interesting ones, so sort by how
   // lopsided the gap is first. Ties used to break alphabetically, which mattered
   // more than it looks: on a three-language article nearly every gap ties at
   // "missing from two", so the limit was slicing an alphabetical prefix and the
   // panel showed everything from "1923…" to "agriculture…" and nothing later.
   // Break ties on prominence instead, and keep the label as a stable last resort.
-  return gaps
-    .sort(
-      (a, b) =>
-        b.missingFrom.length - a.missingFrom.length ||
-        (firstSeen.get(a.qid) ?? Infinity) - (firstSeen.get(b.qid) ?? Infinity) ||
-        a.label.localeCompare(b.label),
-    )
-    .slice(0, limit);
+  gaps.sort(
+    (a, b) =>
+      b.missingFrom.length - a.missingFrom.length ||
+      (firstSeen.get(a.qid) ?? Infinity) - (firstSeen.get(b.qid) ?? Infinity) ||
+      a.label.localeCompare(b.label),
+  );
+
+  return { gaps: gaps.slice(0, limit), only };
 }
 
 /** Arabic-Indic and Eastern Arabic-Indic digits normalise to ASCII so that

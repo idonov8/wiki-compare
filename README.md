@@ -185,16 +185,21 @@ those sections reach the model.
 
 Coverage is computed over links read off the cleaned article tree, not the API's link list. The
 API lists every link on the rendered page, including navboxes, authority-control templates and
-citation footnotes — so using it made the coverage panel disagree with the columns above it and
+citation footnotes — so using it made the coverage diff disagree with the columns it describes and
 report "WorldCat" as a concept one version uniquely covers.
 
-The panel groups its pills into one column per edition rather than one flat list, and each pill is
-a jump: `extractLinks` stamps every `LinkSpan` with the Wikidata id its title resolved to, so a
-click can find the one span in that edition's own column that is the pill's evidence, scroll to it
-and flash it — the same ring `DiffNav`'s jump-to uses. A concept linked only from the infobox has
-no such span (the key-facts block flattens its links to plain text) and the search gives up rather
-than spinning; everywhere else, following a coverage gap means never having to read a whole column
-to find the sentence it named.
+It reaches the page as one line above the columns (`components/Coverage.tsx`): *31 linked
+concepts appear only in English, 30 only in Hebrew, 12 only in Arabic.* Two things about that
+sentence are load-bearing. It sits at the top because how lopsided the linking is is a fact about
+the whole article, and a reader wants it before they start rather than after they finish. And it
+says it was computed, because everything else on the page that reads like a finding came out of a
+model — a number set among them without that note inherits their provenance.
+
+The figures are counted over every gap; the `coverage` list beside them is capped at sixty, because
+it is stored and was once rendered. Counting the list instead would have reported the cap: on all
+four fixtures the English count alone runs past sixty, and on the coffee article it is 211.
+`coverageDiff` returns both, and `check:deterministic` asserts the counts don't move when the cap
+does. A row stored before the counts existed shows no summary rather than a wrong one.
 
 ### Why infoboxes survive
 
@@ -409,6 +414,7 @@ components/PreviewGate.tsx the seam between what was read and what wasn't
 components/CreditBar.tsx   balance in the masthead, and the thank-you on hover
 components/Donate.tsx      amounts, running costs, monthly, the Redeem button, and the reveal
 components/Columns.tsx     the articles side by side, with or without a comparison
+components/Coverage.tsx    the coverage diff, as one computed line above the columns
 components/Highlighted.tsx span location and marking
 components/DiffNav.tsx     right-edge rail + jump-to-difference controls
 components/LangSwitch.tsx  the floating language pill, where one column is all that fits
