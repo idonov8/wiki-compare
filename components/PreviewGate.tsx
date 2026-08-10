@@ -80,19 +80,16 @@ export default function PreviewGate({
       <p className="gate-note mt-[12px] font-mono text-[11px] leading-[1.6] text-ink-soft">
         {canFund ? (
           <>
-            This spends {formatCents(PRICE_PER_ARTICLE_CENTS)} of your{" "}
-            {formatCents(creditCents)} credit to open the whole article — for you and for
-            everyone who reads it after you.
+            This spends ~{formatCents(PRICE_PER_ARTICLE_CENTS)} of your{" "}
+            {formatCents(creditCents)} credit
           </>
         ) : signedIn ? (
           <>
-            You have {formatCents(creditCents)} left, and an article costs{" "}
-            {formatCents(PRICE_PER_ARTICLE_CENTS)}. Add credit and you can donate this one.
+            Or wait till sombody else does :) You can see processed articles in the <a href="/?full=true#recently-compared" className="text-ink">home page</a>.
           </>
         ) : (
           <>
-            A new account starts with {formatCents(SIGNUP_GRANT_CENTS)} of credit —{" "}
-            {articlesFor(SIGNUP_GRANT_CENTS)} articles you can open for everyone.
+            Get {articlesFor(SIGNUP_GRANT_CENTS)} articles for free on sign up
           </>
         )}
       </p>

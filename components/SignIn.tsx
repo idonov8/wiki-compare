@@ -79,8 +79,8 @@ function describeThrown(cause: unknown): string {
  */
 export default function SignIn({
   callbackURL,
-  heading = "Sign in to donate",
-  blurb = "An account exists only so your credit has somewhere to live — no password, just a link in your inbox.",
+  heading,
+  blurb,
 }: {
   /** Where to land after a successful sign-in. Defaults to the current URL. */
   callbackURL?: string;
@@ -270,8 +270,7 @@ export default function SignIn({
               whether to hand it over. Two sentences and a link: enough to say
               what happens to it, short enough to actually be read. */}
           <p className="signin-screen-notice mt-[18px] font-mono text-[11px] leading-[1.6] tracking-[0.02em] text-ink-soft">
-            We keep your address to sign you in, and nothing else uses it. Delete the account and
-            it goes with it —{" "}
+            Address is used only to sign you in. Read more about{" "}
             <a href="/privacy" className="text-ink underline underline-offset-[3px]">
               privacy
             </a>
