@@ -155,7 +155,12 @@ function ndjson(run: (emit: (event: CompareEvent) => void) => Promise<void>): Re
       let closed = false;
       const emit = (event: CompareEvent) => {
         if (closed) return;
-        controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+        try {
+          controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+        } catch {
+          // The reader has gone. Stop writing, but let the run finish and store.
+          closed = true;
+        }
       };
       try {
         await run(emit);
