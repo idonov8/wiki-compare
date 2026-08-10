@@ -227,6 +227,9 @@ export interface MeResponse {
   peakCreditCents: number;
   articlesProcessed: number;
   readsOfThoseArticles: number;
+  /** Whether this account is still holding the sign-up credit, untouched and
+   *  unadded-to. What the masthead's welcome note keys off — see the route. */
+  newcomer: boolean;
 }
 
 /** What the mock payment page submits. Amounts are whole cents. */

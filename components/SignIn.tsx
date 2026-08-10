@@ -1,8 +1,8 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { authClient } from "@/lib/auth-client";
-import { track } from "@/lib/analytics";
+import { initAnalytics, track } from "@/lib/analytics";
 
 /**
  * Whether to offer the Google button at all.
@@ -64,23 +64,20 @@ function describeThrown(cause: unknown): string {
   return `Could not reach the server${detail ? ` — ${detail}` : ""}. Check your connection and try again.`;
 }
 
+/** A `?next=` value, if it's a same-site path. Anything else (e.g. an absolute
+ *  URL) would be an open redirect, so it's rejected. */
+function safeNext(raw: string | null): string | null {
+  return raw && raw.startsWith("/") && !raw.startsWith("//") ? raw : null;
+}
+
 /**
- * The sign-in screen.
- *
- * A whole step rather than a widget: the donate flow renders this as its first
- * page, so it owns the heading and the explanation instead of assuming something
- * above it already set the scene. The masthead keeps its own one-line form for
- * the incidental case; this is the one you land on.
- *
- * The default copy answers the question the moment actually raises. Somebody who
- * clicked "donate" did not ask for an account and is right to resent being asked
- * for one, so the blurb gives the only honest reason there is: the credit has to
- * be attached to something, and this is the cheapest something that works.
+ * The sign-in screen. Used bare by `/login`, and embedded as the first step of
+ * the donate flow (which passes its own heading/blurb).
  */
 export default function SignIn({
   callbackURL,
-  heading = "Sign in to donate",
-  blurb = "An account exists only so your credit has somewhere to live — no password, just a link in your inbox.",
+  heading,
+  blurb,
 }: {
   /** Where to land after a successful sign-in. Defaults to the current URL. */
   callbackURL?: string;
@@ -95,15 +92,18 @@ export default function SignIn({
   const fieldId = useId();
   const errorId = useId();
 
-  /**
-   * Resolved at click time, not at render. The default is "wherever you already
-   * are", and on the server during SSR there is no such place — reading
-   * `location` in the component body would break the render that has to happen
-   * before anyone can click anything.
-   */
-  const destination = () => callbackURL ?? window.location.href;
+  /** Resolved at click time: `callbackURL` prop, else `?next=`, else current URL. */
+  const destination = () =>
+    callbackURL ??
+    safeNext(new URLSearchParams(window.location.search).get("next")) ??
+    window.location.href;
 
   const busy = status === "sending" || status === "leaving";
+
+  // No-op if already started (e.g. by the donate flow).
+  useEffect(() => {
+    initAnalytics();
+  }, []);
 
   async function signInWithGoogle(): Promise<void> {
     if (busy) return;
@@ -270,8 +270,7 @@ export default function SignIn({
               whether to hand it over. Two sentences and a link: enough to say
               what happens to it, short enough to actually be read. */}
           <p className="signin-screen-notice mt-[18px] font-mono text-[11px] leading-[1.6] tracking-[0.02em] text-ink-soft">
-            We keep your address to sign you in, and nothing else uses it. Delete the account and
-            it goes with it —{" "}
+            Address is used only to sign you in. Read more about{" "}
             <a href="/privacy" className="text-ink underline underline-offset-[3px]">
               privacy
             </a>
