@@ -12,6 +12,7 @@ import LangBars from "./LangBars";
 import LangSwitch from "./LangSwitch";
 import Legend from "./Legend";
 import Loading from "./Loading";
+import Outage from "./Outage";
 import PreviewGate from "./PreviewGate";
 import SearchBox from "./SearchBox";
 import ThankYou from "./ThankYou";
@@ -25,6 +26,7 @@ import {
   CACHE_WINDOW_DAYS,
   LANGS,
   LANG_META,
+  OUT_OF_CREDIT,
   type ArticleSnapshot,
   type CacheInfo,
   type Claim,
@@ -773,12 +775,15 @@ export default function Compare() {
         </div>
       )}
 
-      {error && (
-        <div className="state error text-ink-soft py-[64px] pe-[24px] ps-[16px] max-w-[58ch] border-s-[3px] border-contradiction">
-          <h2 className="font-display text-[27px] font-normal text-ink m-0 mb-[10px]">That didn&apos;t work</h2>
-          <p>{error}</p>
-        </div>
-      )}
+      {error &&
+        (error === OUT_OF_CREDIT ? (
+          <Outage from="outage" />
+        ) : (
+          <div className="state error text-ink-soft py-[64px] pe-[24px] ps-[16px] max-w-[58ch] border-s-[3px] border-contradiction">
+            <h2 className="font-display text-[27px] font-normal text-ink m-0 mb-[10px]">That didn&apos;t work</h2>
+            <p>{error}</p>
+          </div>
+        ))}
 
       {/* The landing page. It holds none of the state above — the query, the
           search and the URL all stay here, and it works entirely through the
