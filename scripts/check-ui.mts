@@ -102,30 +102,50 @@ await page.route(
     (url.searchParams.get("title") ?? "").startsWith("demo:"),
   async (route) => {
     const response = await route.fetch();
-    const json = await response.json();
+    const body = await response.text();
     const usage = USAGE[stored];
+    const cache = {
+      computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
+      expiresAt: new Date(Date.now() + 86400_000).toISOString(),
+      edited: ["he", "ar"],
+    };
     // A preview stops part-way through every edition, so each one carries a cut.
-    const scope = asPreview
-      ? {
-          kind: "preview",
-          processedThrough: Object.fromEntries(
-            Object.keys(json.articles ?? {}).map((lang) => [lang, { section: 1, chars: 400 }]),
-          ),
-        }
-      : json.scope;
+    const previewScope = (articles: Record<string, unknown>) => ({
+      kind: "preview",
+      processedThrough: Object.fromEntries(
+        Object.keys(articles ?? {}).map((lang) => [lang, { section: 1, chars: 400 }]),
+      ),
+    });
+
+    // The client asks for a stream, so the fixture answers as one: a `done`
+    // line carrying the result. Re-wrapped rather than passed through, because
+    // what this interception exists to do is substitute the usage figures.
+    const streamed = new URL(route.request().url()).searchParams.get("stream") === "1";
+    if (streamed) {
+      const done = body
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+        .find((event) => event.event === "done");
+      const scope = asPreview ? previewScope(done.result.articles) : done.result.scope;
+      route.fulfill({
+        contentType: "application/x-ndjson",
+        body:
+          JSON.stringify({
+            event: "done",
+            result: { ...done.result, usage, scope },
+            fromCache: true,
+            cache,
+          }) + "\n",
+      });
+      return;
+    }
+
+    const json = JSON.parse(body);
+    const scope = asPreview ? previewScope(json.articles) : json.scope;
     route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({
-        ...json,
-        usage,
-        scope,
-        fromCache: true,
-        cache: {
-          computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
-          expiresAt: new Date(Date.now() + 86400_000).toISOString(),
-          edited: ["he", "ar"],
-        },
-      }),
+      body: JSON.stringify({ ...json, usage, scope, fromCache: true, cache }),
     });
   },
 );

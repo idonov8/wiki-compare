@@ -12,6 +12,7 @@ import type {
 import { KEY_FACTS_HEADING, LANG_META, LEAD_HEADING } from "./types";
 import { PREVIEW_CHARS, previewOf, screenGroups, type SectionGroup } from "./deterministic";
 import { costOfUsage, FALLBACK_PRICING_MODEL } from "./pricing";
+import { ClaimStream } from "./stream-json";
 
 export const PROMPT_VERSION = "v2";
 
@@ -168,16 +169,48 @@ Rules:
 Reply with JSON only, no prose, no code fences:
 {"claims":[{"type":"contradiction","summary":"...","explanation":"...","spans":{"en":"...","he":"...","ar":"..."}}]}`;
 
+const CLAIM_TYPES = ["contradiction", "unique", "framing"];
+
+/** One parsed object from the model's array, as a `Claim` — or null if it is not
+ *  shaped like one at all. An unrecognised `type` is framing rather than a drop:
+ *  the difference was still found, and framing is the reading that claims least. */
+function asClaim(raw: unknown, id: string): Claim | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Partial<Claim>;
+  if (typeof r.summary !== "string" || !r.summary) return null;
+  return {
+    id,
+    type: CLAIM_TYPES.includes(r.type as string) ? (r.type as Claim["type"]) : "framing",
+    summary: r.summary,
+    explanation: typeof r.explanation === "string" ? r.explanation : "",
+    spans: r.spans && typeof r.spans === "object" ? r.spans : {},
+  };
+}
+
+/**
+ * Run the diff and hand back every claim whose spans could be located.
+ *
+ * `deliver` is called with each claim the moment it is whole, which is what lets
+ * the page fill in as the model writes rather than a minute later. It is not the
+ * same thing as the return value: the return is in batch order and the callback
+ * fires in completion order, so the stored comparison stays deterministic while
+ * the reader still sees findings arrive as they are found.
+ */
 async function diffGroups(
   groups: SectionGroup[],
   langs: Lang[],
   usage: Usage,
+  verify: (claim: Claim) => Claim | null,
   // A preview overrides both: its whole input is bounded by PREVIEW_CHARS per
   // language, so it goes in one call — the model sees the entire prefix at once
   // — and the per-section cap has to be the preview budget rather than a lower
   // number that would silently read less than the columns say was read.
-  { perCall = GROUPS_PER_CALL, maxChars = MAX_CHARS_PER_SECTION } = {},
-): Promise<Claim[]> {
+  {
+    perCall = GROUPS_PER_CALL,
+    maxChars = MAX_CHARS_PER_SECTION,
+    deliver,
+  }: { perCall?: number; maxChars?: number; deliver?: (claim: Claim) => void } = {},
+): Promise<{ claims: Claim[]; raw: number }> {
   const size = Math.max(1, perCall);
   const batches: SectionGroup[][] = [];
   for (let i = 0; i < groups.length; i += size) {
@@ -185,7 +218,7 @@ async function diffGroups(
   }
 
   const results = await Promise.all(
-    batches.map(async (batch) => {
+    batches.map(async (batch, batchIndex) => {
       const body = batch
         .map((group) => {
           const parts = langs
@@ -201,7 +234,27 @@ async function diffGroups(
         })
         .join("\n\n");
 
-      const message = await client().messages.create({
+      // Claims are parsed out of the text as it arrives, so `id` is assigned on
+      // completion order within the batch and prefixed by the batch — stable
+      // across runs however the batches interleave, which the cached copy and
+      // the client's React keys both depend on.
+      const parser = new ClaimStream();
+      const found: Claim[] = [];
+      let raw = 0;
+
+      const consume = (delta: string) => {
+        for (const object of parser.push(delta)) {
+          const claim = asClaim(object, `b${batchIndex}c${raw}`);
+          raw++;
+          if (!claim) continue;
+          const located = verify(claim);
+          if (!located) continue;
+          found.push(located);
+          deliver?.(located);
+        }
+      };
+
+      const stream = client().messages.stream({
         model: DIFF_MODEL,
         max_tokens: 8000,
         // The breakpoint is correct but currently inert: the minimum cacheable
@@ -219,37 +272,39 @@ async function diffGroups(
           },
         ],
       });
+
+      stream.on("text", consume);
+      const message = await stream.finalMessage();
       addUsage(usage, message, DIFF_MODEL);
 
-      // A truncated response is unparseable JSON, and the catch below would
-      // discard the whole batch — every claim from three sections — without a
-      // trace. Say so, so it reads as a budget problem rather than as the model
-      // having found nothing.
+      const label = batch.map((g) => g.key).join(", ");
+
+      // Truncation used to cost the whole batch: the response was unparseable
+      // JSON and the catch discarded every claim in it. Parsing as it streams
+      // means only the claim being written when the budget ran out is lost, but
+      // the rest of the batch's sections went unread, so it still needs saying.
       if (message.stop_reason === "max_tokens") {
         console.warn(
-          `[compare] batch [${batch.map((g) => g.key).join(", ")}] hit max_tokens; ` +
-            `its claims are lost. Raise max_tokens or lower GROUPS_PER_CALL.`,
+          `[compare] batch [${label}] hit max_tokens after ${raw} claim(s); ` +
+            `the rest are lost. Raise max_tokens or lower GROUPS_PER_CALL.`,
         );
       }
 
-      try {
-        return parseJson<{ claims?: Omit<Claim, "id">[] }>(textOf(message)).claims ?? [];
-      } catch (error) {
+      const text = textOf(message);
+      if (raw === 0 && text.trim() && !/"claims"\s*:\s*\[\s*\]/.test(text)) {
         console.warn(
-          `[compare] batch [${batch.map((g) => g.key).join(", ")}] returned unparseable JSON ` +
-            `(${(error as Error).message}); dropping ${textOf(message).length} chars of output.`,
+          `[compare] batch [${label}] yielded no parseable claim from ${text.length} chars of output.`,
         );
-        return [];
       }
+
+      return { claims: found, raw };
     }),
   );
 
-  return results.flat().map((claim, i) => ({
-    ...claim,
-    id: `c${i}`,
-    type: ["contradiction", "unique", "framing"].includes(claim.type) ? claim.type : "framing",
-    spans: claim.spans ?? {},
-  }));
+  return {
+    claims: results.flatMap((r) => r.claims),
+    raw: results.reduce((n, r) => n + r.raw, 0),
+  };
 }
 
 export interface SpanReport {
@@ -279,43 +334,50 @@ export interface SpanReport {
  * would admit spans that straddle a section boundary, which then match nothing
  * at render time and silently disappear.
  */
-function verifySpans(
-  claims: Claim[],
-  articles: ArticleSnapshot[],
-): { claims: Claim[]; report: SpanReport } {
+function spanVerifier(articles: ArticleSnapshot[]): {
+  report: SpanReport;
+  verify: (claim: Claim) => Claim | null;
+} {
   const haystacks = new Map<Lang, string[]>(
     articles.map((a) => [a.lang, a.sections.map((s) => s.text)]),
   );
 
   const report: SpanReport = { offered: 0, matched: 0, droppedClaims: 0, samples: [] };
 
-  const verified = claims
-    .map((claim) => {
-      const spans: Claim["spans"] = {};
-      for (const [lang, snippet] of Object.entries(claim.spans) as [Lang, string][]) {
-        if (!snippet) continue;
-        report.offered++;
-        if (haystacks.get(lang)?.some((text) => text.includes(snippet))) {
-          report.matched++;
-          spans[lang] = snippet;
-        } else if (report.samples.length < 8) {
-          report.samples.push({ lang, snippet: snippet.slice(0, 120) });
-        }
+  // One claim at a time rather than an array, because a streamed claim has to be
+  // judged the moment it completes: it is either locatable and shippable now, or
+  // it never becomes locatable by waiting for the claims after it.
+  const verify = (claim: Claim): Claim | null => {
+    const spans: Claim["spans"] = {};
+    for (const [lang, snippet] of Object.entries(claim.spans) as [Lang, string][]) {
+      if (!snippet) continue;
+      report.offered++;
+      if (haystacks.get(lang)?.some((text) => text.includes(snippet))) {
+        report.matched++;
+        spans[lang] = snippet;
+      } else if (report.samples.length < 8) {
+        report.samples.push({ lang, snippet: snippet.slice(0, 120) });
       }
-      return { ...claim, spans };
-    })
-    .filter((claim) => {
-      const kept = Object.keys(claim.spans).length > 0;
-      if (!kept) report.droppedClaims++;
-      return kept;
-    });
+    }
+    if (!Object.keys(spans).length) {
+      report.droppedClaims++;
+      return null;
+    }
+    return { ...claim, spans };
+  };
 
-  return { claims: verified, report };
+  return { report, verify };
 }
 
+/**
+ * `onClaim` fires as each difference is found and verified, before the run is
+ * over. Optional: without it this is exactly the batch call it always was, which
+ * is what the funded path and the fixture recorder still want.
+ */
 export async function runComparison(
   articles: ArticleSnapshot[],
   scope: ScopeKind = "full",
+  onClaim?: (claim: Claim) => void,
 ): Promise<{ claims: Claim[]; usage: Usage; spans: SpanReport; scope: ComparisonScope }> {
   const usage: Usage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
   const langs = articles.map((a) => a.lang);
@@ -334,16 +396,14 @@ export async function runComparison(
       // budget, so there is nothing left for screening to decide.
       [...groups].sort((a, b) => a.order - b.order)
     : screenGroups(groups, langs);
-  const raw = await diffGroups(
-    selected,
-    langs,
-    usage,
-    previews ? { perCall: selected.length, maxChars: PREVIEW_CHARS } : {},
-  );
   // Verified against the full articles, not the truncated copies: a span quoted
   // out of a prefix is a substring of the section the columns actually render,
   // which is what the highlighter has to find it in.
-  const { claims, report } = verifySpans(raw, articles);
+  const { report, verify } = spanVerifier(articles);
+  const { claims, raw } = await diffGroups(selected, langs, usage, verify, {
+    ...(previews ? { perCall: selected.length, maxChars: PREVIEW_CHARS } : {}),
+    deliver: onClaim,
+  });
 
   // Priced here, once, while the model ids that spent the tokens are still in
   // hand. The figure is stored with the comparison and never recomputed, so a
@@ -353,7 +413,7 @@ export async function runComparison(
   const pct = report.offered ? Math.round((report.matched / report.offered) * 100) : 100;
   console.log(
     `[compare] scope=${scope} groups=${selected.length}/${groups.length} (${selected.map((g) => g.key).join(", ")}) ` +
-      `claims=${raw.length}->${claims.length} spans=${report.matched}/${report.offered} (${pct}% matched) ` +
+      `claims=${raw}->${claims.length} spans=${report.matched}/${report.offered} (${pct}% matched) ` +
       `tokens=${usage.inputTokens}in/${usage.outputTokens}out/${usage.cachedInputTokens}cached ` +
       `cost=$${usage.costUsd.toFixed(4)}`,
   );
