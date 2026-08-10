@@ -14,6 +14,7 @@ import Legend from "./Legend";
 import Loading from "./Loading";
 import PreviewGate from "./PreviewGate";
 import SearchBox from "./SearchBox";
+import ThankYou from "./ThankYou";
 import { useNarrow } from "./useNarrow";
 import { useSwipe } from "./useSwipe";
 import Wordmark from "./Wordmark";
@@ -199,6 +200,8 @@ export default function Compare() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [funding, setFunding] = useState(false);
   const [fundError, setFundError] = useState<string | null>(null);
+  /** The thank-you, up for nine seconds from the moment credit is spent. */
+  const [thanks, setThanks] = useState(false);
   /** Set once the landing page's own search field has scrolled out of reach.
    *  While it is on screen the masthead carries no search at all — two boxes
    *  visible at once is just the same control asked for twice. */
@@ -444,6 +447,18 @@ export default function Compare() {
   }, []);
 
   /**
+   * Off to sign in, and back to this exact article afterwards. `next` carries
+   * the whole path and query, so somebody who logged in from the gate lands
+   * back at the comparison they were reading rather than on the front page
+   * having to find it again.
+   */
+  const goLogIn = useCallback((from: string) => {
+    void track("gate_cta_clicked", { from });
+    const back = window.location.pathname + window.location.search;
+    window.location.href = `/login?next=${encodeURIComponent(back)}`;
+  }, []);
+
+  /**
    * Buy the rest of this article, or a re-read of one whose revisions have moved
    * on. Streamed for the same reason `open` is: the gate's job is done the
    * instant the request goes out — the reader paid, the rest of the article is
@@ -467,6 +482,9 @@ export default function Compare() {
       setFunding(true);
       setFundError(null);
       setLiveClaims([]);
+      // Thanks for the donation, not for the wait: raised on the press, while
+      // the run it paid for is still a minute from finishing.
+      if (kind === "full") setThanks(true);
       void track(kind === "refresh" ? "stale_update_clicked" : "gate_cta_clicked", {
         qid: data?.qid,
         from: "fund",
@@ -512,6 +530,10 @@ export default function Compare() {
         refreshMe();
       } catch (e) {
         if (!current()) return;
+        // Nothing was read and the credit has been handed back, so the thanks
+        // are withdrawn with it: a thank-you standing over an error message is
+        // thanking somebody for a donation that did not happen.
+        setThanks(false);
         setFundError(e instanceof Error ? e.message : "That didn't work.");
       } finally {
         // Unconditional: `funding` is this button's own busy flag, not part of
@@ -523,6 +545,12 @@ export default function Compare() {
     },
     [target, funding, data?.qid, refreshMe],
   );
+
+  useEffect(() => {
+    if (!thanks) return;
+    const t = setTimeout(() => setThanks(false), 9000);
+    return () => clearTimeout(t);
+  }, [thanks]);
 
   // Fired off the payload rather than from `open`, because `open` does not know
   // yet which of the three things it will turn out to be — cached, preview or a
@@ -695,7 +723,11 @@ export default function Compare() {
           />
         )}
         <div className="ms-auto">
-          <CreditBar me={me} onDonate={() => goDonate("masthead")} />
+          <CreditBar
+            me={me}
+            onDonate={() => goDonate("masthead")}
+            onLogIn={() => goLogIn("masthead")}
+          />
         </div>
       </header>
 
@@ -891,7 +923,8 @@ export default function Compare() {
                 creditCents={me?.creditCents ?? 0}
                 error={fundError}
                 onFund={() => fund("full")}
-                onDonate={() => goDonate("preview-gate")}
+                onLogIn={() => goLogIn("preview-gate")}
+                onTopUp={() => goDonate("preview-gate")}
               />
               <Columns
                 articles={articles}
@@ -1008,6 +1041,8 @@ export default function Compare() {
           className={langSwitch ? "pb-[76px]" : ""}
         />
       )}
+
+      {thanks && <ThankYou />}
 
       {card && (
         <div

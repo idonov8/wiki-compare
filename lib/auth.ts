@@ -3,6 +3,8 @@ import { magicLink } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 import { Pool, neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
+import { SIGNUP_GRANT_CENTS } from "./pricing";
+import { capture } from "./analytics";
 
 /**
  * A second connection to the same database, on a different driver.
@@ -96,6 +98,36 @@ export const auth = betterAuth({
        */
       creditCents: { type: "number", defaultValue: 0, input: false },
       peakCreditCents: { type: "number", defaultValue: 0, input: false },
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        /**
+         * The welcome credit, five articles' worth, written into the INSERT that
+         * creates the account rather than added by an UPDATE just after it.
+         *
+         * `before` and not `after` because there is no moment in between worth
+         * having: an account that exists with a zero balance for one round trip
+         * is an account whose first `/api/me` can answer "no credit" and whose
+         * gate can tell a brand-new reader to top up. Granting it here also
+         * keeps lib/credits.ts as the only thing that ever *moves* a balance —
+         * this sets the balance a row is born with, which is a different act.
+         *
+         * `peakCreditCents` matches, because it is the meter's denominator: a
+         * bar that reads $1.00 of $0.00 is worse than no bar.
+         */
+        before: async (user) => ({
+          data: {
+            ...user,
+            creditCents: SIGNUP_GRANT_CENTS,
+            peakCreditCents: SIGNUP_GRANT_CENTS,
+          },
+        }),
+        after: async (user) => {
+          capture("signup_grant_issued", { grantedCents: SIGNUP_GRANT_CENTS }, user.id);
+        },
+      },
     },
   },
   plugins: [

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { MeResponse } from "@/lib/types";
 import { getSessionUser } from "@/lib/auth";
 import { creditSummary } from "@/lib/credits";
+import { SIGNUP_GRANT_CENTS } from "@/lib/pricing";
 
 export const runtime = "nodejs";
 
@@ -28,11 +29,26 @@ export async function GET(request: Request) {
     console.warn("credit summary unavailable:", error instanceof Error ? error.message : error);
   }
 
+  const creditCents = user.creditCents ?? 0;
+  const peakCreditCents = user.peakCreditCents ?? 0;
+
   const body: MeResponse = {
     email: user.email,
-    creditCents: user.creditCents ?? 0,
-    peakCreditCents: user.peakCreditCents ?? 0,
+    creditCents,
+    peakCreditCents,
     ...summary,
+    /**
+     * Somebody who has just arrived: the credit they hold is the sign-up grant,
+     * they have never topped it up, and they have not spent any of it yet. Read
+     * off the balance rather than off `createdAt`, because what the note beside
+     * the meter explains is the credit, not the age of the account — an account
+     * made a month ago and never used still has that explanation coming, and one
+     * made this morning that has already processed an article does not.
+     */
+    newcomer:
+      creditCents > 0 &&
+      peakCreditCents <= SIGNUP_GRANT_CENTS &&
+      summary.articlesProcessed === 0,
   };
   return NextResponse.json(body);
 }

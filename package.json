@@ -16,7 +16,8 @@
     "check:deterministic": "tsx scripts/check-deterministic.mts",
     "check:input": "tsx scripts/check-input.mts",
     "check:stream": "tsx scripts/check-stream.mts",
-    "check": "npm run check:input && npm run check:parser && npm run check:deterministic && npm run check:stream",
+    "check:live": "tsx scripts/check-live.mts",
+    "check": "npm run check:input && npm run check:parser && npm run check:deterministic && npm run check:stream && npm run check:live",
     "check:ui": "tsx scripts/check-ui.mts"
   },
   "keywords": [],
