@@ -1,16 +1,14 @@
 import { NextResponse } from "next/server";
 import {
   CACHE_WINDOW_DAYS,
-  type ArticleSnapshot,
   type CacheInfo,
-  type Claim,
   type CompareEvent,
   type ComparisonResult,
-  type CoverageGap,
   type Lang,
   type ScopeKind,
 } from "@/lib/types";
 import { PARSER_VERSION, fetchLabels } from "@/lib/wikipedia";
+import { followRun, liveRun, trackRun } from "@/lib/live";
 import { resolveTarget, snapshotsFor } from "@/lib/articles";
 import {
   bumpServedCount,
@@ -62,59 +60,67 @@ async function computeAndStore(
   {
     overwrite = false,
     fundedBy = null,
-    onArticles,
-    onCoverage,
-    onClaim,
+    emit = () => {},
   }: {
     overwrite?: boolean;
     fundedBy?: string | null;
     /** Called as each stage becomes available, for the streaming path. The
      *  articles land in about a second and the coverage diff costs no tokens, so
      *  both are worth sending long before the model has finished. */
-    onArticles?: (articles: ArticleSnapshot[]) => void;
-    onCoverage?: (coverage: CoverageGap[]) => void;
-    onClaim?: (claim: Claim) => void;
+    emit?: (event: CompareEvent) => void;
   } = {},
 ): Promise<{ result: ComparisonResult; cacheKey: string }> {
   const { qid, titles, revids, langs } = target;
-  const articles = await snapshotsFor(langs, titles, revids);
-  onArticles?.(articles);
-
-  // Coverage diff: no tokens involved, only set arithmetic over Wikidata ids.
-  // It runs on a preview too — it is free, and it describes the whole article
-  // rather than the part that was read, so withholding it would buy nothing.
-  const allQids = [...new Set(articles.flatMap((a) => a.linkQids))];
-  const known = await getLabels(allQids);
-  const missing = allQids.filter((q) => !known.has(q));
-  if (missing.length) {
-    const fetched = await fetchLabels(missing);
-    await putLabels(fetched);
-    for (const [qid_, label] of fetched) known.set(qid_, label);
-  }
-  const coverage = coverageGaps(articles, known);
-  onCoverage?.(coverage);
-
-  const run = await runComparison(articles, scope, onClaim);
-
-  const result: ComparisonResult = {
-    qid,
-    articles: Object.fromEntries(articles.map((a) => [a.lang, a])),
-    claims: run.claims,
-    coverage,
-    promptVersion: PROMPT_VERSION,
-    parserVersion: PARSER_VERSION,
-    computedAt: new Date().toISOString(),
-    usage: run.usage,
-    scope: run.scope,
-    spans: {
-      offered: run.spans.offered,
-      matched: run.spans.matched,
-      droppedClaims: run.spans.droppedClaims,
-    },
-  };
-
   const cacheKey = comparisonKey(qid, revids, PROMPT_VERSION, PARSER_VERSION, scope);
-  await putComparison(cacheKey, result, overwrite, fundedBy);
+
+  // Registered before any work starts, so a tab reopened mid-run joins this one
+  // rather than starting a second read of the same article.
+  const result = await trackRun(cacheKey, emit, async (send) => {
+    const articles = await snapshotsFor(langs, titles, revids);
+    send({
+      event: "articles",
+      qid,
+      articles: Object.fromEntries(articles.map((a) => [a.lang, a])),
+    });
+
+    // Coverage diff: no tokens involved, only set arithmetic over Wikidata ids.
+    // It runs on a preview too — it is free, and it describes the whole article
+    // rather than the part that was read, so withholding it would buy nothing.
+    const allQids = [...new Set(articles.flatMap((a) => a.linkQids))];
+    const known = await getLabels(allQids);
+    const missing = allQids.filter((q) => !known.has(q));
+    if (missing.length) {
+      const fetched = await fetchLabels(missing);
+      await putLabels(fetched);
+      for (const [qid_, label] of fetched) known.set(qid_, label);
+    }
+    const coverage = coverageGaps(articles, known);
+    send({ event: "coverage", coverage });
+
+    const run = await runComparison(articles, scope, (claim) => send({ event: "claim", claim }));
+
+    const result: ComparisonResult = {
+      qid,
+      articles: Object.fromEntries(articles.map((a) => [a.lang, a])),
+      claims: run.claims,
+      coverage,
+      promptVersion: PROMPT_VERSION,
+      parserVersion: PARSER_VERSION,
+      computedAt: new Date().toISOString(),
+      usage: run.usage,
+      scope: run.scope,
+      spans: {
+        offered: run.spans.offered,
+        matched: run.spans.matched,
+        droppedClaims: run.spans.droppedClaims,
+      },
+    };
+    // Stored while the run is still joinable, so the moment it stops being one
+    // there is a cached row to serve instead.
+    await putComparison(cacheKey, result, overwrite, fundedBy);
+    return result;
+  });
+
   return { result, cacheKey };
 }
 
@@ -245,6 +251,21 @@ export async function GET(request: Request) {
       ? null
       : await getCachedComparison(qid, fullKey, previewKey, PROMPT_VERSION, PARSER_VERSION);
 
+    // Somebody is already reading this article — a reload of this same tab, most
+    // likely. Join that run: its progress replays at once and the rest arrives
+    // as it is found, which is the reload picking the stream back up rather than
+    // paying for a second read of the same article.
+    //
+    // A funded run outranks anything stored, because what is stored in the
+    // middle of one is the preview it was bought to replace. A preview run only
+    // wins when there is nothing at all.
+    const live = liveRun(fullKey) ?? (cached ? undefined : liveRun(previewKey));
+    if (live) {
+      const joined = await followRun(live, emit);
+      emit({ event: "done", result: joined, fromCache: false });
+      return { ...joined, fromCache: false };
+    }
+
     if (cached) {
       // Counting the read must not be able to delay or fail serving it.
       void bumpServedCount(cached.cacheKey);
@@ -263,14 +284,7 @@ export async function GET(request: Request) {
     // below what this covered, and funding it through POST reads the rest.
     const { result } = await computeAndStore(target, bypassCache ? "full" : "preview", {
       overwrite: bypassCache,
-      onArticles: (articles) =>
-        emit({
-          event: "articles",
-          qid,
-          articles: Object.fromEntries(articles.map((a) => [a.lang, a])),
-        }),
-      onCoverage: (coverage) => emit({ event: "coverage", coverage }),
-      onClaim: (claim) => emit({ event: "claim", claim }),
+      emit,
     });
     void capture("comparison_served", {
       qid,
