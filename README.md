@@ -263,7 +263,7 @@ to top up. That grant is what the whole flow is arranged around: the masthead as
 reader to log in rather than to donate, the gate at the end of a preview does the same, and the
 payment page is reached only by somebody who has actually run out. Signed in with credit, the gate
 says "Donate this article" and names what pressing it spends and who gets it; the thanks appear on
-the press, for five seconds, because the run they paid for takes about a minute and a thank-you at
+the press, for nine seconds, because the run they paid for takes about a minute and a thank-you at
 the end of it would be thanking somebody for waiting. `/api/me` reports `newcomer` — this balance
 is still the sign-up grant, untouched — which is what raises the note beside the meter explaining
 where the credit came from.
@@ -425,7 +425,7 @@ components/Compare.tsx     search → choose → compare, hover card
 components/SignIn.tsx      the sign-in screen: Google, or a link by email
 components/LogIn.tsx       that screen as a page, with the way back in `?next=`
 components/PreviewGate.tsx the seam between what was read and what wasn't
-components/ThankYou.tsx    five seconds of thanks, raised when credit is spent
+components/ThankYou.tsx    nine seconds of thanks, raised when credit is spent
 components/CreditBar.tsx   balance in the masthead, the welcome note, the thank-you on hover
 components/Donate.tsx      amounts, running costs, monthly, the Redeem button, and the reveal
 components/Columns.tsx     the articles side by side, with or without a comparison

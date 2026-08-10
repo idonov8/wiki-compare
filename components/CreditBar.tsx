@@ -57,6 +57,11 @@ export default function CreditBar({
    *  the effect below is what lets it through. */
   const [welcomeSeen, setWelcomeSeen] = useState(true);
 
+  /** True right after "Got it" is clicked, until the pointer/focus leaves the
+   *  container — keeps the detail panel from opening under a cursor that
+   *  never moved. */
+  const [justDismissedWelcome, setJustDismissedWelcome] = useState(false);
+
   useEffect(() => {
     try {
       setWelcomeSeen(localStorage.getItem(WELCOME_SEEN) === "1");
@@ -70,6 +75,7 @@ export default function CreditBar({
 
   function dismissWelcome(): void {
     setWelcomeSeen(true);
+    setJustDismissedWelcome(true);
     try {
       localStorage.setItem(WELCOME_SEEN, "1");
     } catch {}
@@ -126,6 +132,12 @@ export default function CreditBar({
       className="credit group relative flex flex-col gap-[5px] min-w-[148px] max-cols:min-w-0 max-cols:flex-[1_1_100%] font-mono text-[11px] text-ink-soft cursor-help"
       tabIndex={0}
       aria-describedby={welcome ? "credit-welcome-text" : "credit-detail-text"}
+      onMouseLeave={() => setJustDismissedWelcome(false)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+          setJustDismissedWelcome(false);
+        }
+      }}
     >
       {/* Proportion of the account's own peak, not of some notional full tank:
           the denominator is the most this person ever held, so the bar empties
@@ -159,11 +171,8 @@ export default function CreditBar({
           role="status"
         >
           <p className="credit-welcome-text m-0" id="credit-welcome-text">
-            Welcome — there&apos;s {formatCents(me.creditCents)} on your account, enough for{" "}
-            {remaining} {remaining === 1 ? "article" : "articles"}. Open one and press{" "}
-            <b className="font-semibold">Donate this article</b> at the end of the preview: it
-            spends your credit to process the rest, and it stays readable for everyone who comes
-            after you.
+            Welcome! we added {formatCents(me.creditCents)} of credits to your account. 
+            Use them to process articles, they will stay readable for <b>everyone.</b>
           </p>
           <button
             type="button"
@@ -190,9 +199,9 @@ export default function CreditBar({
           `getComputedStyle(el).visibility` directly. */}
       <div
         className={`credit-detail absolute z-50 top-[calc(100%_+_8px)] end-0 max-cols:end-auto max-cols:start-0 w-[300px] max-cols:w-[min(300px,calc(100vw_-_48px))] pt-[11px] px-[13px] pb-[12px] bg-paper-raised border border-ink rounded-[2px] shadow-offset font-body text-[13px] leading-[1.55] tracking-normal normal-case text-start text-ink cursor-default invisible opacity-0 pointer-events-none transition-opacity duration-[120ms] ease-[ease] group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 group-focus-within:pointer-events-auto before:content-[''] before:absolute before:-inset-x-px before:-top-[10px] before:h-[10px] ${
-          // `display: none` beats every visibility utility above, which is what
-          // keeps the welcome note from being opened into on hover.
-          welcome ? "hidden" : ""
+          // `display: none` beats every visibility utility above — keeps the
+          // welcome note, and its dismissal, from being opened into on hover.
+          welcome || justDismissedWelcome ? "hidden" : ""
         }`}
       >
         {/* The trip from the figures down to the panel crosses 8px of nothing,

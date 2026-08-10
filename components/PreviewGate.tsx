@@ -89,7 +89,7 @@ export default function PreviewGate({
           </>
         ) : (
           <>
-            Get {articlesFor(SIGNUP_GRANT_CENTS)} articles for free on sign up
+            Get {articlesFor(SIGNUP_GRANT_CENTS)} articles for free
           </>
         )}
       </p>

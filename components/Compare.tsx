@@ -192,7 +192,7 @@ export default function Compare() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [funding, setFunding] = useState(false);
   const [fundError, setFundError] = useState<string | null>(null);
-  /** The thank-you, up for five seconds from the moment credit is spent. */
+  /** The thank-you, up for nine seconds from the moment credit is spent. */
   const [thanks, setThanks] = useState(false);
   /** Set once the landing page's own search field has scrolled out of reach.
    *  While it is on screen the masthead carries no search at all — two boxes
@@ -449,7 +449,7 @@ export default function Compare() {
 
   useEffect(() => {
     if (!thanks) return;
-    const t = setTimeout(() => setThanks(false), 5000);
+    const t = setTimeout(() => setThanks(false), 9000);
     return () => clearTimeout(t);
   }, [thanks]);
 
