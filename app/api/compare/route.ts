@@ -307,6 +307,15 @@ export async function GET(request: Request) {
  * in a transaction with the run — the model call takes about a minute, and
  * holding a row lock across it would serialise every donor in the system behind
  * whoever is currently reading the longest article.
+ *
+ * `?stream=1` reports progress the same way GET's does: an ndjson body ending in
+ * `done` or `error`. The gate wants this — pressing it should drop the paywall
+ * and let the tail's own marks appear as the model finds them, not sit on
+ * "Reading the rest…" for a minute and then pop in all at once. The pre-charge
+ * checks (sign-in, an existing answer, insufficient credit) still answer with an
+ * ordinary status before any stream opens, since nothing has been spent yet to
+ * explain mid-stream; only the read itself, after the debit, needs the ndjson
+ * error line.
  */
 export async function POST(request: Request) {
   const user = await getSessionUser(request.headers);
@@ -328,7 +337,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Add a title." }, { status: 400 });
   }
 
-  let charged = false;
+  const streaming = new URL(request.url).searchParams.get("stream") === "1";
+
   try {
     const target = await resolveTarget(title, sourceLang);
     const { qid, revids } = target;
@@ -348,12 +358,10 @@ export async function POST(request: Request) {
       );
       if (existing && existing.result.scope?.kind !== "preview") {
         void bumpServedCount(existing.cacheKey);
-        return NextResponse.json({
-          ...existing.result,
-          fromCache: true,
-          charged: false,
-          cache: cacheInfo(existing.result, existing.computedAt, target),
-        });
+        const cache = cacheInfo(existing.result, existing.computedAt, target);
+        return streaming
+          ? ndjson(async (emit) => emit({ event: "done", result: existing.result, fromCache: true, cache }))
+          : NextResponse.json({ ...existing.result, fromCache: true, charged: false, cache });
       }
     }
 
@@ -364,35 +372,62 @@ export async function POST(request: Request) {
         { status: 402 },
       );
     }
-    charged = true;
 
-    const { result, cacheKey } = await computeAndStore(target, "full", {
-      overwrite: kind === "refresh",
-      fundedBy: user.id,
-    });
+    // From here on a charge exists and every exit must either spend it on a
+    // stored result or refund it — never fall through with money taken and
+    // nothing to show for it.
+    const read = async (emit: (event: CompareEvent) => void) => {
+      const { result, cacheKey } = await computeAndStore(target, "full", {
+        overwrite: kind === "refresh",
+        fundedBy: user.id,
+        onArticles: (articles) =>
+          emit({
+            event: "articles",
+            qid,
+            articles: Object.fromEntries(articles.map((a) => [a.lang, a])),
+          }),
+        onClaim: (claim) => emit({ event: "claim", claim }),
+      });
 
-    await recordSpend({
-      userId: user.id,
-      qid,
-      cacheKey,
-      kind,
-      chargedCents: PRICE_PER_ARTICLE_CENTS,
-      actualCostCents: Math.round((result.usage.costUsd ?? 0) * 100),
-    });
-    void capture(
-      "credits_spent",
-      { qid, kind, chargedCents: PRICE_PER_ARTICLE_CENTS, costUsd: result.usage.costUsd ?? 0 },
-      user.id,
-    );
+      await recordSpend({
+        userId: user.id,
+        qid,
+        cacheKey,
+        kind,
+        chargedCents: PRICE_PER_ARTICLE_CENTS,
+        actualCostCents: Math.round((result.usage.costUsd ?? 0) * 100),
+      });
+      void capture(
+        "credits_spent",
+        { qid, kind, chargedCents: PRICE_PER_ARTICLE_CENTS, costUsd: result.usage.costUsd ?? 0 },
+        user.id,
+      );
+      return result;
+    };
 
-    return NextResponse.json({
-      ...result,
-      fromCache: false,
-      charged: true,
-      creditCents: remaining,
-    });
+    if (streaming) {
+      return ndjson(async (emit) => {
+        try {
+          const result = await read(emit);
+          emit({ event: "done", result, fromCache: false });
+        } catch (error) {
+          await grant(user.id, PRICE_PER_ARTICLE_CENTS);
+          emit({
+            event: "error",
+            error: error instanceof Error ? error.message : "Comparison failed.",
+          });
+        }
+      });
+    }
+
+    try {
+      const result = await read(() => {});
+      return NextResponse.json({ ...result, fromCache: false, charged: true, creditCents: remaining });
+    } catch (error) {
+      await grant(user.id, PRICE_PER_ARTICLE_CENTS);
+      throw error;
+    }
   } catch (error) {
-    if (charged) await grant(user.id, PRICE_PER_ARTICLE_CENTS);
     const message = error instanceof Error ? error.message : "Comparison failed.";
     return NextResponse.json({ error: message }, { status: 500 });
   }

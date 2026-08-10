@@ -427,12 +427,16 @@ export default function Compare() {
   const solo = available.includes(active) ? active : available[0];
   const visible = narrow ? (solo ? [solo] : []) : shown.filter((l) => available.includes(l));
   const badged = !!data?.cache && data.cache.edited.length > 0;
-  const preview = data?.scope?.kind === "preview";
+  // While a fund is streaming, `data` still describes the preview that is being
+  // replaced — the gate has to drop the instant the button is pressed, not once
+  // the reply says the scope changed, so `funding` overrides it here too.
+  const preview = data?.scope?.kind === "preview" && !funding;
   /** What is marked on the page right now: the finished run's claims, or the
-   *  ones that have arrived so far while it is still reading. The finished run
-   *  supersedes rather than merges — it is the same list, and it is the copy
-   *  that got stored. */
-  const claims = data?.claims ?? liveClaims;
+   *  ones that have arrived so far while it is still reading — whether that
+   *  reading is the free preview or the fund that is replacing it. The
+   *  finished run supersedes rather than merges — it is the same list, and it
+   *  is the copy that got stored. */
+  const claims = funding ? liveClaims : (data?.claims ?? liveClaims);
 
   const goDonate = useCallback((from: string) => {
     void track("gate_cta_clicked", { from });
@@ -441,33 +445,79 @@ export default function Compare() {
 
   /**
    * Buy the rest of this article, or a re-read of one whose revisions have moved
-   * on. The reply is a whole comparison, so it simply replaces what is on screen
-   * — the gate disappears because the payload it was describing is gone, not
-   * because anything told it to.
+   * on. Streamed for the same reason `open` is: the gate's job is done the
+   * instant the request goes out — the reader paid, the rest of the article is
+   * already sitting in `articles`, there is nothing left to gate — so it drops
+   * immediately rather than waiting out the minute-long read behind "Reading
+   * the rest…". What was behind it streams in its own marks exactly as `open`
+   * does, `liveClaims` doing double duty as whichever run is currently arriving.
+   * The reply's `done` line still replaces `data` wholesale at the end, which is
+   * what turns `preview` false for good and lets `liveClaims` step aside for the
+   * stored claim list.
    */
   const fund = useCallback(
     async (kind: "full" | "refresh") => {
       if (!target || funding) return;
+      // Shares `runId` with `open`: following a link away from this article
+      // while its purchase is still streaming must not have the late claims or
+      // the late `done` land on whatever is on screen by then.
+      const id = ++runId.current;
+      const current = () => runId.current === id;
+
       setFunding(true);
       setFundError(null);
+      setLiveClaims([]);
       void track(kind === "refresh" ? "stale_update_clicked" : "gate_cta_clicked", {
         qid: data?.qid,
         from: "fund",
       });
       try {
-        const res = await fetch("/api/compare", {
+        const res = await fetch("/api/compare?stream=1", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ title: target.title, lang: target.lang, kind }),
         });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error ?? "That didn't work.");
-        setData(json as ComparePayload);
-        setArticles(json.articles ?? {});
+        if (!res.ok || !res.body) {
+          const json = await res.json().catch(() => ({}));
+          throw new Error(json.error ?? "That didn't work.");
+        }
+
+        let final: ComparePayload | null = null;
+        let failed: string | null = null;
+
+        await readNdjson<CompareEvent>(res.body, (event) => {
+          if (!current()) return;
+          switch (event.event) {
+            case "articles":
+              setArticles((prev) => ({ ...prev, ...event.articles }));
+              break;
+            case "claim":
+              setLiveClaims((claims) => [...claims, event.claim]);
+              break;
+            case "done":
+              final = { ...event.result, fromCache: event.fromCache, cache: event.cache };
+              break;
+            case "error":
+              failed = event.error;
+              break;
+          }
+        });
+
+        if (!current()) return;
+        if (failed) throw new Error(failed);
+        if (!final) throw new Error("The comparison ended without returning a result.");
+
+        setData(final);
+        setArticles((final as ComparePayload).articles);
         refreshMe();
       } catch (e) {
+        if (!current()) return;
         setFundError(e instanceof Error ? e.message : "That didn't work.");
       } finally {
+        // Unconditional: `funding` is this button's own busy flag, not part of
+        // what a stale run is forbidden from touching. Leaving it set because
+        // the reader followed a link elsewhere mid-purchase would jam the
+        // button for good the next time this article's gate is seen.
         setFunding(false);
       }
     },
@@ -860,7 +910,7 @@ export default function Compare() {
               // Ghosts stand in for marks nobody has yet. The first real
               // difference retires them: drifting placeholders beside located
               // claims read as though the located ones were still moving.
-              ghost={comparing && claims.length === 0}
+              ghost={(comparing || funding) && claims.length === 0}
               activeId={card?.claim.id ?? null}
               onEnter={onEnter}
               onLeave={() => setCard(null)}
