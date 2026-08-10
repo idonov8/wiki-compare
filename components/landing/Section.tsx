@@ -12,15 +12,16 @@ interface Props {
    *  the heading's baseline, at the end of the measure. */
   action?: React.ReactNode;
   className?: string;
+  id?: string;
   children: React.ReactNode;
 }
 
 /** The measure every band shares. */
 export const MEASURE = "mx-auto max-w-[860px]";
 
-export default function Section({ heading, action, className = "", children }: Props) {
+export default function Section({ heading, action, className = "", id, children }: Props) {
   return (
-    <section className={`px-[24px] max-tight:px-[18px] ${className}`}>
+    <section className={`px-[24px] max-tight:px-[18px] ${className}`} id={id}>
       <div className={MEASURE}>
         {(heading || action) && (
           <div className="flex flex-wrap items-baseline justify-between gap-x-[18px] gap-y-[10px]">

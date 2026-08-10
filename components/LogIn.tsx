@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import SignIn from "@/components/SignIn";
 import { initAnalytics } from "@/lib/analytics";
-import { SIGNUP_GRANT_CENTS, articlesFor, formatCents } from "@/lib/pricing";
 
 /**
  * Where to land afterwards, taken from `?next=`.
@@ -46,11 +45,6 @@ export default function LogIn() {
     <SignIn
       callbackURL={next}
       heading="Log in"
-      blurb={
-        `No password — we email you a link. A new account starts with ` +
-        `${formatCents(SIGNUP_GRANT_CENTS)} of credit, which is ` +
-        `${articlesFor(SIGNUP_GRANT_CENTS)} articles you can open for everyone.`
-      }
     />
   );
 }

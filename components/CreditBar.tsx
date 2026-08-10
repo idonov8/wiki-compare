@@ -237,7 +237,7 @@ export default function CreditBar({
             className="credit-detail-signout py-[6px] px-[14px] font-mono text-[12px] tracking-[0.04em] bg-transparent text-ink border border-ink transition-opacity duration-[120ms] ease-[ease] hover:opacity-[0.82]"
             onClick={signOut}
           >
-            Sign out
+            Log out
           </button>
         </div>
       </div>
