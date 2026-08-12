@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import CouponBanner from "@/components/CouponBanner";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,7 +20,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Noto+Serif:wght@400;600&family=Noto+Serif+Hebrew:wght@400;600&family=Noto+Naskh+Arabic:wght@400;600&family=Noto+Sans:wght@400;600;700&family=Noto+Sans+Hebrew:wght@400;600;700&family=Noto+Sans+Arabic:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {/* Above everything, including the sticky masthead: the offer is the
+            first thing on the page and scrolls away with the top of it. It takes
+            itself down once the code expires or the reader closes it. */}
+        <CouponBanner />
+        {children}
+      </body>
     </html>
   );
 }

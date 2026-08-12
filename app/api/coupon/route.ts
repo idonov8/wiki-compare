@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { CouponCheck, CouponRequest, CouponResponse } from "@/lib/types";
 import { getSessionUser } from "@/lib/auth";
 import { claimCoupon, grant, hasRedeemed } from "@/lib/credits";
-import { couponValue, normalizeCoupon } from "@/lib/coupons";
+import { couponEndLabel, couponExpired, couponValue, normalizeCoupon } from "@/lib/coupons";
 import { formatCents } from "@/lib/pricing";
 import { capture } from "@/lib/analytics";
 
@@ -90,6 +90,18 @@ async function resolve(
     // Captured, not just refused: typos and retired codes only separate in bulk.
     void capture("coupon_rejected", { code }, user.id);
     return NextResponse.json({ error: `${code} isn't a code we know.` }, { status: 404 });
+  }
+
+  // A code that ran out is a real code, so it is refused in its own words and
+  // with its own status: "isn't a code we know" reads as a typo, and somebody
+  // typing a code off a banner that has come down deserves to be told which of
+  // the two happened.
+  if (couponExpired(code)) {
+    void capture("coupon_rejected", { code, expired: true }, user.id);
+    return NextResponse.json(
+      { error: `${code} ran out on ${couponEndLabel(code)}.` },
+      { status: 410 },
+    );
   }
 
   return { userId: user.id, code, cents };
