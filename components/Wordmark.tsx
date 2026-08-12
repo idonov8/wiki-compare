@@ -70,10 +70,8 @@ function Strand() {
       aria-hidden="true"
       className="strand relative mx-[5px] inline-block h-[18px] w-[15px] align-middle"
     >
-      {/* The axis, drawn before the bars settle onto it — a chart plots its
-          baseline first, and the 30/70/110ms stagger below is the three bars
-          arriving on it in the order the chart sorts them. */}
-      <i className="absolute bottom-[-2px] left-[-2px] h-px w-[20px] origin-left scale-x-0 bg-ink opacity-0 transition-[transform,opacity] duration-200 ease-out group-hover:scale-x-100 group-hover:opacity-100 group-focus-visible:scale-x-100 group-focus-visible:opacity-100" />
+      {/* The 30/70/110ms stagger is the three bars landing in the order the
+          chart sorts them; their shared bottom edge is the only axis needed. */}
       <i
         className={`${bar} left-[1px] rotate-[-10deg] bg-framing delay-[30ms] group-hover:left-[-1px] group-hover:rotate-0 group-focus-visible:left-[-1px] group-focus-visible:rotate-0`}
       />
