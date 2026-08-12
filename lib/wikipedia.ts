@@ -26,7 +26,7 @@ export const PARSER_VERSION = "v6";
  * contact has to be something that actually reaches a maintainer.
  * https://foundation.wikimedia.org/wiki/Policy:User-Agent_policy
  */
-const CONTACT = process.env.WIKI_CONTACT || "https://wiki-compare.vercel.app; idonov8@gmail.com";
+const CONTACT = process.env.WIKI_CONTACT || "https://wikicompare.app; contact@wikicompare.app";
 const UA = `wiki-compare/0.1 (${CONTACT})`;
 const MAX_SECTION_CHARS = 4000;
 const MAX_LINKS = 400;

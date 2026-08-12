@@ -24,7 +24,7 @@ export const metadata = {
  */
 
 const UPDATED = "August 2026";
-const CONTACT = "idonov8@gmail.com";
+const CONTACT = "contact@wikicompare.app";
 
 export default function Page() {
   return (
