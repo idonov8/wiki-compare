@@ -891,12 +891,10 @@ check(!(await page.$(".card")), "Escape dismisses the card");
 
 // ---- the search docking into the masthead -----------------------------------
 
-// Docking makes the masthead taller — a whole extra row on a phone — and the
-// masthead sits in the flow above the hero, so that growth pushes the hero's
-// field back down the screen. Judged against one fixed line, docking undid
-// itself and the box flickered in and out for as long as the reader sat in
-// those few pixels, so what is asserted is the crossing count: once each way
-// over a slow sweep down the page and back up it, at both sizes.
+// Docking grows the masthead, which pushes the hero's field back down the page
+// and — judged against one fixed line — undid the dock, so the box flickered in
+// and out for as long as the reader sat in those few pixels. What is asserted is
+// the crossing count: once each way over a sweep down the page and back up it.
 {
   const rows = Array.from({ length: 30 }, (_, i) => ({
     qid: `Q${i}`,
@@ -910,7 +908,7 @@ check(!(await page.$(".card")), "Escape dismisses the card");
   for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 700 }]) {
     const sweeper = await browser.newPage({ viewport });
     sweeper.on("pageerror", (e) => pageErrors.push(e.message));
-    // Enough of a ledger to give the landing page a page and a half to scroll.
+    // Enough of a ledger to give the landing page something to scroll.
     await sweeper.route("**/api/recent", (route) =>
       route.fulfill({ contentType: "application/json", body: JSON.stringify({ items: rows }) }),
     );
@@ -922,8 +920,8 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     const limit = await sweeper.evaluate(
       () => document.documentElement.scrollHeight - innerHeight,
     );
-    // Six pixels a step: the band the old code oscillated in was nine wide on a
-    // wide window, and a sweep that stepped over it would report a clean pass.
+    // Six pixels a step: the band it oscillated in is nine wide on a wide
+    // window, and a sweep that stepped over it would report a clean pass.
     const down = Array.from({ length: Math.ceil(limit / 6) + 1 }, (_, i) => Math.min(i * 6, limit));
     const sweep = [...down, ...[...down].reverse()];
 

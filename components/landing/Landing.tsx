@@ -6,9 +6,7 @@ import Hero from "./Hero";
 import RecentList from "./RecentList";
 import type { RecentArticle } from "@/lib/types";
 
-/** How far past the docked masthead the hero's field has to come back before
- *  the masthead gives its search up again. Only has to exceed the rounding on a
- *  measured height — the height the masthead loses is accounted for above. */
+/** Slack on the way back out, over the rounding on a measured height. */
 const SETTLE = 2;
 
 interface Props {
@@ -71,18 +69,11 @@ export default function Landing({
     if (!mark) return;
     if (typeof IntersectionObserver === "undefined") return;
 
-    // The masthead covers the top of the viewport, so the sentinel is out of
-    // reach a little before it is out of the window. Measured rather than
-    // assumed, because docking a search into the masthead makes it taller —
-    // by nine pixels on a wide window, by a whole row on a phone.
-    //
-    // That growth is also why the line moves with the state. The masthead sits
-    // in the flow above the hero, so growing it pushes the sentinel down past
-    // the line it had just crossed: with one fixed line, docking undocked
-    // itself, which shrank the masthead, which docked again — the search box
-    // flickering in and out for as long as the reader stayed within those few
-    // pixels. Undocking asks for `SETTLE` more than the docked masthead
-    // covers, so the crossing back is always clear of the height it gave up.
+    // Docking grows the masthead — a row taller on a phone — and it sits in the
+    // flow above the hero, so a fixed line here pushed the sentinel back past
+    // itself and undocked, which shrank the masthead, which docked again.
+    // Measuring it as it now stands makes the way back out the taller line, so
+    // the return crossing clears the height docking added.
     const line =
       Math.round(masthead.current?.getBoundingClientRect().height ?? 72) +
       (docked ? SETTLE : 0);
