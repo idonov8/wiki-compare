@@ -61,8 +61,8 @@ function BetaBadge() {
 function Strand() {
   // Anchored at the bottom rather than the top, because a bar that shortens
   // from a shared baseline is a chart and one that shortens from a shared
-  // ceiling is not. Widening as they land too: 4px on an 8px pitch is the same
-  // half-filled rhythm the real chart has at 22px on 44px.
+  // ceiling is not. Widening as they land too: 4px on a 7px pitch keeps the
+  // trio reading as one grouped mark rather than three separate strokes.
   const bar =
     "absolute bottom-0 h-[18px] w-[3px] rounded-[1px] transition-[left,width,height,transform] duration-200 ease-out group-hover:w-[4px] group-focus-visible:w-[4px]";
   return (
@@ -75,13 +75,13 @@ function Strand() {
           arriving on it in the order the chart sorts them. */}
       <i className="absolute bottom-[-2px] left-[-2px] h-px w-[20px] origin-left scale-x-0 bg-ink opacity-0 transition-[transform,opacity] duration-200 ease-out group-hover:scale-x-100 group-hover:opacity-100 group-focus-visible:scale-x-100 group-focus-visible:opacity-100" />
       <i
-        className={`${bar} left-[1px] rotate-[-10deg] bg-framing delay-[30ms] group-hover:left-[-2px] group-hover:rotate-0 group-focus-visible:left-[-2px] group-focus-visible:rotate-0`}
+        className={`${bar} left-[1px] rotate-[-10deg] bg-framing delay-[30ms] group-hover:left-[-1px] group-hover:rotate-0 group-focus-visible:left-[-1px] group-focus-visible:rotate-0`}
       />
       <i
         className={`${bar} left-[6px] bg-contradiction delay-[70ms] group-hover:h-[10px] group-focus-visible:h-[10px]`}
       />
       <i
-        className={`${bar} left-[11px] rotate-[10deg] bg-unique delay-[110ms] group-hover:left-[14px] group-hover:h-[7px] group-hover:rotate-0 group-focus-visible:left-[14px] group-focus-visible:h-[7px] group-focus-visible:rotate-0`}
+        className={`${bar} left-[11px] rotate-[10deg] bg-unique delay-[110ms] group-hover:left-[13px] group-hover:h-[7px] group-hover:rotate-0 group-focus-visible:left-[13px] group-focus-visible:h-[7px] group-focus-visible:rotate-0`}
       />
     </span>
   );
