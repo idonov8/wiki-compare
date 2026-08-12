@@ -4,7 +4,7 @@ import { MEASURE } from "./landing/Section";
 
 /** Where a correction request lands. The same address as the privacy notice's,
  *  deliberately: one inbox that is actually read beats two that are not. */
-const CONTACT = "idonov8@gmail.com";
+const CONTACT = "contact@wikicompare.app";
 
 /**
  * The colophon, at the foot of every page: the standing caveat, a route to

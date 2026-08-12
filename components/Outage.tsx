@@ -18,8 +18,8 @@ export default function Outage({ from }: { from: string }) {
       <p className="m-0 mb-[14px]">{OUT_OF_CREDIT}</p>
       <p className="m-0 mb-[14px]">
         If you want the site to come back please donate, and{" "}
-        <a className="text-ink underline underline-offset-[3px]" href="mailto:idonov8@gmail.com">
-          email me at idonov8@gmail.com
+        <a className="text-ink underline underline-offset-[3px]" href="mailto:contact@wikicompare.app">
+          email me at contact@wikicompare.app
         </a>
         .
       </p>
