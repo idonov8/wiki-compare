@@ -210,6 +210,10 @@ export default function Compare() {
    *  While it is on screen the masthead carries no search at all — two boxes
    *  visible at once is just the same control asked for twice. */
   const [docked, setDocked] = useState(false);
+  /** The masthead measures itself for `Landing`: how much of the top of the
+   *  viewport it covers is what decides when the hero's field is out of
+   *  reach, and docking a search into it changes that number. */
+  const masthead = useRef<HTMLElement | null>(null);
 
   const reset = () => {
     setError(null);
@@ -663,6 +667,7 @@ export default function Compare() {
           that spot: the mark arrives already covered, and the hover card it is
           supposed to open never opens. `npm run check:ui` catches this. */}
       <header
+        ref={masthead}
         className={`masthead z-40 border-b border-rule bg-paper px-[24px] py-[20px] flex gap-[24px] items-center flex-wrap max-tight:px-[18px] max-tight:py-[14px] max-tight:gap-[14px] ${
           landing ? "sticky top-0" : ""
         }`}
@@ -811,7 +816,9 @@ export default function Compare() {
           recentLoading={recentLoading}
           relative={relative}
           onDonate={() => goDonate("landing_footer")}
+          docked={docked}
           onDocked={setDocked}
+          masthead={masthead}
         />
       )}
 

@@ -6,6 +6,11 @@ import Hero from "./Hero";
 import RecentList from "./RecentList";
 import type { RecentArticle } from "@/lib/types";
 
+/** How far past the docked masthead the hero's field has to come back before
+ *  the masthead gives its search up again. Only has to exceed the rounding on a
+ *  measured height — the height the masthead loses is accounted for above. */
+const SETTLE = 2;
+
 interface Props {
   query: string;
   setQuery: (value: string) => void;
@@ -20,9 +25,14 @@ interface Props {
   recentLoading: boolean;
   relative: (iso: string) => string;
   onDonate: () => void;
+  /** Whether the masthead is currently carrying a search of its own. */
+  docked: boolean;
   /** Told when the hero's search field has scrolled out of reach, so the
    *  masthead can grow one of its own. */
   onDocked: (docked: boolean) => void;
+  /** The masthead itself, so the line below can be measured off what is
+   *  actually covering the top of the viewport. */
+  masthead: React.RefObject<HTMLElement | null>;
 }
 
 /**
@@ -43,7 +53,9 @@ export default function Landing({
   recentLoading,
   relative,
   onDonate,
+  docked,
   onDocked,
+  masthead,
 }: Props) {
   const sentinel = useRef<HTMLDivElement | null>(null);
 
@@ -59,15 +71,29 @@ export default function Landing({
     if (!mark) return;
     if (typeof IntersectionObserver === "undefined") return;
 
+    // The masthead covers the top of the viewport, so the sentinel is out of
+    // reach a little before it is out of the window. Measured rather than
+    // assumed, because docking a search into the masthead makes it taller —
+    // by nine pixels on a wide window, by a whole row on a phone.
+    //
+    // That growth is also why the line moves with the state. The masthead sits
+    // in the flow above the hero, so growing it pushes the sentinel down past
+    // the line it had just crossed: with one fixed line, docking undocked
+    // itself, which shrank the masthead, which docked again — the search box
+    // flickering in and out for as long as the reader stayed within those few
+    // pixels. Undocking asks for `SETTLE` more than the docked masthead
+    // covers, so the crossing back is always clear of the height it gave up.
+    const line =
+      Math.round(masthead.current?.getBoundingClientRect().height ?? 72) +
+      (docked ? SETTLE : 0);
+
     const observer = new IntersectionObserver(
       ([entry]) => onDocked(!entry.isIntersecting),
-      // The masthead covers the top of the viewport, so the sentinel is out of
-      // reach a little before it is out of the window.
-      { rootMargin: "-72px 0px 0px 0px" },
+      { rootMargin: `-${line}px 0px 0px 0px` },
     );
     observer.observe(mark);
     return () => observer.disconnect();
-  }, [onDocked]);
+  }, [onDocked, docked, masthead]);
 
   return (
     // The grain. One tiled turbulence at very low opacity, which is the whole
