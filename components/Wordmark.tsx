@@ -10,8 +10,11 @@ const BETA_GROUP_URL = "https://chat.whatsapp.com/L8T9rwmdALzJD8IqYZ292y?s=cl&p=
  * the entire product, so the mark says that before a reader has run a single
  * comparison, in the site's own colour vocabulary rather than a borrowed one.
  * At rest the bars sit close and tilted, like a folded ribbon; on hover or
- * keyboard focus they fan out level, the way the columns themselves fan out
- * into three tellings of one article.
+ * keyboard focus they drop onto a baseline and step down in height — the same
+ * shape `LangBars` draws under the search field once a comparison is running,
+ * where three editions of one article turn out to be nothing like the same
+ * length. The mark makes the site's argument twice: three colours for three
+ * readings, and a lopsided chart for how unevenly they are written.
  *
  * `beta` rides low on the baseline, the way a trademark mark sits off a
  * wordmark rather than floating centred beside it, and is its own link —
@@ -56,19 +59,27 @@ function BetaBadge() {
 
 /** Decorative only — the link's accessible name comes from the `aria-label` above. */
 function Strand() {
+  // Anchored at the bottom rather than the top, because a bar that shortens
+  // from a shared baseline is a chart and one that shortens from a shared
+  // ceiling is not. Widening as they land too: 4px on a 7px pitch keeps the
+  // trio reading as one grouped mark rather than three separate strokes.
   const bar =
-    "absolute top-0 h-full w-[3px] rounded-[1px] transition-[left,transform] duration-200 ease-out";
+    "absolute bottom-0 h-[18px] w-[3px] rounded-[1px] transition-[left,width,height,transform] duration-200 ease-out group-hover:w-[4px] group-focus-visible:w-[4px]";
   return (
     <span
       aria-hidden="true"
       className="strand relative mx-[5px] inline-block h-[18px] w-[15px] align-middle"
     >
+      {/* The 30/70/110ms stagger is the three bars landing in the order the
+          chart sorts them; their shared bottom edge is the only axis needed. */}
       <i
-        className={`${bar} left-[1px] rotate-[-10deg] bg-framing group-hover:left-[-3px] group-hover:rotate-0 group-focus-visible:left-[-3px] group-focus-visible:rotate-0`}
+        className={`${bar} left-[1px] rotate-[-10deg] bg-framing delay-[30ms] group-hover:left-[-1px] group-hover:rotate-0 group-focus-visible:left-[-1px] group-focus-visible:rotate-0`}
       />
-      <i className={`${bar} left-[6px] bg-contradiction`} />
       <i
-        className={`${bar} left-[11px] rotate-[10deg] bg-unique group-hover:left-[15px] group-hover:rotate-0 group-focus-visible:left-[15px] group-focus-visible:rotate-0`}
+        className={`${bar} left-[6px] bg-contradiction delay-[70ms] group-hover:h-[10px] group-focus-visible:h-[10px]`}
+      />
+      <i
+        className={`${bar} left-[11px] rotate-[10deg] bg-unique delay-[110ms] group-hover:left-[13px] group-hover:h-[7px] group-hover:rotate-0 group-focus-visible:left-[13px] group-focus-visible:h-[7px] group-focus-visible:rotate-0`}
       />
     </span>
   );
