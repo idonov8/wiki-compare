@@ -47,13 +47,25 @@ function Described() {
   );
 }
 
-export default function Legend({ describe = false }: { describe?: boolean }) {
+export default function Legend({
+  describe = false,
+  holdOpen = false,
+}: {
+  describe?: boolean;
+  /** Keeps the auto-open below from firing while true. `LangBars` teaches its
+   *  own chart the same way on the same first article, and a reader cannot
+   *  read two notes opening at once — so `Compare` holds this one back until
+   *  the chart's has been dismissed, then lets go. Never affects the manual
+   *  toggle: pressing the key still opens and closes it at any time. */
+  holdOpen?: boolean;
+}) {
   /** Whether the panel spelling the three kinds out is open. Starts closed so it
    *  cannot flash on screen during hydration and then vanish; the effect below
    *  is what opens it on a device that has never seen it. */
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
+    if (holdOpen) return;
     let seen = true;
     try {
       seen = localStorage.getItem(LEGEND_SEEN) === "1";
@@ -63,7 +75,7 @@ export default function Legend({ describe = false }: { describe?: boolean }) {
       seen = false;
     }
     if (!seen) setOpen(true);
-  }, []);
+  }, [holdOpen]);
 
   function close(): void {
     setOpen(false);
