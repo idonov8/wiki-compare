@@ -55,7 +55,7 @@ export default function CouponBanner() {
   return (
     <aside
       aria-label="Welcome credit"
-      className="coupon-banner flex flex-wrap items-center gap-x-[22px] gap-y-[10px] border-b border-ink bg-ink px-[24px] py-[12px] text-paper-raised max-tight:gap-x-[10px] max-tight:gap-y-[4px] max-tight:px-[12px] max-tight:py-[7px]"
+      className="coupon-banner relative flex flex-wrap items-center gap-x-[22px] gap-y-[10px] border-b border-ink bg-ink px-[24px] py-[12px] text-paper-raised max-tight:gap-x-[10px] max-tight:gap-y-[4px] max-tight:px-[12px] max-tight:py-[7px] max-tight:pr-[28px]"
     >
       <button
         type="button"
@@ -68,7 +68,7 @@ export default function CouponBanner() {
           }
         }}
         aria-label={`Copy the code ${BANNER_COUPON}`}
-        className="flex items-baseline gap-[8px] border border-dashed border-paper-55 bg-transparent px-[11px] py-[6px] font-mono text-[13px] tracking-[0.18em] uppercase text-paper-raised hover:border-paper-raised hover:bg-paper-22 max-tight:gap-[5px] max-tight:px-[7px] max-tight:py-[3px] max-tight:text-[11px]"
+        className="flex items-baseline gap-[8px] border border-dashed border-paper-55 bg-transparent px-[11px] py-[6px] font-mono text-[13px] tracking-[0.18em] uppercase text-paper-raised hover:border-paper-raised hover:bg-paper-22 max-tight:order-2 max-tight:ms-auto max-tight:gap-[5px] max-tight:px-[7px] max-tight:py-[3px] max-tight:text-[11px]"
       >
         <span aria-hidden="true" className="text-[11px] tracking-normal opacity-70 max-tight:text-[9px]">
           ✂
@@ -85,7 +85,7 @@ export default function CouponBanner() {
       {/* The offer and the reason, one above the other: the figure is the news,
           the sentence under it is the argument, and neither reads as the other's
           small print when they are set at different sizes on their own lines. */}
-      <div className="min-w-0 flex-[1_1_340px] max-tight:flex-[1_1_180px]">
+      <div className="min-w-0 flex-[1_1_340px] max-tight:order-1 max-tight:flex-[1_1_100%]">
         <p className="m-0 font-mono text-[11px] tracking-[0.12em] uppercase text-paper-62 max-tight:text-[9px]">
           {formatCents(CENTS)} of credit · {articlesFor(CENTS)} articles · ends{" "}
           {couponEndLabel(BANNER_COUPON)}
@@ -98,7 +98,7 @@ export default function CouponBanner() {
 
       <a
         href="/donate?from=coupon-banner"
-        className="border border-paper-raised bg-paper-raised px-[16px] py-[8px] font-mono text-[11px] uppercase tracking-[0.07em] text-ink no-underline hover:bg-paper-86 max-tight:px-[10px] max-tight:py-[4px] max-tight:text-[10px]"
+        className="border border-paper-raised bg-paper-raised px-[16px] py-[8px] font-mono text-[11px] uppercase tracking-[0.07em] text-ink no-underline hover:bg-paper-86 max-tight:order-3 max-tight:px-[10px] max-tight:py-[4px] max-tight:text-[10px]"
       >
         Redeem it
       </a>
@@ -107,7 +107,7 @@ export default function CouponBanner() {
         type="button"
         onClick={dismiss}
         aria-label="Dismiss this offer"
-        className="ms-auto bg-transparent px-[6px] font-mono text-[15px] leading-none text-paper-62 hover:text-paper-raised max-tight:ms-0 max-tight:px-[2px] max-tight:text-[13px]"
+        className="ms-auto bg-transparent px-[6px] font-mono text-[15px] leading-none text-paper-62 hover:text-paper-raised max-tight:absolute max-tight:top-1/2 max-tight:right-[8px] max-tight:-translate-y-1/2 max-tight:ms-0 max-tight:px-[2px] max-tight:text-[13px]"
       >
         ×
       </button>
