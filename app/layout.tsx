@@ -2,8 +2,22 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://wikicompare.app"),
   title: "Wiki Compare",
   description: "Explore differences between narratives through Wikipedia articles",
+  openGraph: {
+    title: "Wiki Compare",
+    description: "Explore differences between narratives through Wikipedia articles",
+    url: "https://wikicompare.app",
+    siteName: "Wiki Compare",
+    locale: "en",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Wiki Compare",
+    description: "Explore differences between narratives through Wikipedia articles",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
