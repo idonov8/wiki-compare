@@ -363,7 +363,7 @@ function GlobeMark() {
       // Fills the box its cluster sizes. The ring of languages is placed off
       // that same `--globe`, so the sphere and the three labels can only ever
       // be scaled together.
-      className="pointer-events-none h-full w-full"
+      className="pointer-events-none h-full w-full -rotate-12"
       viewBox="92 64 136 136"
       aria-hidden="true"
     >
