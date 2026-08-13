@@ -203,8 +203,7 @@ export default function LangBars({
             what the bars mean
           </p>
           <p className="m-0 text-[14px] leading-[1.6] text-ink-soft">
-            Each bar&apos;s height is that edition&apos;s word count, so the tallest is the longest
-            article. Click a language to bring its column on screen, or to put it away again.
+            The bars show word-count of each article. Click a language to toggle its visibility.
           </p>
           <button
             type="button"
