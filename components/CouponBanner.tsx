@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BANNER_COUPON, COUPONS, couponEndLabel, couponExpired } from "@/lib/coupons";
 import { articlesFor, formatCents } from "@/lib/pricing";
 
@@ -30,6 +30,7 @@ const STORAGE_KEY = `coupon-banner:${BANNER_COUPON}`;
 export default function CouponBanner() {
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (couponExpired(BANNER_COUPON)) return;
@@ -39,6 +40,10 @@ export default function CouponBanner() {
       // A browser refusing storage is not a reason to withhold the offer.
     }
     setShow(true);
+  }, []);
+
+  useEffect(() => () => {
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
   }, []);
 
   if (!show) return null;
@@ -63,6 +68,8 @@ export default function CouponBanner() {
           try {
             await navigator.clipboard.writeText(BANNER_COUPON);
             setCopied(true);
+            if (copiedTimer.current) clearTimeout(copiedTimer.current);
+            copiedTimer.current = setTimeout(() => setCopied(false), 2000);
           } catch {
             // Nothing to say: the code is legible on the strip either way.
           }
@@ -73,7 +80,14 @@ export default function CouponBanner() {
         <span aria-hidden="true" className="text-[11px] tracking-normal opacity-70 max-tight:text-[9px]">
           ✂
         </span>
-        {BANNER_COUPON}
+        {copied ? (
+          <>
+            <span className="max-tight:hidden">{BANNER_COUPON}</span>
+            <span className="hidden max-tight:inline">copied</span>
+          </>
+        ) : (
+          BANNER_COUPON
+        )}
         <span
           className="font-mono text-[10px] tracking-[0.08em] normal-case opacity-70 max-tight:hidden"
           role="status"
