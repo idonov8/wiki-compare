@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
 import CouponBanner from "@/components/CouponBanner";
 import "./globals.css";
 
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body>
+        <Analytics />
         {/* Above everything, including the sticky masthead: the offer is the
             first thing on the page and scrolls away with the top of it. It takes
             itself down once the code expires or the reader closes it. */}
