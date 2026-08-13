@@ -282,6 +282,14 @@ Checking early is the point — finding out whether a code works no longer costs
 not want to make, and a typo comes back as one line under the field instead of as a thank-you
 screen for something else — but committing still belongs on the button that commits.
 
+`WELCOME3` is also time-limited, and the limit is real on both sides: `COUPON_ENDS` in
+`lib/coupons.ts` names the last day it works, `/api/coupon` answers 410 with that date once it has
+passed, and `components/CouponBanner.tsx` — the strip across the top of every page offering the
+code, with the reason the credit is being handed out at all — prints the same deadline and takes
+itself down when it arrives. The strip renders only after mount, because whether it belongs on
+screen depends on today's date and on a dismissal kept in `localStorage`, neither of which the
+server knows.
+
 A checked code is a discount rather than a top-up beside the order, which is what makes the
 summary add up. It becomes the order and then pays for it: processing is set to the $3 the code
 covers, the running-costs line to nothing, and the coupon lands in the summary as −$3.00, so the

@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { guessLang, parseWikipediaUrl } from "../lib/wikipedia.js";
 import { ghostRanges } from "../lib/ghost.js";
 import { isOutOfCredit } from "../lib/compare.js";
+import { couponEndLabel, couponExpired } from "../lib/coupons.js";
 
 let failures = 0;
 const check = (label: string, fn: () => void) => {
@@ -133,6 +134,28 @@ for (const other of [
     assert.equal(isOutOfCredit(new Error(other)), false),
   );
 }
+
+console.log("\nCoupon deadlines");
+
+check("a code works through the last minute of its final day", () =>
+  assert.equal(couponExpired("WELCOME3", new Date("2026-08-26T23:59:59Z")), false),
+);
+
+check("and not a minute past it", () =>
+  assert.equal(couponExpired("WELCOME3", new Date("2026-08-27T00:00:00Z")), true),
+);
+
+check("lower case reaches the same deadline", () =>
+  assert.equal(couponExpired(" welcome3 ", new Date("2026-08-27T00:00:00Z")), true),
+);
+
+check("a code with no deadline never runs out", () =>
+  assert.equal(couponExpired("NOSUCHCODE", new Date("2099-01-01T00:00:00Z")), false),
+);
+
+check("the banner prints the day the server refuses after", () =>
+  assert.equal(couponEndLabel("WELCOME3"), "26 August"),
+);
 
 console.log(failures ? `\n${failures} check(s) failed\n` : "\nall checks passed\n");
 process.exit(failures ? 1 : 0);

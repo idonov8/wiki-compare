@@ -15,6 +15,45 @@ export const COUPONS: Record<string, number> = {
 };
 
 /**
+ * The last day each code works, as a UTC calendar date.
+ *
+ * A code with no entry here never runs out. A date is the honest half of a
+ * banner that says "ends the 26th": the strip on the front page and the check
+ * behind the field read this same line, so the offer cannot outlive its own
+ * advertisement in either direction.
+ */
+export const COUPON_ENDS: Record<string, string> = {
+  WELCOME3: "2026-08-26",
+};
+
+/** The code the strip across the top of the site offers. */
+export const BANNER_COUPON = "WELCOME3";
+
+/** Midnight after the last working day, which is the instant a code dies. */
+export function couponDeadline(input: string): Date | null {
+  const day = COUPON_ENDS[normalizeCoupon(input)];
+  return day ? new Date(new Date(`${day}T00:00:00Z`).getTime() + 86_400_000) : null;
+}
+
+/** The last day a code works, as "26 August", or null if it never runs out. */
+export function couponEndLabel(input: string): string | null {
+  const day = COUPON_ENDS[normalizeCoupon(input)];
+  return day
+    ? new Date(`${day}T00:00:00Z`).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "long",
+        timeZone: "UTC",
+      })
+    : null;
+}
+
+/** Whether a code has run out. Codes with no deadline never have. */
+export function couponExpired(input: string, now: Date = new Date()): boolean {
+  const deadline = couponDeadline(input);
+  return deadline !== null && now >= deadline;
+}
+
+/**
  * The form a code takes for lookup and for storage. Case-folded because a code
  * is read off a screen and typed back in, often by a keyboard that capitalises
  * for you; normalised on the way into the ledger so it holds one spelling.
