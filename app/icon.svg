@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Wiki Compare">
+  <!-- The wordmark's hover state: the three bars of `components/Wordmark.tsx`
+       dropped onto a shared baseline and stepping 26 / 14.5 / 10, which is its
+       18 / 10 / 7 scaled to fill the tile. -->
+  <rect width="32" height="32" rx="3" fill="#e9eae6"/>
+  <rect x="3" y="3" width="6" height="26" rx="1.5" fill="#6b4e9e"/>
+  <rect x="13" y="14.5" width="6" height="14.5" rx="1.5" fill="#a8322b"/>
+  <rect x="23" y="19" width="6" height="10" rx="1.5" fill="#2c6b58"/>
+</svg>
