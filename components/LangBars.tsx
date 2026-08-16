@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { LANG_META, type ArticleSnapshot, type Lang } from "@/lib/types";
+import { OnboardingDot } from "./Onboarding";
 
 /**
  * How much text each edition has, and which of them are on screen.
@@ -20,12 +21,6 @@ import { LANG_META, type ArticleSnapshot, type Lang } from "@/lib/types";
  * pressing either changes which. Nothing here is decoration that a reader
  * could mistake for state.
  */
-
-/** That the chart's own note has been read on this device. Same pattern as the
- *  legend's flag, and for the same reason — a panel dismissed once should stay
- *  dismissed — but its own key, since a reader can have seen one note and not
- *  the other. */
-const BARS_SEEN = "wiki-compare:langbars-seen";
 
 /** The bar zone, and the tallest a bar in it may get. The difference between
  *  them is headroom for the figure printed above the bar, so even the longest
@@ -61,7 +56,8 @@ export default function LangBars({
   articles,
   onScreen,
   onPick,
-  onIntroClose,
+  hint = false,
+  onHintDone,
 }: {
   langs: Lang[];
   articles: Record<string, ArticleSnapshot>;
@@ -70,37 +66,20 @@ export default function LangBars({
    *  screen" — which is why one chart can serve both. */
   onScreen: Lang[];
   onPick: (lang: Lang) => void;
-  /** Fired once, the moment the chart's own intro note is dismissed — either by
-   *  the reader or, having nothing to show, on mount. The legend's note holds
-   *  itself back until this fires, so the two never fight for the same reader's
-   *  attention at once. */
-  onIntroClose?: () => void;
+  /** Whether the chart is the feature the onboarding dot is currently on. The
+   *  note below is nothing but that dot's explanation, so it exists only while
+   *  this is true. */
+  hint?: boolean;
+  /** Fired when the note is dismissed, which is what moves the dot on. */
+  onHintDone?: () => void;
 }) {
-  /** Whether the note explaining the chart is open. Starts closed for the same
-   *  reason the legend's does: it must not flash in during hydration only to
-   *  vanish once the seen-flag is read. */
+  /** Whether the note explaining the chart is open — never on arrival: the dot
+   *  is what asks, and this is the answer. */
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    let seen = true;
-    try {
-      seen = localStorage.getItem(BARS_SEEN) === "1";
-    } catch {
-      seen = false;
-    }
-    if (!seen) setOpen(true);
-    else onIntroClose?.();
-    // Runs once, on mount, same as the legend's own version of this effect —
-    // `onIntroClose` is left out of the dependency list on purpose so a
-    // parent re-render never re-fires the seen-flag check.
-  }, []);
 
   function close(): void {
     setOpen(false);
-    try {
-      localStorage.setItem(BARS_SEEN, "1");
-    } catch {}
-    onIntroClose?.();
+    onHintDone?.();
   }
 
   const words = Object.fromEntries(
@@ -125,6 +104,9 @@ export default function LangBars({
     // spread; the buttons stay flush against each other, because the axis under
     // them is only continuous while they are.
     <div className="langbars-key relative max-tight:flex-1 max-tight:basis-0">
+      {hint && !open && (
+        <OnboardingDot reveal={() => setOpen(true)} label="What the bars mean" />
+      )}
       <div className="toggles flex" role="group" aria-label="Editions and how long each one is">
         {sorted.map((lang, index) => {
           const on = onScreen.includes(lang);
@@ -191,8 +173,8 @@ export default function LangBars({
 
       {/* Same raised panel the legend's note is printed on, so the two read as
           one vocabulary of "something just opened" rather than two different
-          UI patterns for the same kind of interruption. `role="status"` for the
-          same reason: on a first article, nobody asked for this either. */}
+          UI patterns for the same kind of interruption. `role="status"` because
+          the dot that opens it is not what a reader was reading. */}
       {open && (
         <div
           id="langbars-note"

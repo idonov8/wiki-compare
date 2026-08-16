@@ -798,7 +798,14 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     articlesProcessed: 0,
     readsOfThoseArticles: 0,
     newcomer: true,
+    onboardingDone: false,
   };
+  // The tour reaches the meter last, and this block is where an account first
+  // exists — so it is opened here with the cursor already on that step.
+  await page.route("**/api/onboarding", (route) =>
+    route.fulfill({ contentType: "application/json", body: '{"ok":true}' }),
+  );
+  await page.evaluate(() => localStorage.setItem("wiki-compare:onboarding", "credits"));
   await openGate();
   {
     const { cta, note } = await gate();
@@ -807,20 +814,30 @@ check(!(await page.$(".card")), "Escape dismisses the card");
       "and says what it spends and who gets it", note);
   }
   // The note beside the meter, which is the only thing that explains where the
-  // credit came from. It opens itself, and it takes the anchor exclusively.
-  check(!!(await page.$(".credit-welcome")), "a new account is told about its credit");
+  // credit came from. It waits behind the dot, and takes the anchor exclusively.
+  await page.waitForSelector(".credit .onboarding-dot", { timeout: 5000 }).catch(() => {});
+  check(!!(await page.$(".credit .onboarding-dot")), "a new account gets a dot on its meter");
+  check((await page.$(".credit-welcome")) === null, "and is not interrupted before asking");
+  check(
+    await page.$eval(".credit-detail", (el) => getComputedStyle(el).display === "none"),
+    "the hover panel stands aside while the dot is there",
+  );
+  await page.hover(".credit .onboarding-dot");
+  await page.waitForSelector(".credit-welcome", { timeout: 5000 }).catch(() => {});
+  check(!!(await page.$(".credit-welcome")), "hovering the dot tells it about its credit");
   check(
     /5 articles/.test((await page.textContent(".credit-welcome-text")) ?? ""),
     "the note says how many articles that is",
     (await page.textContent(".credit-welcome-text")) ?? "",
   );
-  check(
-    await page.$eval(".credit-detail", (el) => getComputedStyle(el).display === "none"),
-    "and the hover panel stands aside while it is up",
-  );
   await page.click(".credit-welcome-ok");
   await page.waitForTimeout(150);
   check((await page.$(".credit-welcome")) === null, "dismissing it puts it away");
+  check((await page.$(".onboarding-dot")) === null, "and ends the tour, so no dot is left");
+  check(
+    (await page.evaluate(() => localStorage.getItem("wiki-compare:onboarding"))) === "done",
+    "which is remembered",
+  );
   await page.hover(".credit");
   await page.waitForTimeout(200);
   check(
@@ -873,6 +890,7 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     articlesProcessed: 25,
     readsOfThoseArticles: 90,
     newcomer: false,
+    onboardingDone: true,
   };
   await openGate();
   {
@@ -884,9 +902,13 @@ check(!(await page.$(".card")), "Escape dismisses the card");
   check((await page.$(".credit-welcome")) === null,
     "and is not welcomed as a new account");
 
+  check((await page.$(".onboarding-dot")) === null,
+    "and an account already through the tour is not shown it again");
+
   asPreview = false;
   me = null;
   await page.unroute("**/api/me");
+  await page.unroute("**/api/onboarding");
 }
 
 // ---- one language at a time, on a phone ------------------------------------

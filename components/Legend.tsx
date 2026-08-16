@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { OnboardingDot } from "./Onboarding";
 
 /**
  * The three kinds of difference, and the band each one wears.
@@ -12,10 +13,9 @@ import { useEffect, useState } from "react";
  * than not teaching it at all.
  *
  * In the strip the key is also a control: three two-word labels are not the
- * whole explanation, so pressing it opens the described version, and the first
- * article a device opens has it already open. A reader who does not know what
- * the colours mean cannot read the page at all, and the moment that matters is
- * the moment the marks first appear.
+ * whole explanation, so pressing it opens the described version. On a first
+ * article the onboarding dot sits on it and offers the same thing, because a
+ * reader who does not know what the colours mean cannot read the page at all.
  */
 
 const KINDS = [
@@ -23,13 +23,6 @@ const KINDS = [
   ["unique", "bg-mark-unique inset-shadow-unique", "only in one version", "Material one language covers and the others skip entirely."],
   ["framing", "bg-mark-framing inset-shadow-framing", "different framing", "The same fact, told in words that carry a different claim."],
 ] as const;
-
-/**
- * That the key has been read on this device. Kept beside the welcome note's own
- * flag (`CreditBar`) and for the same reason: it records a panel that has been
- * dismissed, not a fact about the account.
- */
-const LEGEND_SEEN = "wiki-compare:legend-seen";
 
 function Described() {
   return (
@@ -49,39 +42,22 @@ function Described() {
 
 export default function Legend({
   describe = false,
-  holdOpen = false,
+  hint = false,
+  onHintDone,
 }: {
   describe?: boolean;
-  /** Keeps the auto-open below from firing while true. `LangBars` teaches its
-   *  own chart the same way on the same first article, and a reader cannot
-   *  read two notes opening at once — so `Compare` holds this one back until
-   *  the chart's has been dismissed, then lets go. Never affects the manual
-   *  toggle: pressing the key still opens and closes it at any time. */
-  holdOpen?: boolean;
+  /** Whether the key is the feature the onboarding dot is currently on. */
+  hint?: boolean;
+  /** Fired when the panel is dismissed while the dot is here, which is what
+   *  moves the dot on. Dismissing it any other time is just a closed panel. */
+  onHintDone?: () => void;
 }) {
-  /** Whether the panel spelling the three kinds out is open. Starts closed so it
-   *  cannot flash on screen during hydration and then vanish; the effect below
-   *  is what opens it on a device that has never seen it. */
+  /** Whether the panel spelling the three kinds out is open. */
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    if (holdOpen) return;
-    let seen = true;
-    try {
-      seen = localStorage.getItem(LEGEND_SEEN) === "1";
-    } catch {
-      // Storage can be denied outright (private mode, a locked-down browser).
-      // The key is worth teaching once even where the dismissal cannot stick.
-      seen = false;
-    }
-    if (!seen) setOpen(true);
-  }, [holdOpen]);
 
   function close(): void {
     setOpen(false);
-    try {
-      localStorage.setItem(LEGEND_SEEN, "1");
-    } catch {}
+    if (hint) onHintDone?.();
   }
 
   if (describe) return <Described />;
@@ -104,6 +80,9 @@ export default function Legend({
     // so the leftover goes to the chart, which is the half of the strip that
     // can actually use it, and neither of them wraps down to 320px.
     <div className="legend-key relative max-tight:min-w-fit max-tight:flex-1 max-tight:basis-0">
+      {hint && !open && (
+        <OnboardingDot reveal={() => setOpen(true)} label="What the marks mean" />
+      )}
       {/* Labels in ink rather than the strip's soft grey, and the swatches
           carry the same band the marks in the prose do: the one thing a reader
           has to read before the columns mean anything should not be the palest
@@ -126,13 +105,13 @@ export default function Legend({
 
       {/* Printed on raised paper with the offset shadow every live panel here
           wears, so on a first article it reads as something opened rather than
-          as more strip. Not a tooltip: it opens itself, it holds a button, and
-          it stays until it is dismissed.
-          `role="status"` because on that first article nobody asked for it, so
-          it is announced where it stands instead of waiting for focus to
-          arrive. Anchored to the right edge on a phone, where the key sits
-          against it and a panel starting at the key's own left edge would run
-          off screen. */}
+          as more strip. Not a tooltip: it holds a button, and it stays until it
+          is dismissed.
+          `role="status"` because the dot that opens it on a first article is
+          not what a reader was reading, so it is announced where it stands
+          instead of waiting for focus to arrive. Anchored to the right edge on
+          a phone, where the key sits against it and a panel starting at the
+          key's own left edge would run off screen. */}
       {open && (
         <div
           id="legend-note"
