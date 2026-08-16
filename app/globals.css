@@ -107,6 +107,7 @@
   --animate-reveal-spin: reveal-spin 0.8s linear infinite;
   --animate-lang-in: lang-in 0.24s ease-out;
   --animate-bar-rise: bar-rise 0.42s cubic-bezier(0.2, 0.75, 0.2, 1) both;
+  --animate-attention-pulse: attention-pulse 1.5s ease-in-out infinite;
 
   /* The jump-to-difference target announces itself with a brief ring. */
   @keyframes diff-flash {
@@ -284,6 +285,20 @@
     }
     to {
       transform: none;
+    }
+  }
+
+  /* The onboarding dot, breathing. Size rather than colour, because the dot
+     already carries a colour nothing else on the strip does, and a still dot in
+     that colour reads as a status light instead of as somewhere to point. Held
+     at its resting size with motion off, where it is simply a dot. */
+  @keyframes attention-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.32);
     }
   }
 }
