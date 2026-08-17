@@ -814,7 +814,8 @@ check(!(await page.$(".card")), "Escape dismisses the card");
       "and says what it spends and who gets it", note);
   }
   // The note beside the meter, which is the only thing that explains where the
-  // credit came from. It waits behind the dot, and takes the anchor exclusively.
+  // credit came from. The dot marks it; the meter itself is what opens it, and
+  // it takes the panel anchor exclusively while it is up.
   await page.waitForSelector(".credit .onboarding-dot", { timeout: 5000 }).catch(() => {});
   check(!!(await page.$(".credit .onboarding-dot")), "a new account gets a dot on its meter");
   check((await page.$(".credit-welcome")) === null, "and is not interrupted before asking");
@@ -822,9 +823,9 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     await page.$eval(".credit-detail", (el) => getComputedStyle(el).display === "none"),
     "the hover panel stands aside while the dot is there",
   );
-  await page.hover(".credit .onboarding-dot");
+  await page.hover(".credit-balance");
   await page.waitForSelector(".credit-welcome", { timeout: 5000 }).catch(() => {});
-  check(!!(await page.$(".credit-welcome")), "hovering the dot tells it about its credit");
+  check(!!(await page.$(".credit-welcome")), "hovering the meter tells it about its credit");
   check(
     /5 articles/.test((await page.textContent(".credit-welcome-text")) ?? ""),
     "the note says how many articles that is",

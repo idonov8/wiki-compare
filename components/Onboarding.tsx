@@ -113,33 +113,39 @@ export function useOnboarding(me: MeResponse | null): {
 }
 
 /**
- * The dot. Absolutely positioned, so every feature that carries one needs to be
- * a positioned box — all three already are, because each one anchors a panel to
- * the same corner.
+ * What opens the note: the whole feature, not the dot.
  *
- * A button, not a decorated span: it is hoverable *and* pressable, which is the
- * only way it works on a touch screen and on a keyboard. `reveal` is the same
- * call for all three, so the explanation opens however the reader arrived.
- *
- * The pulse is on the span inside rather than on the button, so the thing being
- * pointed at holds still while only its ink breathes. A button whose own box
- * scales is a target that moves out from under the pointer — and one that never
- * settles, which is a hover Playwright will wait out the clock for.
+ * A 9px target is a poor thing to ask anybody to hit, and the dot is a label for
+ * the feature rather than a control of its own — so the chart, the key and the
+ * meter each reveal their own note when the pointer arrives anywhere on them, on
+ * a tap anywhere on them, or when focus reaches anything inside them (`onFocus`
+ * bubbles, so the bars and the key's own button carry the keyboard case).
  */
-export function OnboardingDot({ reveal, label }: { reveal: () => void; label: string }) {
+export function hintTriggers(reveal: () => void): {
+  onMouseEnter: () => void;
+  onFocus: () => void;
+  onTouchStart: () => void;
+} {
+  return { onMouseEnter: reveal, onFocus: reveal, onTouchStart: reveal };
+}
+
+/**
+ * The dot itself, which is only ever a mark on the feature: no handlers, and
+ * nothing for a screen reader, whose reader is told by the note the feature
+ * opens on focus. Absolutely positioned, so every feature that carries one has
+ * to be a positioned box — all three already are, because each one anchors a
+ * panel to the same corner.
+ *
+ * The pulse is on the span inside so that the box does not move: a hover target
+ * that scales never settles, and Playwright waits out the clock on it.
+ */
+export function OnboardingDot() {
   return (
-    <button
-      type="button"
-      className="onboarding-dot absolute z-50 -top-[7px] -end-[7px] grid place-items-center w-[9px] h-[9px] p-0 border-0 bg-transparent"
-      aria-label={label}
-      onMouseEnter={reveal}
-      onFocus={reveal}
-      onClick={reveal}
+    <span
+      aria-hidden="true"
+      className="onboarding-dot absolute z-50 -top-[7px] -end-[7px] grid place-items-center w-[9px] h-[9px] pointer-events-none"
     >
-      <span
-        aria-hidden="true"
-        className="block w-full h-full rounded-full bg-contradiction shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-contradiction)_22%,transparent)] animate-attention-pulse"
-      />
-    </button>
+      <span className="block w-full h-full rounded-full bg-contradiction shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-contradiction)_22%,transparent)] animate-attention-pulse" />
+    </span>
   );
 }
