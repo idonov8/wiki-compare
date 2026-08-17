@@ -31,8 +31,8 @@ export default function Footer({
         className={`${MEASURE} grid gap-[10px] font-mono text-[11px] leading-[1.65] tracking-[0.04em] text-ink-soft`}
       >
         <p className="m-0">
-          Comparisons are machine-generated and can be wrong — a marked difference is a pointer to
-          check the sources, not a finding.{" "}
+          Comparisons are machine-generated and can be wrong. Treat marked differences as pointers to
+          check the sources, not as findings.{" "}
           <a
             href={`mailto:${CONTACT}?subject=${encodeURIComponent("Wiki Compare: correction")}`}
             className="text-ink hover:underline"
