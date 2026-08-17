@@ -70,9 +70,7 @@ export default function PreviewGate({
         The rest of this article hasn&apos;t been processed yet
       </h2>
       <p className="mx-auto mb-[18px] max-w-[56ch] text-[14px] text-ink-soft">
-        Each article costs about{" "}{formatCents(PRICE_PER_ARTICLE_CENTS)} to process.
-        <br />
-        Once it&apos;s done it becomes available for everyone.
+        Find processed articles on the <a href="/?full=true#recently-compared" className="text-ink underline underline-offset-[3px]">home page</a> or
       </p>
       <button
         className="gate-cta border border-ink bg-ink px-[22px] py-[10px] text-paper-raised disabled:cursor-progress disabled:opacity-45"
@@ -96,13 +94,9 @@ export default function PreviewGate({
             This spends ~{formatCents(PRICE_PER_ARTICLE_CENTS)} of your{" "}
             {formatCents(creditCents)} credit
           </>
-        ) : signedIn ? (
-          <>
-            You can find processed articles in the <a href="/?full=true#recently-compared" className="text-ink">home page</a>.
-          </>
         ) : (
           <>
-            Get {articlesFor(SIGNUP_GRANT_CENTS)} articles for free
+            We use AI to compare the articles
           </>
         )}
       </p>
