@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { LANG_META, type ArticleSnapshot, type Lang } from "@/lib/types";
-import { OnboardingDot } from "./Onboarding";
+import { OnboardingDot, hintTriggers } from "./Onboarding";
 
 /**
  * How much text each edition has, and which of them are on screen.
@@ -73,8 +73,8 @@ export default function LangBars({
   /** Fired when the note is dismissed, which is what moves the dot on. */
   onHintDone?: () => void;
 }) {
-  /** Whether the note explaining the chart is open — never on arrival: the dot
-   *  is what asks, and this is the answer. */
+  /** Whether the note explaining the chart is open — never on arrival: it waits
+   *  for a reader who reaches the chart the dot is sitting on. */
   const [open, setOpen] = useState(false);
 
   function close(): void {
@@ -103,10 +103,11 @@ export default function LangBars({
     // thirds of the screen with the rest blank. The slots widen and the bars
     // spread; the buttons stay flush against each other, because the axis under
     // them is only continuous while they are.
-    <div className="langbars-key relative max-tight:flex-1 max-tight:basis-0">
-      {hint && !open && (
-        <OnboardingDot reveal={() => setOpen(true)} label="What the bars mean" />
-      )}
+    <div
+      className="langbars-key relative max-tight:flex-1 max-tight:basis-0"
+      {...(hint && !open ? hintTriggers(() => setOpen(true)) : {})}
+    >
+      {hint && !open && <OnboardingDot />}
       <div className="toggles flex" role="group" aria-label="Editions and how long each one is">
         {sorted.map((lang, index) => {
           const on = onScreen.includes(lang);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { OnboardingDot } from "./Onboarding";
+import { OnboardingDot, hintTriggers } from "./Onboarding";
 
 /**
  * The three kinds of difference, and the band each one wears.
@@ -79,10 +79,11 @@ export default function Legend({
     // `min-w-fit` then claims back exactly the width its longest label needs —
     // so the leftover goes to the chart, which is the half of the strip that
     // can actually use it, and neither of them wraps down to 320px.
-    <div className="legend-key relative max-tight:min-w-fit max-tight:flex-1 max-tight:basis-0">
-      {hint && !open && (
-        <OnboardingDot reveal={() => setOpen(true)} label="What the marks mean" />
-      )}
+    <div
+      className="legend-key relative max-tight:min-w-fit max-tight:flex-1 max-tight:basis-0"
+      {...(hint && !open ? hintTriggers(() => setOpen(true)) : {})}
+    >
+      {hint && !open && <OnboardingDot />}
       {/* Labels in ink rather than the strip's soft grey, and the swatches
           carry the same band the marks in the prose do: the one thing a reader
           has to read before the columns mean anything should not be the palest

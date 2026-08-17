@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { articlesFor, formatCents } from "@/lib/pricing";
-import { OnboardingDot } from "./Onboarding";
+import { OnboardingDot, hintTriggers } from "./Onboarding";
 import { authClient } from "@/lib/auth-client";
 import { track } from "@/lib/analytics";
 import type { MeResponse } from "@/lib/types";
@@ -36,7 +36,8 @@ import type { MeResponse } from "@/lib/types";
  * cannot be reached without an account: a meter that fills in on its own the
  * first time somebody signs in is a number with no sentence attached, and the
  * sentence — five articles, already yours, spend them on anything — is the whole
- * reason the number is there. The dot on the meter is what offers it.
+ * reason the number is there. The dot marks the meter as having something to
+ * say; hovering the meter itself is what opens it.
  */
 export default function CreditBar({
   me,
@@ -53,7 +54,7 @@ export default function CreditBar({
   /** Fired when the welcome note is dismissed, which ends the tour. */
   onHintDone?: () => void;
 }) {
-  /** Whether the welcome note has been opened from the dot. */
+  /** Whether the welcome note has been opened by a reader arriving at the meter. */
   const [welcomeOpen, setWelcomeOpen] = useState(false);
 
   /** True right after "Got it" is clicked, until the pointer/focus leaves the
@@ -101,8 +102,8 @@ export default function CreditBar({
   }
 
   const remaining = articlesFor(me.creditCents);
-  /** The note beside the meter, up from the moment the dot is taken until it is
-   *  dismissed. `newcomer` — the server's word for "this balance is still the
+  /** The note beside the meter, up from the moment the meter is reached until it
+   *  is dismissed. `newcomer` — the server's word for "this balance is still the
    *  sign-up grant, untouched" — is what the note describes, so `Compare` only
    *  ever points the dot here while it holds. */
   const welcome = hint && welcomeOpen;
@@ -120,6 +121,7 @@ export default function CreditBar({
       className="credit group relative flex flex-col gap-[5px] min-w-[148px] max-cols:min-w-0 max-cols:flex-[1_1_100%] font-mono text-[11px] text-ink-soft cursor-help"
       tabIndex={0}
       aria-describedby={welcome ? "credit-welcome-text" : "credit-detail-text"}
+      {...(hint && !welcomeOpen ? hintTriggers(() => setWelcomeOpen(true)) : {})}
       onMouseLeave={() => setJustDismissedWelcome(false)}
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
@@ -127,9 +129,7 @@ export default function CreditBar({
         }
       }}
     >
-      {hint && !welcomeOpen && (
-        <OnboardingDot reveal={() => setWelcomeOpen(true)} label="What this credit is" />
-      )}
+      {hint && !welcomeOpen && <OnboardingDot />}
       {/* Proportion of the account's own peak, not of some notional full tank:
           the denominator is the most this person ever held, so the bar empties
           against what they gave rather than against a number we invented. */}
