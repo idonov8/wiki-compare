@@ -242,6 +242,9 @@ export interface MeResponse {
   /** Whether this account is still holding the sign-up credit, untouched and
    *  unadded-to. What the masthead's welcome note keys off — see the route. */
   newcomer: boolean;
+  /** Whether the onboarding tour has been finished on any browser. Overrides
+   *  this browser's own progress through it. */
+  onboardingDone: boolean;
 }
 
 /** What the mock payment page submits. Amounts are whole cents. */

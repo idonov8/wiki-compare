@@ -49,6 +49,7 @@ export async function GET(request: Request) {
       creditCents > 0 &&
       peakCreditCents <= SIGNUP_GRANT_CENTS &&
       summary.articlesProcessed === 0,
+    onboardingDone: user.onboardingDone ?? false,
   };
   return NextResponse.json(body);
 }
