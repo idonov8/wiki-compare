@@ -88,11 +88,6 @@ CREATE TABLE IF NOT EXISTS "user" (
   -- lib/credits.ts would arithmetic into more NULL rather than into a number.
   "creditCents"     INTEGER     NOT NULL DEFAULT 0,
   "peakCreditCents" INTEGER     NOT NULL DEFAULT 0,
-  -- Whether this account has been through the onboarding tour: the dot on the
-  -- length chart, on the key, and on the credit meter, all three dismissed. On
-  -- the account and not only in localStorage because the tour ends on a panel
-  -- about the credit the account holds, and being shown that again on a second
-  -- browser is being told about a grant already spent.
   "onboardingDone"  BOOLEAN     NOT NULL DEFAULT false
 );
 
