@@ -87,13 +87,15 @@ CREATE TABLE IF NOT EXISTS "user" (
   -- backfill, a future provider that writes its own — with a NULL balance that
   -- lib/credits.ts would arithmetic into more NULL rather than into a number.
   "creditCents"     INTEGER     NOT NULL DEFAULT 0,
-  "peakCreditCents" INTEGER     NOT NULL DEFAULT 0
+  "peakCreditCents" INTEGER     NOT NULL DEFAULT 0,
+  "onboardingDone"  BOOLEAN     NOT NULL DEFAULT false
 );
 
 -- For databases whose user table was created by `auth:migrate` back when the
 -- credit columns were not part of it. No-ops everywhere else.
 ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "creditCents"     INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "peakCreditCents" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "onboardingDone"  BOOLEAN NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS "session" (
   "id"        TEXT        NOT NULL PRIMARY KEY,

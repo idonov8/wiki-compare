@@ -12,6 +12,7 @@ import LangBars from "./LangBars";
 import LangSwitch from "./LangSwitch";
 import Legend from "./Legend";
 import Loading from "./Loading";
+import { useOnboarding } from "./Onboarding";
 import Outage from "./Outage";
 import PreviewGate from "./PreviewGate";
 import SearchBox from "./SearchBox";
@@ -210,12 +211,8 @@ export default function Compare() {
    *  While it is on screen the masthead carries no search at all — two boxes
    *  visible at once is just the same control asked for twice. */
   const [docked, setDocked] = useState(false);
-  /** Holds the legend's intro note back until the chart's own note (`LangBars`)
-   *  has had its turn — both teach a first-time reader something, and a reader
-   *  cannot read two panels opening at once. Starts `true` so the legend never
-   *  gets a frame to open in before `LangBars`' own mount effect has had a
-   *  chance to run and say whether it needs the floor at all. */
-  const [holdLegend, setHoldLegend] = useState(true);
+  /** Which feature the onboarding dot is on — see components/Onboarding.tsx. */
+  const onboarding = useOnboarding(me);
 
   const reset = () => {
     setError(null);
@@ -696,6 +693,10 @@ export default function Compare() {
             me={me}
             onDonate={() => goDonate("masthead")}
             onLogIn={() => goLogIn("masthead")}
+            // The last stop, and the only one that needs an account: the note
+            // describes the sign-up credit.
+            hint={onboarding.step === "credits" && !!me?.newcomer}
+            onHintDone={onboarding.done}
           />
         </div>
       </header>
@@ -717,9 +718,10 @@ export default function Compare() {
             articles={articles}
             onScreen={visible}
             onPick={narrow ? readIn : toggle}
-            onIntroClose={() => setHoldLegend(false)}
+            hint={onboarding.step === "bars"}
+            onHintDone={onboarding.done}
           />
-          <Legend holdOpen={holdLegend} />
+          <Legend hint={onboarding.step === "marks"} onHintDone={onboarding.done} />
           {/* A line of its own below `cols`, rather than whatever is left over
               beside the legend: given the leftover, it squeezes the legend into
               wrapping labels it has the room to set on one line each. */}

@@ -98,6 +98,7 @@ export const auth = betterAuth({
        */
       creditCents: { type: "number", defaultValue: 0, input: false },
       peakCreditCents: { type: "number", defaultValue: 0, input: false },
+      onboardingDone: { type: "boolean", defaultValue: false, input: false },
     },
   },
   databaseHooks: {
