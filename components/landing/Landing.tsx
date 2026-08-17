@@ -73,7 +73,7 @@ export default function Landing({
     // The grain. One tiled turbulence at very low opacity, which is the whole
     // difference between paper and a grey rectangle. `fixed` so it does not
     // travel with the content and read as a texture printed on the page.
-    <main className="landing relative">
+    <main className="landing relative overflow-x-clip">
       <div
         aria-hidden="true"
         className="pointer-events-none fixed inset-0 z-0 opacity-[0.5] mix-blend-multiply"

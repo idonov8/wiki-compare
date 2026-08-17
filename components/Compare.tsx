@@ -666,7 +666,7 @@ export default function Compare() {
           that spot: the mark arrives already covered, and the hover card it is
           supposed to open never opens. `npm run check:ui` catches this. */}
       <header
-        className={`masthead z-40 border-b border-rule bg-paper px-[24px] py-[20px] flex gap-[24px] items-center flex-wrap max-tight:px-[18px] max-tight:py-[14px] max-tight:gap-[14px] ${
+        className={`masthead z-40 overflow-x-clip border-b border-rule bg-paper px-[24px] py-[20px] flex gap-[24px] items-center flex-wrap max-tight:px-[18px] max-tight:py-[14px] max-tight:gap-[14px] ${
           landing ? "sticky top-0" : ""
         }`}
       >
