@@ -183,7 +183,7 @@ function GlobeWithLanguages() {
       className="relative mx-auto h-[var(--globe)] w-[var(--globe)] md:translate-x-[min(11vw,240px)]"
       style={{ "--globe": "clamp(150px,min(30vw,46vh),460px)" } as React.CSSProperties}
     >
-      <GlobeMark />
+      <GlobeMark className="md:translate-y-7.5 translate-y-5 -rotate-12"/>
       <div className="absolute top-[36%] right-[102%] -translate-y-1/2">
         <LanguageMark lang="en" align="items-end text-end" />
       </div>
@@ -324,7 +324,7 @@ function cellAt(cell: (typeof CELLS)[number], t: number) {
  * have to sit *between* meridians: two clocks would let a colour drift off its
  * own grid lines within a minute. One angle drives everything instead.
  */
-function GlobeMark() {
+function GlobeMark({ className }: { className?: string }) {
   const cells = useRef<(SVGPathElement | null)[]>([]);
   const meridians = useRef<(SVGPathElement | null)[]>([]);
 
@@ -363,7 +363,7 @@ function GlobeMark() {
       // Fills the box its cluster sizes. The ring of languages is placed off
       // that same `--globe`, so the sphere and the three labels can only ever
       // be scaled together.
-      className="pointer-events-none h-full w-full -rotate-12"
+      className={`pointer-events-none h-full w-full ${className ?? ""}`}
       viewBox="92 64 136 136"
       aria-hidden="true"
     >
