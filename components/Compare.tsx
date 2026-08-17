@@ -211,9 +211,7 @@ export default function Compare() {
    *  While it is on screen the masthead carries no search at all — two boxes
    *  visible at once is just the same control asked for twice. */
   const [docked, setDocked] = useState(false);
-  /** Which feature the onboarding dot is on, and how to move it along. One dot
-   *  at a time, in order, across the length chart, the key and the credit
-   *  meter — see components/Onboarding.tsx. */
+  /** Which feature the onboarding dot is on — see components/Onboarding.tsx. */
   const onboarding = useOnboarding(me);
 
   const reset = () => {
@@ -696,8 +694,7 @@ export default function Compare() {
             onDonate={() => goDonate("masthead")}
             onLogIn={() => goLogIn("masthead")}
             // The last stop, and the only one that needs an account: the note
-            // the dot opens describes the sign-up credit, so the dot waits here
-            // until somebody is signed in and still holding it.
+            // describes the sign-up credit.
             hint={onboarding.step === "credits" && !!me?.newcomer}
             onHintDone={onboarding.done}
           />

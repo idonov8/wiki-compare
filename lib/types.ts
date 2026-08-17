@@ -243,7 +243,7 @@ export interface MeResponse {
    *  unadded-to. What the masthead's welcome note keys off — see the route. */
   newcomer: boolean;
   /** Whether the onboarding tour has been finished on any browser. Overrides
-   *  whatever this browser's own progress through it says. */
+   *  this browser's own progress through it. */
   onboardingDone: boolean;
 }
 

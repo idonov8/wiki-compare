@@ -800,8 +800,7 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     newcomer: true,
     onboardingDone: false,
   };
-  // The tour reaches the meter last, and this block is where an account first
-  // exists — so it is opened here with the cursor already on that step.
+  // The tour reaches the meter last, so start this block already on that step.
   await page.route("**/api/onboarding", (route) =>
     route.fulfill({ contentType: "application/json", body: '{"ok":true}' }),
   );
@@ -813,9 +812,8 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     check(/\$0\.20 of your \$1\.00 credit/.test(note) && /everyone/.test(note),
       "and says what it spends and who gets it", note);
   }
-  // The note beside the meter, which is the only thing that explains where the
-  // credit came from. The dot marks it; the meter itself is what opens it, and
-  // it takes the panel anchor exclusively while it is up.
+  // The note beside the meter, the only thing that explains where the credit
+  // came from. The dot marks it; the meter is what opens it.
   await page.waitForSelector(".credit .onboarding-dot", { timeout: 5000 }).catch(() => {});
   check(!!(await page.$(".credit .onboarding-dot")), "a new account gets a dot on its meter");
   check((await page.$(".credit-welcome")) === null, "and is not interrupted before asking");

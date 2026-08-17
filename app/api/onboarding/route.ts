@@ -5,19 +5,9 @@ import { getSessionUser } from "@/lib/auth";
 export const runtime = "nodejs";
 
 /**
- * The onboarding tour has been finished.
- *
- * Takes no body: the only thing it can say is "done", about whoever is signed
- * in. A boolean from the client would be a way to un-finish somebody else's
- * tour, and there is nothing to gain by allowing it.
- *
- * Written straight here rather than through Better Auth's update-user API, which
- * refuses this column by design (`input: false` in lib/auth.ts), and rather than
- * through lib/credits.ts, which is about money.
- *
- * Failures are reported, but the caller is expected to shrug: the browser's own
- * copy of the progress has already moved on, so the worst case is the tour
- * coming back on a second device.
+ * The onboarding tour has been finished, by whoever is signed in. No body: a
+ * boolean from the client would be a way to un-finish somebody's tour. Written
+ * in SQL because Better Auth refuses the column by design (`input: false`).
  */
 export async function POST(request: Request) {
   const user = await getSessionUser(request.headers);
