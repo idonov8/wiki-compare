@@ -98,10 +98,6 @@ export const auth = betterAuth({
        */
       creditCents: { type: "number", defaultValue: 0, input: false },
       peakCreditCents: { type: "number", defaultValue: 0, input: false },
-      /** Whether the onboarding tour has been finished. `input: false` for the
-       *  same reason as the two above, though the stakes are a dismissed panel
-       *  rather than money: /api/onboarding is the only thing that sets it, and
-       *  it sets it for whoever is signed in. */
       onboardingDone: { type: "boolean", defaultValue: false, input: false },
     },
   },
