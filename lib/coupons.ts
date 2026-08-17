@@ -23,7 +23,7 @@ export const COUPONS: Record<string, number> = {
  * advertisement in either direction.
  */
 export const COUPON_ENDS: Record<string, string> = {
-  WELCOME3: "2026-08-26",
+  WELCOME3: "2026-08-14",
 };
 
 /** The code the strip across the top of the site offers. */
