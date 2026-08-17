@@ -14,8 +14,7 @@ import { OnboardingDot, hintTriggers } from "./Onboarding";
  *
  * In the strip the key is also a control: three two-word labels are not the
  * whole explanation, so pressing it opens the described version. On a first
- * article the onboarding dot sits on it and offers the same thing, because a
- * reader who does not know what the colours mean cannot read the page at all.
+ * article the onboarding dot sits on it and offers the same thing.
  */
 
 const KINDS = [
@@ -46,13 +45,12 @@ export default function Legend({
   onHintDone,
 }: {
   describe?: boolean;
-  /** Whether the key is the feature the onboarding dot is currently on. */
+  /** Whether the onboarding dot is on the key. */
   hint?: boolean;
-  /** Fired when the panel is dismissed while the dot is here, which is what
-   *  moves the dot on. Dismissing it any other time is just a closed panel. */
+  /** Fired when the panel is dismissed while the dot is here, which moves the
+   *  dot on. Dismissing it any other time is just a closed panel. */
   onHintDone?: () => void;
 }) {
-  /** Whether the panel spelling the three kinds out is open. */
   const [open, setOpen] = useState(false);
 
   function close(): void {
@@ -108,11 +106,11 @@ export default function Legend({
           wears, so on a first article it reads as something opened rather than
           as more strip. Not a tooltip: it holds a button, and it stays until it
           is dismissed.
-          `role="status"` because the dot that opens it on a first article is
-          not what a reader was reading, so it is announced where it stands
-          instead of waiting for focus to arrive. Anchored to the right edge on
-          a phone, where the key sits against it and a panel starting at the
-          key's own left edge would run off screen. */}
+          `role="status"` because the reader came for the article, not for this,
+          so it is announced where it stands instead of waiting for focus to
+          arrive. Anchored to the right edge on a phone, where the key sits
+          against it and a panel starting at its own left edge would run off
+          screen. */}
       {open && (
         <div
           id="legend-note"

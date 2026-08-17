@@ -33,11 +33,10 @@ import type { MeResponse } from "@/lib/types";
  * to say how much of it there has been.
  *
  * The welcome note is the last stop on the onboarding tour, and the one that
- * cannot be reached without an account: a meter that fills in on its own the
- * first time somebody signs in is a number with no sentence attached, and the
- * sentence — five articles, already yours, spend them on anything — is the whole
- * reason the number is there. The dot marks the meter as having something to
- * say; hovering the meter itself is what opens it.
+ * cannot be reached without an account: a meter that fills in on its own is a
+ * number with no sentence attached, and the sentence — five articles, already
+ * yours — is the whole reason the number is there. The dot marks the meter;
+ * hovering the meter is what opens it.
  */
 export default function CreditBar({
   me,
@@ -49,12 +48,11 @@ export default function CreditBar({
   me: MeResponse | null;
   onDonate: () => void;
   onLogIn: () => void;
-  /** Whether the meter is the feature the onboarding dot is currently on. */
+  /** Whether the onboarding dot is on the meter. */
   hint?: boolean;
   /** Fired when the welcome note is dismissed, which ends the tour. */
   onHintDone?: () => void;
 }) {
-  /** Whether the welcome note has been opened by a reader arriving at the meter. */
   const [welcomeOpen, setWelcomeOpen] = useState(false);
 
   /** True right after "Got it" is clicked, until the pointer/focus leaves the
@@ -102,10 +100,8 @@ export default function CreditBar({
   }
 
   const remaining = articlesFor(me.creditCents);
-  /** The note beside the meter, up from the moment the meter is reached until it
-   *  is dismissed. `newcomer` — the server's word for "this balance is still the
-   *  sign-up grant, untouched" — is what the note describes, so `Compare` only
-   *  ever points the dot here while it holds. */
+  /** The note beside the meter. It describes the untouched sign-up grant, so
+   *  `Compare` only points the dot here while `me.newcomer` holds. */
   const welcome = hint && welcomeOpen;
   // Never divide by a zero peak: a brand-new account has held nothing, and an
   // empty meter is the honest picture of an empty balance.
@@ -147,16 +143,12 @@ export default function CreditBar({
         <span className="text-ink-soft">· {formatCents(used)} used</span>
       </span>
 
-      {/* The welcome note: the same anchor as the detail panel below, opened
-          from the dot rather than on arrival, because nobody hovers a meter they
-          have not yet been given a reason to look at. It takes that anchor
-          exclusively — two panels stacked at one corner is one panel covering
-          another — so the hover panel stands aside for as long as the dot is
-          here, which is until this is dismissed.
+      {/* The welcome note takes the detail panel's anchor exclusively — two
+          panels at one corner is one panel covering another — so the hover panel
+          stands aside for as long as the dot is here.
 
-          `role="status"`: what opened it is the dot, not the meter the reader
-          was looking at, so it is announced where it stands rather than waiting
-          for focus to arrive. */}
+          `role="status"`: the reader came for the article, not this, so it is
+          announced where it stands rather than waiting for focus to arrive. */}
       {welcome && (
         <div
           className="credit-welcome absolute z-50 top-[calc(100%_+_8px)] end-0 max-cols:end-auto max-cols:start-0 w-[300px] max-cols:w-[min(300px,calc(100vw_-_48px))] pt-[11px] px-[13px] pb-[12px] bg-paper-raised border border-ink rounded-[2px] shadow-offset font-body text-[13px] leading-[1.55] tracking-normal normal-case text-start text-ink cursor-default animate-reveal-in"
@@ -193,9 +185,8 @@ export default function CreditBar({
         className={`credit-detail absolute z-50 top-[calc(100%_+_8px)] end-0 max-cols:end-auto max-cols:start-0 w-[300px] max-cols:w-[min(300px,calc(100vw_-_48px))] pt-[11px] px-[13px] pb-[12px] bg-paper-raised border border-ink rounded-[2px] shadow-offset font-body text-[13px] leading-[1.55] tracking-normal normal-case text-start text-ink cursor-default invisible opacity-0 pointer-events-none transition-opacity duration-[120ms] ease-[ease] group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 group-focus-within:pointer-events-auto before:content-[''] before:absolute before:-inset-x-px before:-top-[10px] before:h-[10px] ${
           // `display: none` beats every visibility utility above — keeps the
           // welcome note, and its dismissal, from being opened into on hover.
-          // Off for the whole time the dot is here, not only once the note is
-          // up: the pointer reaching the dot crosses the meter, and the detail
-          // panel flashing on the way would cover the note about to open.
+          // Off for the whole time the dot is here: the same hover that opens
+          // the note would otherwise flash this panel over it.
           hint || justDismissedWelcome ? "hidden" : ""
         }`}
       >

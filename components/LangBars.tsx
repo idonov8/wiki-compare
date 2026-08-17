@@ -66,15 +66,12 @@ export default function LangBars({
    *  screen" — which is why one chart can serve both. */
   onScreen: Lang[];
   onPick: (lang: Lang) => void;
-  /** Whether the chart is the feature the onboarding dot is currently on. The
-   *  note below is nothing but that dot's explanation, so it exists only while
-   *  this is true. */
+  /** Whether the onboarding dot is on the chart. The note below is that dot's
+   *  explanation, so it exists only while this is true. */
   hint?: boolean;
-  /** Fired when the note is dismissed, which is what moves the dot on. */
+  /** Fired when the note is dismissed, which moves the dot on. */
   onHintDone?: () => void;
 }) {
-  /** Whether the note explaining the chart is open — never on arrival: it waits
-   *  for a reader who reaches the chart the dot is sitting on. */
   const [open, setOpen] = useState(false);
 
   function close(): void {
@@ -175,7 +172,7 @@ export default function LangBars({
       {/* Same raised panel the legend's note is printed on, so the two read as
           one vocabulary of "something just opened" rather than two different
           UI patterns for the same kind of interruption. `role="status"` because
-          the dot that opens it is not what a reader was reading. */}
+          the reader came for the article, not for this. */}
       {open && (
         <div
           id="langbars-note"

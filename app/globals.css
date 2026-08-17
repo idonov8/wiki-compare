@@ -288,10 +288,8 @@
     }
   }
 
-  /* The onboarding dot, breathing. Size rather than colour, because the dot
-     already carries a colour nothing else on the strip does, and a still dot in
-     that colour reads as a status light instead of as somewhere to point. Held
-     at its resting size with motion off, where it is simply a dot. */
+  /* The onboarding dot, breathing. Size rather than colour: a still dot in that
+     colour reads as a status light instead of as somewhere to point. */
   @keyframes attention-pulse {
     0%,
     100% {
