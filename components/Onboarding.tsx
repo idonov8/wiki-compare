@@ -4,17 +4,18 @@ import { useCallback, useEffect, useState } from "react";
 import type { MeResponse } from "@/lib/types";
 
 /**
- * The three features that need explaining, in the order one pulsing dot visits
- * them: the length chart, the marks key, the credit meter. Dismissing the note
- * a feature opens moves the dot on, and only one dot exists at a time.
+ * The two features that need explaining, in the order one pulsing dot visits
+ * them: the length chart, then the marks key. Dismissing the note a feature
+ * opens moves the dot on, and only one dot exists at a time. The credit system
+ * is no longer a stop on this tour — it gets a modal of its own over the first
+ * article a new account opens (components/CreditsModal.tsx).
  */
-export type OnboardingStep = "bars" | "marks" | "credits";
+export type OnboardingStep = "bars" | "marks";
 
 /** `null` is the end of the tour. */
 const NEXT: Record<OnboardingStep, OnboardingStep | null> = {
   bars: "marks",
-  marks: "credits",
-  credits: null,
+  marks: null,
 };
 
 /** Where the tour got to on this device. One cursor rather than a flag per
@@ -32,6 +33,8 @@ const LEGACY = [
 function readCursor(): OnboardingStep | null {
   try {
     const at = localStorage.getItem(CURSOR);
+    // A cursor parked on the retired "credits" step has seen both remaining
+    // stops, so it falls through to `null` along with "done".
     if (at) return at in NEXT ? (at as OnboardingStep) : null;
     return LEGACY.some((key) => localStorage.getItem(key) === "1") ? null : "bars";
   } catch {
@@ -47,9 +50,8 @@ function writeCursor(step: OnboardingStep | null): void {
 }
 
 /**
- * Which feature the dot is on, and how to move it along. The last step is the
- * credit bar, so a reader who never signs in leaves the cursor parked on
- * `credits`; finishing POSTs the flag, and the next device gets no dots.
+ * Which feature the dot is on, and how to move it along. Finishing POSTs the
+ * flag, and the next device gets no dots.
  */
 export function useOnboarding(me: MeResponse | null): {
   step: OnboardingStep | null;
@@ -76,11 +78,8 @@ export function useOnboarding(me: MeResponse | null): {
       // Taught on another device. Not `settle`, which would POST the flag back.
       setStep(null);
       writeCursor(null);
-    } else if (step === "credits" && !me.newcomer) {
-      // The note explains the sign-up grant, and this account is past it.
-      settle(null);
     }
-  }, [me, step, settle]);
+  }, [me]);
 
   return {
     step,

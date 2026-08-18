@@ -5,6 +5,7 @@ import ArticlesSkeleton from "./ArticlesSkeleton";
 import Columns from "./Columns";
 import { comparePath } from "./Highlighted";
 import CreditBar from "./CreditBar";
+import CreditsModal, { creditsExplained, markCreditsExplained } from "./CreditsModal";
 import DiffNav from "./DiffNav";
 import Footer from "./Footer";
 import Landing from "./landing/Landing";
@@ -213,6 +214,10 @@ export default function Compare() {
   const [docked, setDocked] = useState(false);
   /** Which feature the onboarding dot is on — see components/Onboarding.tsx. */
   const onboarding = useOnboarding(me);
+  /** The credit explainer, up over the first article a new account opens —
+   *  whether they searched their way to it or were sent back to it by the
+   *  login redirect. See components/CreditsModal.tsx. */
+  const [explaining, setExplaining] = useState(false);
 
   const reset = () => {
     setError(null);
@@ -472,9 +477,16 @@ export default function Compare() {
 
   /**
    * Buy the rest of this article, or a re-read of one whose revisions have moved
-   * on. The reply is a whole comparison, so it simply replaces what is on screen
-   * — the gate disappears because the payload it was describing is gone, not
-   * because anything told it to.
+   * on. The reply is the same NDJSON stream `open` reads, so the page turns over
+   * as the run reports it rather than a minute later all at once: the gate goes
+   * the moment the server says the scope is now `full`, and the differences land
+   * as they are found. The gate disappears because the payload it was describing
+   * is gone, not because anything told it to.
+   *
+   * Nothing on the page moves on the press. A donation can still be refused —
+   * not enough credit, somebody else funded it first — and blanking the article
+   * optimistically would flash it away for a request that never started, and
+   * take the gate that is the only place the refusal can be read with it.
    */
   const fund = useCallback(
     async (kind: "full" | "refresh") => {
@@ -488,29 +500,133 @@ export default function Compare() {
         qid: data?.qid,
         from: "fund",
       });
+
+      /** The preview this run was bought to replace, put back if it fails. The
+       *  articles go back with it: a refresh replaces them, and a comparison's
+       *  claims are located in the text it was computed from, so an old payload
+       *  over new articles marks the wrong words. */
+      const previous = data;
+      const previousArticles = articles;
+      /** Where `runId` stood on the press. The run claims the page on the first
+       *  line rather than here — a donation refused before it starts must not
+       *  have killed a read that is still arriving — but only if nothing else
+       *  has claimed it since, so following a link mid-donation leaves the
+       *  reader on the article they went to. */
+      const pressed = runId.current;
+      let id = 0;
+      const superseded = () => runId.current !== (id || pressed);
+      /** The handover, run once, on the first line the server sends: this is now
+       *  a full read of this article, and the preview's claims and scope belong
+       *  to the answer being replaced. Clearing them puts the page back into the
+       *  state `open` uses while it reads — ghost marks and the reading panel —
+       *  which is exactly what is happening. */
+      const begin = () => {
+        if (id || superseded()) return;
+        id = ++runId.current;
+        setData(null);
+        setLiveClaims([]);
+        setLiveScope(null);
+        setPhase("comparing");
+      };
+
       try {
-        const res = await fetch("/api/compare", {
+        const res = await fetch("/api/compare?stream=1", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ title: target.title, lang: target.lang, kind }),
         });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.error ?? "That didn't work.");
-        setData(json as ComparePayload);
-        setArticles(json.articles ?? {});
+        // A refusal before the first line — signed out, out of credit — is still
+        // an ordinary JSON error body with a status code to match.
+        if (!res.ok || !res.body) {
+          const json = await res.json().catch(() => ({}));
+          throw new Error(json.error ?? "That didn't work.");
+        }
+
+        let final: ComparePayload | null = null;
+        let broke: string | null = null;
+
+        await readNdjson<CompareEvent>(res.body, (event) => {
+          if (event.event !== "error") begin();
+          if (superseded()) return;
+          switch (event.event) {
+            case "articles":
+              // `shown` is left alone, unlike in `open`: this is the same
+              // article the reader is already looking at, so a column they put
+              // away should stay away.
+              setArticles(event.articles);
+              break;
+            case "scope":
+              setLiveScope(event.scope);
+              break;
+            case "claim":
+              setLiveClaims((claims) => [...claims, event.claim]);
+              break;
+            case "done":
+              final = { ...event.result, fromCache: event.fromCache, cache: event.cache };
+              break;
+            case "error":
+              broke = event.error;
+              break;
+          }
+        });
+
+        if (broke) throw new Error(broke);
+        if (!final) throw new Error("The comparison ended without returning a result.");
+        // The spent credit and the article this account has now paid for, even
+        // if the reader has since moved on: the money left the balance either
+        // way, and the meter should not be the last to know.
         refreshMe();
+        if (superseded()) return;
+
+        setData(final);
+        setArticles((final as ComparePayload).articles);
+        setPhase("done");
       } catch (e) {
+        if (superseded()) return;
+        const message = e instanceof Error ? e.message : "That didn't work.";
         // Nothing was read and the credit has been handed back, so the thanks
         // are withdrawn with it: a thank-you standing over an error message is
         // thanking somebody for a donation that did not happen.
         setThanks(false);
-        setFundError(e instanceof Error ? e.message : "That didn't work.");
+        if (!id) {
+          // Refused before it started, so nothing was cleared: the preview and
+          // its gate are still on screen, and that is where this belongs.
+          setFundError(message);
+        } else if (previous) {
+          // Back to the preview, which is where the gate is, which is the only
+          // place that error has to be read.
+          setFundError(message);
+          setData(previous);
+          setArticles(previousArticles);
+          setLiveClaims([]);
+          setLiveScope(null);
+          setPhase("done");
+        } else {
+          // Funded from a preview that was still reading, so there is no payload
+          // to go back to and no gate to put this in. Reported the way `open`
+          // reports a failed read — over the articles, which are still good.
+          setError(message);
+          setPhase("done");
+        }
       } finally {
         setFunding(false);
       }
     },
-    [target, funding, data?.qid, refreshMe],
+    [target, funding, data, articles, refreshMe],
   );
+
+  // On the article, not on arrival: the modal's button spends credit on the
+  // page under it, so it waits for there to be a page under it.
+  useEffect(() => {
+    if (!me?.newcomer || creditsExplained()) return;
+    if (phase !== "comparing" && phase !== "done") return;
+    setExplaining(true);
+  }, [me, phase]);
+
+  const dismissExplainer = useCallback(() => {
+    markCreditsExplained();
+    setExplaining(false);
+  }, []);
 
   useEffect(() => {
     if (!thanks) return;
@@ -693,10 +809,6 @@ export default function Compare() {
             me={me}
             onDonate={() => goDonate("masthead")}
             onLogIn={() => goLogIn("masthead")}
-            // The last stop, and the only one that needs an account: the note
-            // describes the sign-up credit.
-            hint={onboarding.step === "credits" && !!me?.newcomer}
-            onHintDone={onboarding.done}
           />
         </div>
       </header>
@@ -1018,6 +1130,17 @@ export default function Compare() {
       )}
 
       {thanks && <ThankYou />}
+
+      {explaining && me && data?.scope?.kind === "preview" && (
+        <CreditsModal
+          creditCents={me.creditCents}
+          onProcess={() => {
+            dismissExplainer();
+            void fund("full");
+          }}
+          onDismiss={dismissExplainer}
+        />
+      )}
 
       {card && (
         <div

@@ -800,54 +800,59 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     newcomer: true,
     onboardingDone: false,
   };
-  // The tour reaches the meter last, so start this block already on that step.
+  // The dot tour no longer visits the meter, so keep its two remaining stops
+  // out of this block's way.
   await page.route("**/api/onboarding", (route) =>
     route.fulfill({ contentType: "application/json", body: '{"ok":true}' }),
   );
-  await page.evaluate(() => localStorage.setItem("wiki-compare:onboarding", "credits"));
+  await page.evaluate(() => {
+    localStorage.setItem("wiki-compare:onboarding", "done");
+    localStorage.removeItem("wiki-compare:credits-explained");
+  });
   await openGate();
+  // The credit system, explained over the first article a new account opens —
+  // a modal, not a note beside the meter, because the meter only explained it
+  // to readers who happened to hover a 3px bar.
+  await page.waitForSelector(".credits-modal", { timeout: 5000 }).catch(() => {});
+  check(!!(await page.$(".credits-modal")), "a new account's first article raises the credit explainer");
+  check(
+    /5 articles/.test((await page.textContent(".credits-modal h2")) ?? ""),
+    "which says how many articles the grant is",
+    (await page.textContent(".credits-modal h2")) ?? "",
+  );
+  check(
+    /^Process this article$/.test((await page.textContent(".credits-modal-cta")) ?? ""),
+    "and offers to process the article under it",
+    (await page.textContent(".credits-modal-cta")) ?? "",
+  );
+  check((await page.$(".credit .onboarding-dot")) === null, "the meter carries no dot any more");
+  // "Not now" is the quiet way past; the flag keeps it from coming back.
+  await page.click(".credits-modal-later");
+  await page.waitForTimeout(150);
+  check((await page.$(".credits-modal")) === null, "declining puts the modal away");
+  check(
+    (await page.evaluate(() => localStorage.getItem("wiki-compare:credits-explained"))) === "1",
+    "which is remembered",
+  );
   {
     const { cta, note } = await gate();
     check(/^Donate this article$/.test(cta), "with credit, the gate asks for the donation", cta);
     check(/\$0\.20 of your \$1\.00 credit/.test(note) && /everyone/.test(note),
       "and says what it spends and who gets it", note);
   }
-  // The note beside the meter, the only thing that explains where the credit
-  // came from. The dot marks it; the meter is what opens it.
-  await page.waitForSelector(".credit .onboarding-dot", { timeout: 5000 }).catch(() => {});
-  check(!!(await page.$(".credit .onboarding-dot")), "a new account gets a dot on its meter");
-  check((await page.$(".credit-welcome")) === null, "and is not interrupted before asking");
-  check(
-    await page.$eval(".credit-detail", (el) => getComputedStyle(el).display === "none"),
-    "the hover panel stands aside while the dot is there",
-  );
-  await page.hover(".credit-balance");
-  await page.waitForSelector(".credit-welcome", { timeout: 5000 }).catch(() => {});
-  check(!!(await page.$(".credit-welcome")), "hovering the meter tells it about its credit");
-  check(
-    /5 articles/.test((await page.textContent(".credit-welcome-text")) ?? ""),
-    "the note says how many articles that is",
-    (await page.textContent(".credit-welcome-text")) ?? "",
-  );
-  await page.click(".credit-welcome-ok");
-  await page.waitForTimeout(150);
-  check((await page.$(".credit-welcome")) === null, "dismissing it puts it away");
-  check((await page.$(".onboarding-dot")) === null, "and ends the tour, so no dot is left");
-  check(
-    (await page.evaluate(() => localStorage.getItem("wiki-compare:onboarding"))) === "done",
-    "which is remembered",
-  );
+  // The hover panel no longer has a welcome note to stand aside for.
   await page.hover(".credit");
   await page.waitForTimeout(200);
   check(
     await page.$eval(".credit-detail", (el) => getComputedStyle(el).visibility === "visible"),
-    "and gives the hover panel its anchor back",
+    "hovering the meter opens the detail panel",
   );
   await page.mouse.move(0, 0);
 
-  // The donation itself: the fixture served back as a full read, so the gate is
-  // replaced by the rest of the article — and the thanks land on the press
-  // rather than on the reply, then leave on their own.
+  // The donation itself, this time through the modal's own button: the fixture
+  // served back as a full read, so the gate is replaced by the rest of the
+  // article — and the thanks land on the press rather than on the reply, then
+  // leave on their own.
   await page.route(
     (url) => url.pathname === "/api/compare",
     async (route) => {
@@ -862,13 +867,33 @@ check(!(await page.$(".card")), "Escape dismisses the card");
           postData: undefined,
         })
       ).json();
+      // The funded run reports as it goes, exactly as the free one does, so the
+      // reply is NDJSON and not a single object: the articles, the scope that
+      // retires the gate, then the differences, then the result. `fulfill` can
+      // only hand over a whole body at once, so what this checks is that the
+      // client reads every one of those lines off a POST — the pacing itself is
+      // the same code `open` runs against the real stream above.
+      const result = { ...json, scope: { kind: "full" } };
+      const lines = [
+        { event: "articles", qid: json.qid, articles: json.articles },
+        { event: "scope", scope: { kind: "full" } },
+        { event: "coverage", coverage: json.coverage ?? [] },
+        ...(json.claims ?? []).map((claim: unknown) => ({ event: "claim", claim })),
+        { event: "done", result, fromCache: false },
+      ];
       route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify({ ...json, scope: { kind: "full" }, fromCache: false, charged: true }),
+        contentType: "application/x-ndjson",
+        body: lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
       });
     },
   );
-  await page.click(".gate-cta");
+  await page.evaluate(() => localStorage.removeItem("wiki-compare:credits-explained"));
+  await openGate();
+  await page.waitForSelector(".credits-modal", { timeout: 5000 }).catch(() => {});
+  check(!!(await page.$(".credits-modal")), "unexplained on this device, the modal returns");
+  await page.click(".credits-modal-cta");
+  await page.waitForTimeout(150);
+  check((await page.$(".credits-modal")) === null, "processing puts the modal away");
   await page.waitForSelector(".thanks", { timeout: 5000 }).catch(() => {});
   check(!!(await page.$(".thanks")), "donating raises a thank-you");
   check(
@@ -879,6 +904,14 @@ check(!(await page.$(".card")), "Escape dismisses the card");
   await page.waitForTimeout(5200);
   check((await page.$(".thanks")) === null, "and takes itself away after five seconds");
   check((await page.$(".gate")) === null, "the funded article no longer carries a gate");
+  check(
+    (await page.$$("mark.claim")).length > 0,
+    "and the differences the stream sent are marked in it",
+  );
+  {
+    const meta = (await page.textContent(".meta > span:first-child")) ?? "";
+    check(!/preview/.test(meta), "and the strip no longer calls the read a preview", meta);
+  }
   await page.unroute((url) => url.pathname === "/api/compare");
 
   // Out of credit: the one state where the ask really is money.
@@ -898,7 +931,7 @@ check(!(await page.$(".card")), "Escape dismisses the card");
       "an empty balance is asked to top up, not to log in", cta);
     check(/\$0\.00 left/.test(note), "and is told what it has left", note);
   }
-  check((await page.$(".credit-welcome")) === null,
+  check((await page.$(".credits-modal")) === null,
     "and is not welcomed as a new account");
 
   check((await page.$(".onboarding-dot")) === null,

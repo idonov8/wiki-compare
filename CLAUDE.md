@@ -2,7 +2,7 @@
 
 ## Workflow
 
-Open a PR when you finish working on a feature.
+When working in a cloud enviornment, open a PR when you finish working on a feature.
 
 ## Code comments
 
