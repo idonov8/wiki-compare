@@ -35,7 +35,7 @@ export function markCreditsExplained(): void {
  * The backdrop takes no click. The reader chose an article and this stands on
  * top of it, so it owes them a way past — but a scrim that dismisses on a stray
  * press would be the old hover note again, gone before it was read. The way
- * past is explicit: the CTA, the quiet "Not now", or Escape.
+ * past is explicit: the CTA, the close button, or Escape.
  */
 export default function CreditsModal({
   creditCents,
@@ -73,37 +73,43 @@ export default function CreditsModal({
       aria-modal="true"
       aria-labelledby="credits-modal-title"
     >
-      <div className="w-full max-w-[460px] bg-paper-raised border border-ink rounded-[2px] shadow-offset px-[30px] pt-[26px] pb-[26px] max-tight:px-[20px] animate-reveal-in">
-        <p className="m-0 mb-[10px] font-mono text-[11px] tracking-[0.09em] uppercase text-ink-soft">
-          Welcome — how credit works
-        </p>
+      <div className="relative w-full max-w-[460px] bg-paper-raised border border-ink rounded-[2px] shadow-offset px-[30px] pt-[26px] pb-[26px] max-tight:px-[20px] animate-reveal-in">
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Not now"
+          className="credits-modal-later absolute top-[12px] right-[12px] bg-transparent border-none px-[6px] font-mono text-[15px] leading-none text-ink-soft hover:text-ink"
+        >
+          ×
+        </button>
         <h2 id="credits-modal-title" className="font-display text-[27px] font-normal leading-[1.2] m-0 mb-[12px] max-tight:text-[23px]">
-          Your account holds {formatCents(creditCents)} — about {articles}{" "}
-          {articles === 1 ? "article" : "articles"}
+          Welcome, you got 1$!
         </h2>
         <p className="credits-modal-text m-0 mb-[20px] font-body text-[14px] leading-[1.6] text-ink">
-          Processing an article has AI read all three language versions and mark
-          every difference between them. It spends ~
-          {formatCents(PRICE_PER_ARTICLE_CENTS)} of your credit, and the result
-          stays readable for <b>everyone</b> who opens it after you — that is
-          what your credit buys.
+          Wiki Compare uses a credit system.
+          <br/>
+          As a welcome gift, you got 1$ of credits, which is enough for {articles} article{articles !== 1 ? "s" : ""}.
+          <br/><br/>
+          Each article costs a few cents of your credit, and the result stays readable for <b>everyone</b>.
+          By using your credit you make Wiki Compare more accessible and better for everyone. Thanks!
         </p>
-        <div className="flex items-center gap-[14px] flex-wrap">
+        <div className="text-center">
           <button
             type="button"
             ref={ctaRef}
-            className="credits-modal-cta py-[10px] px-[22px] font-mono text-[12px] tracking-[0.04em] bg-ink text-paper-raised border border-ink transition-opacity duration-[120ms] ease-[ease] hover:opacity-[0.82]"
+            className="credits-modal-cta border border-ink bg-ink px-[22px] py-[10px] text-paper-raised disabled:cursor-progress disabled:opacity-45"
             onClick={onProcess}
           >
-            {processed ? "Read this article" : "Process this article"}
+            {processed ? "Read this article" : "Donate this article"}
           </button>
-          <button
-            type="button"
-            className="credits-modal-later py-[10px] px-[8px] font-mono text-[12px] tracking-[0.04em] bg-transparent text-ink-soft border-none underline underline-offset-[3px] hover:text-ink"
-            onClick={onDismiss}
-          >
-            Not now
-          </button>
+
+          {/* What pressing it means, under the button rather than in it — same
+              pairing as the gate's donate button. */}
+          {!processed && (
+            <p className="credits-modal-note mt-[12px] font-mono text-[11px] leading-[1.6] text-ink-soft">
+              This spends ~{formatCents(PRICE_PER_ARTICLE_CENTS)} of your {formatCents(creditCents)} credit
+            </p>
+          )}
         </div>
       </div>
     </div>
