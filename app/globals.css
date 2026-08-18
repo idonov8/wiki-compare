@@ -316,6 +316,48 @@
   --color-ghost-framing: color-mix(in srgb, #6b4e9e 17%, transparent);
 }
 
+@property --thanks-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.thanks::before,
+.thanks::after {
+  position: absolute;
+  content: "";
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--thanks-angle),
+    var(--color-contradiction) 0deg,
+    var(--color-contradiction) 72deg,
+    var(--color-unique) 120deg,
+    var(--color-unique) 192deg,
+    var(--color-framing) 240deg,
+    var(--color-framing) 312deg,
+    var(--color-contradiction) 360deg
+  );
+  animation: thanks-outline-turn 3.2s linear infinite;
+}
+
+.thanks::after {
+  inset: 0;
+  z-index: 0;
+}
+
+.thanks::before {
+  inset: -4px;
+  z-index: -1;
+  filter: blur(9px);
+  opacity: 0.58;
+}
+
+@keyframes thanks-outline-turn {
+  to {
+    --thanks-angle: 360deg;
+  }
+}
+
 /* ============================================================================
    The difference stepper, while the comparison is still running.
    ========================================================================= */
