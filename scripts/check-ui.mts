@@ -55,6 +55,8 @@ await page.route("**/api/recent", (route) =>
           langs: ["en", "he", "ar"],
           scope: "full",
           computedAt: new Date(Date.now() - 3600_000).toISOString(),
+          words: { en: 8400, he: 4200, ar: 800 },
+          claims: { contradiction: 4, unique: 3, framing: 2 },
         },
         {
           qid: "Q2",
@@ -63,6 +65,8 @@ await page.route("**/api/recent", (route) =>
           langs: ["he", "ar"],
           scope: "preview",
           computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
+          words: { he: 900, ar: 1500 },
+          claims: { contradiction: 0, unique: 0, framing: 0 },
         },
       ],
     }),
@@ -184,6 +188,49 @@ check(
 check(
   (await page.$$(".recent h2, .recent h3")).length === 0,
   "the list carries no heading of its own",
+);
+
+// The two marks that replaced the cached-at timestamp. A bar per edition that
+// exists, scaled within its own row, and one line divided between the kinds of
+// difference found — so a row with none draws an empty track and no segments.
+// The marks plot themselves off a transform, staggered down the rows, so a rect
+// measured too early is a frame of the animation rather than the height the bar
+// is claiming: wait the sequence out before reading any of them.
+await page.waitForTimeout(1000);
+const charts = await page.$$eval(".recent li button", (els) =>
+  els.map((el) => ({
+    bars: [...el.querySelectorAll(".recent-words > span")].map(
+      (bar) => (bar as HTMLElement).getBoundingClientRect().height,
+    ),
+    segments: el.querySelectorAll(".recent-ratio > span").length,
+    words: el.querySelector(".recent-words")?.getAttribute("title") ?? "",
+    ratio: el.querySelector(".recent-ratio")?.getAttribute("title") ?? "",
+  })),
+);
+check(
+  charts[0].bars.length === 3 && charts[0].bars[0] > charts[0].bars[1] && charts[0].bars[1] > charts[0].bars[2],
+  "each row charts its editions' word counts in en·he·ar order",
+  charts.map((c) => c.bars.join("/")).join("; "),
+);
+check(
+  charts[1].bars[0] <= 1 && charts[1].bars[2] > charts[1].bars[1],
+  "an edition the subject does not have draws a stub, not a bar",
+  charts[1].bars.join("/"),
+);
+check(
+  charts[0].segments === 3 && charts[1].segments === 0,
+  "the difference line carries one segment per kind found, and none when there were none",
+  charts.map((c) => `${c.segments}`).join("; "),
+);
+check(
+  /English 8,400 words/.test(charts[0].words) && /4 contradictions/.test(charts[0].ratio),
+  "both marks name their exact figures on hover",
+  `${charts[0].words} | ${charts[0].ratio}`,
+);
+check(
+  /no differences found/.test(charts[1].ratio),
+  "a run that found nothing says so rather than showing an unexplained empty line",
+  charts[1].ratio,
 );
 
 // The ledger holds every cached subject, so the toggle is how a reader gets to

@@ -330,4 +330,9 @@ export interface RecentArticle {
    *  free preview. Rows written before previews existed have no scope in the
    *  database and are read as `"full"`, which is what they are. */
   scope: ScopeKind;
+  /** Words per edition, counted the way `articleWords` counts them. An edition
+   *  the subject does not have is a missing key rather than a zero. */
+  words: Partial<Record<Lang, number>>;
+  /** How many differences of each kind the cached run found. */
+  claims: Record<ClaimType, number>;
 }

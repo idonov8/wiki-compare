@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Section from "./Section";
-import { LANG_META, type RecentArticle } from "@/lib/types";
+import { LANGS, LANG_META, type ClaimType, type RecentArticle } from "@/lib/types";
 
 interface Props {
   recent: RecentArticle[];
@@ -21,6 +21,87 @@ interface Props {
  *  unbounded, so this is not a count of what is coming — it is enough rows to
  *  fill the scroll box, which is all the reader can see either way. */
 const SKELETON_ROWS = Array.from({ length: 12 }, (_, i) => i);
+
+/** The bar zone in a row, and the shortest an edition that exists may draw —
+ *  same reasoning as the chart in the masthead, at half the height. */
+const TALLEST = 18;
+const SHORTEST = 2;
+
+/** The three inks, in the order the legend prints them. `noun` is written after
+ *  a count, so it is already the shape a plural takes. */
+const KINDS: { kind: ClaimType; fill: string; noun: string }[] = [
+  { kind: "contradiction", fill: "bg-contradiction", noun: "contradictions" },
+  { kind: "unique", fill: "bg-unique", noun: "only in one version" },
+  { kind: "framing", fill: "bg-framing", noun: "different framing" },
+];
+
+const wordsSaid = (words: RecentArticle["words"]): string =>
+  LANGS.filter((lang) => words[lang])
+    .map((lang) => `${LANG_META[lang].label} ${words[lang]!.toLocaleString()} words`)
+    .join(", ");
+
+const claimsSaid = (claims: RecentArticle["claims"]): string =>
+  KINDS.filter(({ kind }) => claims[kind])
+    .map(({ kind, noun }) => `${claims[kind]} ${noun}`)
+    .join(", ") || "no differences found";
+
+/**
+ * How much each edition has written, as three bars in a fixed en·he·ar order.
+ *
+ * Scaled against this subject's own longest edition rather than the ledger's:
+ * the fact worth reading off a row is how lopsided its editions are, and a
+ * ledger-wide scale would flatten every ordinary article into slivers behind
+ * whichever one happens to be the longest thing cached.
+ */
+function WordBars({ words, delay }: { words: RecentArticle["words"]; delay: number }) {
+  const longest = Math.max(1, ...LANGS.map((lang) => words[lang] ?? 0));
+  return (
+    <span
+      className="recent-words flex h-[18px] items-end gap-[3px]"
+      title={wordsSaid(words)}
+      aria-hidden
+    >
+      {LANGS.map((lang, index) => {
+        const count = words[lang] ?? 0;
+        return (
+          <span
+            key={lang}
+            className={`w-[6px] origin-bottom animate-bar-rise ${
+              count ? "bg-ink-soft group-hover:bg-ink" : "bg-ink-wash-strong"
+            }`}
+            style={{
+              height: count ? Math.max(SHORTEST, Math.round((count / longest) * TALLEST)) : 1,
+              animationDelay: `${delay + index * 40}ms`,
+            }}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
+/**
+ * What kind of differences were found, as one line divided in proportion.
+ *
+ * Counts, not lengths: the line says a run was mostly contradictions or mostly
+ * framing, which is the character of a disagreement rather than its size. The
+ * empty track stays visible when nothing was found, because a row that drew
+ * nothing there would read as a row that was never read.
+ */
+function RatioLine({ claims, delay }: { claims: RecentArticle["claims"]; delay: number }) {
+  return (
+    <span
+      className="recent-ratio flex h-[6px] w-[84px] origin-left animate-line-draw gap-px bg-ink-wash max-tight:w-[54px]"
+      title={claimsSaid(claims)}
+      style={{ animationDelay: `${delay + 140}ms` }}
+      aria-hidden
+    >
+      {KINDS.filter(({ kind }) => claims[kind]).map(({ kind, fill }) => (
+        <span key={kind} className={fill} style={{ flex: `${claims[kind]} 0 0%` }} />
+      ))}
+    </span>
+  );
+}
 
 /**
  * Articles somebody has already paid to have read.
@@ -94,11 +175,15 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                     >
                       Loading recent article title
                     </span>
-                    <span
-                      className="shrink-0 animate-chip-breathe rounded-[2px] bg-ink-wash-strong font-mono text-[11px] tracking-[0.04em] text-transparent"
-                      style={{ animationDelay: `${i * -0.3}s` }}
-                    >
-                      3 hours ago
+                    <span className="flex shrink-0 items-end gap-[12px] self-center border-b border-rule pb-[3px] max-tight:gap-[8px]">
+                      <span
+                        className="h-[18px] w-[24px] animate-chip-breathe bg-ink-wash-strong"
+                        style={{ animationDelay: `${i * -0.3}s` }}
+                      />
+                      <span
+                        className="h-[6px] w-[84px] animate-chip-breathe bg-ink-wash-strong max-tight:w-[54px]"
+                        style={{ animationDelay: `${i * -0.3}s` }}
+                      />
                     </span>
                     <span
                       className="recent-scope w-14.5 shrink-0 animate-chip-breathe rounded-[2px] border border-transparent bg-ink-wash-strong px-1.25 py-px text-center font-mono text-[10px] tracking-[0.09em] text-transparent"
@@ -109,13 +194,15 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                   </div>
                 </li>
               ))
-            : shown.map((item) => (
+            : shown.map((item, index) => (
                 <li key={item.qid} className="border-b border-rule last:border-b-0">
                   <button
                     type="button"
                     className="group flex w-full items-baseline gap-[14px] border-0 bg-none px-[8px] py-[11px] text-start [font:inherit] text-wiki-link hover:bg-paper-raised"
                     onClick={() => onOpen(item.title, item.lang)}
-                    aria-label={`Compare ${item.title}, ${item.scope} cached ${relative(item.computedAt)}`}
+                    aria-label={`Compare ${item.title}, ${item.scope} cached ${relative(
+                      item.computedAt,
+                    )}, ${wordsSaid(item.words)}, ${claimsSaid(item.claims)}`}
                   >
                     <span
                       className="recent-title min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left group-hover:underline"
@@ -124,12 +211,22 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                     >
                       {item.title}
                     </span>
+                    {/* Both marks on one hairline axis, the same device the
+                        masthead chart draws under its bars: the lengths stand
+                        on it and the difference line runs along it, so the two
+                        read as one reading of the row rather than as two
+                        widgets that happen to be adjacent. */}
+                    <span className="flex shrink-0 items-end gap-[12px] self-center border-b border-rule pb-[3px] max-tight:gap-[8px]">
+                      {/* The ledger plots itself once, top down, as the fetch
+                          lands. Capped a few rows in: past that the cascade is
+                          a queue rather than a reading, and a row scrolled to
+                          is better already drawn than drawing. */}
+                      <WordBars words={item.words} delay={Math.min(index, 8) * 45} />
+                      <RatioLine claims={item.claims} delay={Math.min(index, 8) * 45} />
+                    </span>
                     {/* What's cached, not what a click will cost: a preview reads
                         free and a full run was already paid for, so the badge just
                         names which one is sitting in the cache right now. */}
-                    <span className="shrink-0 font-mono text-[11px] tracking-[0.04em] text-ink-soft">
-                      {relative(item.computedAt)}
-                    </span>
                     <span
                       className={`recent-scope w-14.5 shrink-0 border border-rule px-1.25 py-px text-center font-mono text-[10px] tracking-[0.09em] uppercase text-ink-soft ${
                         item.scope === "full" ? "font-bold" : "opacity-80"
@@ -152,6 +249,27 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
             Nothing has been read in full yet.
           </p>
         )}
+      </div>
+
+      {/* What the two marks on every row mean, said once under the ledger rather
+          than as column headings: the rows are the thing being read, and a
+          header strip repeating three language codes twelve rows above the bars
+          it labels would be the louder half of the page. */}
+      <div className="mt-[11px] flex flex-wrap items-center gap-x-[18px] gap-y-[6px] px-[8px] font-mono text-[10px] tracking-[0.09em] uppercase text-ink-soft">
+        <span className="flex items-center gap-[6px]">
+          <span className="flex h-[9px] items-end gap-[2px]" aria-hidden>
+            <span className="h-[9px] w-[3px] bg-ink-soft" />
+            <span className="h-[4px] w-[3px] bg-ink-soft" />
+            <span className="h-[2px] w-[3px] bg-ink-soft" />
+          </span>
+          words per version, en·he·ar
+        </span>
+        {KINDS.map(({ kind, fill, noun }) => (
+          <span key={kind} className="flex items-center gap-[6px]">
+            <span className={`h-[5px] w-[14px] ${fill}`} aria-hidden />
+            {noun}
+          </span>
+        ))}
       </div>
     </Section>
   );
