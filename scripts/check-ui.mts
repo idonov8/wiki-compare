@@ -457,6 +457,7 @@ check(!!(await page.$(".cached-badge")), "a cached comparison served past an edi
 // ---- the comparison itself --------------------------------------------------
 
 await page.goto(BASE, { waitUntil: "domcontentloaded" });
+await page.waitForLoadState("networkidle");
 await page.fill('input[aria-label="Article title"]', `demo:${FIXTURE}`);
 // `demo:` skips the search-and-confirm flow and compares the fixture directly.
 await page.click("button:has-text('Search')");
@@ -800,8 +801,8 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     newcomer: true,
     onboardingDone: false,
   };
-  // The dot tour no longer visits the meter, so keep its two remaining stops
-  // out of this block's way.
+  // The dot tour no longer visits the meter, so keep it out of this block's
+  // way.
   await page.route("**/api/onboarding", (route) =>
     route.fulfill({ contentType: "application/json", body: '{"ok":true}' }),
   );
@@ -908,10 +909,35 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     (await page.$$("mark.claim")).length > 0,
     "and the differences the stream sent are marked in it",
   );
+  asPreview = false;
+  await page.evaluate(() => localStorage.setItem("wiki-compare:onboarding", "claim"));
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForSelector("mark.claim", { timeout: 30000 });
+  await page.waitForSelector(".onboarding-dot", { timeout: 5000 }).catch(() => {});
+  check(
+    await page.evaluate(() => {
+      const first = document.querySelector("mark.claim");
+      const dot = document.querySelector(".onboarding-dot");
+      return !!first && !!dot && first.contains(dot);
+    }),
+    "the claim tour dot sits inside the first highlight",
+  );
+  const firstClaim = await page.$("mark.claim");
+  if (firstClaim) {
+    await firstClaim.scrollIntoViewIfNeeded();
+    await firstClaim.hover();
+    await page.waitForTimeout(150);
+  }
+  check((await page.$(".onboarding-dot")) === null, "seeing the first claim card dismisses the dot");
+  check(
+    (await page.evaluate(() => localStorage.getItem("wiki-compare:onboarding"))) === "done",
+    "seeing the first claim card finishes the tour",
+  );
   {
     const meta = (await page.textContent(".meta > span:first-child")) ?? "";
     check(!/preview/.test(meta), "and the strip no longer calls the read a preview", meta);
   }
+  asPreview = true;
   await page.unroute((url) => url.pathname === "/api/compare");
 
   // Out of credit: the one state where the ask really is money.

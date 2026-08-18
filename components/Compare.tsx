@@ -13,7 +13,7 @@ import LangBars from "./LangBars";
 import LangSwitch from "./LangSwitch";
 import Legend from "./Legend";
 import Loading from "./Loading";
-import { useOnboarding } from "./Onboarding";
+import { ClaimOnboardingDot, useOnboarding } from "./Onboarding";
 import Outage from "./Outage";
 import PreviewGate from "./PreviewGate";
 import SearchBox from "./SearchBox";
@@ -737,6 +737,7 @@ export default function Compare() {
   // }, [pendingLink, visible]);
 
   const onEnter = (claim: Claim, event: React.MouseEvent | React.FocusEvent) => {
+    if (onboarding.step === "claim") onboarding.done();
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
 
     // Clamp both edges. Clamping only the right edge pushed the card off-screen
@@ -972,6 +973,8 @@ export default function Compare() {
           </ul>
         </div>
       )}
+
+      {onboarding.step === "claim" && <ClaimOnboardingDot claimCount={claims.length} />}
 
       {/* A funded comparison is one grid. A preview is three pieces: what was
           read, the seam, and what wasn't — so the boundary lands as a single

@@ -1,21 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { MeResponse } from "@/lib/types";
 
 /**
- * The two features that need explaining, in the order one pulsing dot visits
- * them: the length chart, then the marks key. Dismissing the note a feature
- * opens moves the dot on, and only one dot exists at a time. The credit system
- * is no longer a stop on this tour — it gets a modal of its own over the first
- * article a new account opens (components/CreditsModal.tsx).
+ * The three features that need explaining, in the order one pulsing dot visits
+ * them: the length chart, the marks key, then the first difference. Dismissing
+ * the note a feature opens moves the dot on, and seeing the first difference's
+ * card finishes the tour. The credit system is no longer a stop on this tour —
+ * it gets a modal of its own over the first article a new account opens
+ * (components/CreditsModal.tsx).
  */
-export type OnboardingStep = "bars" | "marks";
+export type OnboardingStep = "bars" | "marks" | "claim";
 
 /** `null` is the end of the tour. */
 const NEXT: Record<OnboardingStep, OnboardingStep | null> = {
   bars: "marks",
-  marks: null,
+  marks: "claim",
+  claim: null,
 };
 
 /** Where the tour got to on this device. One cursor rather than a flag per
@@ -113,4 +116,51 @@ export function OnboardingDot() {
       <span className="block w-full h-full rounded-full bg-contradiction shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-contradiction)_22%,transparent)] animate-attention-pulse" />
     </span>
   );
+}
+
+export function ClaimOnboardingDot({ claimCount }: { claimCount: number }) {
+  const [mark, setMark] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!claimCount || typeof IntersectionObserver === "undefined") {
+      setMark(null);
+      return;
+    }
+
+    let observed: HTMLElement | null = null;
+    let intersection: IntersectionObserver | null = null;
+
+    const stop = () => {
+      intersection?.disconnect();
+      intersection = null;
+      const previous = observed;
+      observed = null;
+      setMark((current) => (current === previous ? null : current));
+    };
+
+    const watch = () => {
+      const next = document.querySelector<HTMLElement>("mark.claim");
+      if (next === observed) return;
+      stop();
+      if (!next) return;
+      observed = next;
+      intersection = new IntersectionObserver(([entry]) => {
+        if (!entry.isIntersecting) return;
+        setMark(observed);
+        intersection?.disconnect();
+        intersection = null;
+      });
+      intersection.observe(next);
+    };
+
+    watch();
+    const mutations = new MutationObserver(watch);
+    mutations.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      mutations.disconnect();
+      stop();
+    };
+  }, [claimCount]);
+
+  return mark ? createPortal(<OnboardingDot />, mark) : null;
 }

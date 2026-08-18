@@ -118,7 +118,7 @@ export default function Highlighted({
         // across direction changes. A darker inset shadow under the band keeps
         // the type legible without relying on the fill colour alone.
         <mark
-          className="claim text-wiki-text bg-transparent rounded-[2px] py-[0.09em] box-decoration-clone cursor-help transition-[background-color,box-shadow] duration-[120ms] ease-[ease] data-[type=contradiction]:bg-mark-contradiction data-[type=contradiction]:inset-shadow-contradiction data-[type=unique]:bg-mark-unique data-[type=unique]:inset-shadow-unique data-[type=framing]:bg-mark-framing data-[type=framing]:inset-shadow-framing data-[active=true]:data-[type=contradiction]:bg-mark-contradiction-on data-[active=true]:data-[type=unique]:bg-mark-unique-on data-[active=true]:data-[type=framing]:bg-mark-framing-on"
+          className="claim relative text-wiki-text bg-transparent rounded-[2px] py-[0.09em] box-decoration-clone cursor-help transition-[background-color,box-shadow] duration-[120ms] ease-[ease] data-[type=contradiction]:bg-mark-contradiction data-[type=contradiction]:inset-shadow-contradiction data-[type=unique]:bg-mark-unique data-[type=unique]:inset-shadow-unique data-[type=framing]:bg-mark-framing data-[type=framing]:inset-shadow-framing data-[active=true]:data-[type=contradiction]:bg-mark-contradiction-on data-[active=true]:data-[type=unique]:bg-mark-unique-on data-[active=true]:data-[type=framing]:bg-mark-framing-on"
           tabIndex={0}
           role="button"
           aria-describedby={activeId === found.id ? "claim-card" : undefined}
