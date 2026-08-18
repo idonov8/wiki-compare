@@ -55,6 +55,9 @@ export const EVENTS = [
   "credits_spent",
   /** A comparison was served, cached or freshly run. */
   "comparison_served",
+  /** The language stamp on the search field was opened. Until it can offer a
+   *  choice, this counts the demand for one. */
+  "language_menu_opened",
 ] as const;
 
 export type AnalyticsEvent = (typeof EVENTS)[number];
