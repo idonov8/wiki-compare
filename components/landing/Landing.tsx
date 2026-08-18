@@ -103,18 +103,17 @@ export default function Landing({
               <p className="mb-5 font-mono text-[11px] tracking-[0.12em] uppercase text-ink-soft">
                 Why Compare?
               </p>
-              <p className="m-0 font-display text-[clamp(34px,4.4vw,52px)] leading-[0.98] tracking-[-0.02em] text-ink">
-                Wikipedia is often viewed as a source of truth.
+              <p className="m-0 font-display text-[clamp(34px,4.4vw,49px)] leading-[0.98] tracking-[-0.02em] text-ink">
+                Wikipedia is not a source of truth.
               </p>
               <p className="mt-6 mb-0 max-w-[52ch] text-[16px] leading-[1.65] text-ink-soft">
-                In reality it's written by people, influenced by environemts and perspectives.
+                Wikipedia is written by people, influenced by environemts and perspectives.
                 <br/> 
-                I built Wiki Compare to combat this bias and help people read more critically, while being aware of their own bias. 
-                The different languages often reflect these different environemets and show these gaps. 
+                I'm building Wiki Compare to combat this bias and help people read more critically, while being aware of their own bias. 
                 <br/>
                 <br/>
                 Wikipedia edit wars have always been a thing, everyone fights for their point of view to be the truth. 
-                My goal is not to take a side, but just to make it easier for you to see different perspectives before arriving at sharp conclusions.
+                I'm not here to take a side, just to make it easier for you to see different perspectives.
               </p>
             </div>
 
