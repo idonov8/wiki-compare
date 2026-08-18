@@ -117,9 +117,6 @@ export default function Legend({
           role="status"
           className="legend-note absolute z-50 top-[calc(100%_+_10px)] start-0 max-tight:start-auto max-tight:end-0 w-[min(620px,calc(100vw_-_44px))] max-cols:w-[min(320px,calc(100vw_-_36px))] px-[15px] pt-[12px] pb-[14px] bg-paper-raised border border-ink rounded-[2px] shadow-offset font-body normal-case tracking-normal text-ink animate-reveal-in"
         >
-          <p className="m-0 mb-[12px] font-mono text-[11px] tracking-[0.09em] uppercase text-ink-soft">
-            what the marks mean
-          </p>
           <Described />
           <button
             type="button"
