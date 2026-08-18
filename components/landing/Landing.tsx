@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import Footer from "../Footer";
 import Hero from "./Hero";
 import RecentList from "./RecentList";
+import Section from "./Section";
 import type { RecentArticle } from "@/lib/types";
 
 interface Props {
@@ -92,6 +93,42 @@ export default function Landing({
           busy={busy}
           sentinel={sentinel}
         />
+
+        <Section
+          heading=""
+          className="border-y border-rule bg-paper-22 pt-[max(6vh,48px)] pb-[max(7vh,52px)]"
+        >
+          <div className="mt-7 grid gap-10 md:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] md:items-center md:gap-14">
+            <div className="max-w-136">
+              <p className="mb-5 font-mono text-[11px] tracking-[0.12em] uppercase text-ink-soft">
+                Why Compare?
+              </p>
+              <p className="m-0 font-display text-[clamp(34px,4.4vw,49px)] leading-[0.98] tracking-[-0.02em] text-ink">
+                Wikipedia is not a source of truth.
+              </p>
+              <p className="mt-6 mb-0 max-w-[52ch] text-[16px] leading-[1.65] text-ink-soft">
+                Wikipedia is written by people, influenced by environemts and perspectives.
+                <br/> 
+                I'm building Wiki Compare to combat this bias and help people read more critically, while being aware of their own bias. 
+                <br/>
+                <br/>
+                Wikipedia edit wars have always been a thing, everyone fights for their point of view to be the truth. 
+                I'm not here to take a side, just to make it easier for you to see different perspectives.
+              </p>
+            </div>
+
+            <figure className="relative m-0 border border-ink bg-paper-raised p-2.5 shadow-offset md:-rotate-1">
+              <img
+                src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Wikipedia_Edit_Wars.jpg/500px-Wikipedia_Edit_Wars.jpg?utm_source=en.wikipedia.org&utm_campaign=parser&utm_content=thumbnail"
+                alt="Wikipedia edit wars"
+                className="aspect-4/3 w-full object-cover pt-1"
+              />
+              <figcaption className="flex items-baseline justify-between gap-4 pt-2 font-mono text-[10px] tracking-[0.08em] uppercase text-ink-soft">
+                <span>Wikipedia edit wars</span>
+              </figcaption>
+            </figure>
+          </div>
+        </Section>
 
         <RecentList recent={recent} onOpen={onOpen} relative={relative} loading={recentLoading} />
         <Footer onDonate={onDonate} />
