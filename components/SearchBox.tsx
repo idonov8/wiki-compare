@@ -13,11 +13,9 @@ import { LANGS, LANG_META } from "@/lib/types";
  * one drifts from the placeholder in the other. The variant changes the metrics
  * and nothing else: same value, same submit, same disabled behaviour.
  *
- * Field, language stamp and submit are one printed box rather than three
- * controls in a row, which is what lets the focus ring be drawn inside that
- * box: the thing being focused is the whole search, and a ring standing off the
- * outside would sit over the hero's offset shadow on one page and over the
- * masthead's rule on the other.
+ * Field, language stamp and submit are one printed box, which is what lets the
+ * focus ring be drawn inside it: a ring standing off the outside would sit over
+ * the hero's offset shadow on one page and the masthead's rule on the other.
  */
 
 export type SearchVariant = "hero" | "bar";
@@ -84,18 +82,6 @@ function SearchGlyph({ size }: { size: number }) {
   );
 }
 
-/**
- * Which editions a search reads, stated rather than chosen.
- *
- * Wikipedia's own field carries a language picker in this corner, and a reader
- * arriving from it looks for one in the same place. This site has nothing to
- * pick: every comparison reads all three editions at once, which is the whole
- * product. So the stamp names the three, set in the utility face and the grey
- * of a caption rather than the ink of a control — it is a statement about the
- * search, not a fourth thing to operate. The chevron is what stays honest about
- * the panel behind it, which is the note about the editions that are not here
- * yet.
- */
 function LanguageStamp({
   variant,
   open,
@@ -115,9 +101,7 @@ function LanguageStamp({
       className={`langstamp flex flex-none items-center self-center rounded-[2px] font-mono text-ink-soft transition-[color,background-color] duration-[120ms] ease-[ease] hover:bg-ink-wash hover:text-ink focus-visible:[outline-offset:-2px] aria-expanded:bg-ink-wash aria-expanded:text-ink ${STAMP[variant]}`}
       aria-expanded={open}
       aria-controls={panelId}
-      // Opens with the codes it prints, so "click EN HE AR" reaches it: a name
-      // that only described the control would leave voice control with nothing
-      // on screen to say.
+      // Opens with the codes it prints, so "click EN HE AR" reaches it.
       aria-label={`${codes} — the Wikipedia editions this searches`}
       onClick={onToggle}
     >
@@ -188,9 +172,8 @@ const SearchBox = forwardRef<HTMLInputElement, Props>(function SearchBox(
           className={`min-w-0 flex-1 [font:inherit] border-0 bg-transparent text-inherit outline-none placeholder:text-ink-soft ${FIELD[variant]}`}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          // Short enough to survive a phone. The magnifier at the other end
-          // already says what pressing does, so the placeholder is free to say
-          // only what goes in the field.
+          // The magnifier already says what pressing does, so this only has to
+          // say what goes in the field — and the short version fits a phone.
           placeholder="Article title, or a Wikipedia URL"
           aria-label="Article title"
           autoComplete="off"
@@ -201,16 +184,10 @@ const SearchBox = forwardRef<HTMLInputElement, Props>(function SearchBox(
           open={langOpen}
           panelId={panelId}
           onToggle={() => {
-            // Only the opening is worth a row. Every one of these is somebody
-            // looking for an edition this site does not read yet.
             if (!langOpen) track("language_menu_opened", { variant });
             setLangOpen((was) => !was);
           }}
         />
-        {/* The masthead's only solid block of ink, and now with no word on it:
-            a magnifier is what the eye looks for at the end of a search field,
-            and "Search" beside a field the reader has just typed a title into
-            was labelling the obvious. */}
         <button
           type="submit"
           className={`search-submit flex flex-none items-center justify-center rounded-e-[1px] border-s border-ink bg-ink text-paper-raised transition-opacity duration-[120ms] ease-[ease] hover:opacity-[0.85] focus-visible:[outline-color:var(--color-paper-raised)] focus-visible:[outline-offset:-4px] disabled:cursor-progress disabled:hover:opacity-100 ${SUBMIT[variant]}`}
@@ -218,10 +195,9 @@ const SearchBox = forwardRef<HTMLInputElement, Props>(function SearchBox(
           aria-label={busy ? "Searching…" : "Search"}
         >
           {busy ? (
-            // Full ink still, not the dimmed-out disabled look the word
-            // "Working…" used to carry: the button is unpressable because it is
-            // busy, and a turning loader says that where a grey block says the
-            // search is off.
+            // Full ink rather than the dimmed disabled look the word "Working…"
+            // used to carry: a turning loader says busy where a grey block says
+            // switched off.
             <span
               className="block rounded-full border-[2px] border-paper-22 border-t-paper-raised animate-reveal-spin"
               style={{ width: GLYPH[variant], height: GLYPH[variant] }}
@@ -234,12 +210,9 @@ const SearchBox = forwardRef<HTMLInputElement, Props>(function SearchBox(
       </div>
 
       {langOpen && (
-        // Anchored to the trailing corner of the box rather than to the stamp,
-        // so it tucks under the search rather than hanging out of the middle of
-        // it. Raised paper with the offset shadow, like every other panel that
-        // opens on this site. `role="status"` because focus stays on the stamp
-        // and nothing in here can take it — this is a sentence, not a menu, so
-        // it is announced where it stands.
+        // Anchored to the box's trailing corner, not to the stamp, so it tucks
+        // under the search rather than out of the middle of it. `role="status"`
+        // because focus stays on the stamp and nothing in here can take it.
         <div
           id={panelId}
           role="status"
