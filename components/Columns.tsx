@@ -240,6 +240,7 @@ export default function Columns({
   articles,
   visible,
   claims,
+  onboardingClaimId = null,
   ghost = false,
   activeId = null,
   processedThrough,
@@ -251,6 +252,7 @@ export default function Columns({
   articles: Record<string, ArticleSnapshot>;
   visible: Lang[];
   claims: Claim[];
+  onboardingClaimId?: string | null;
   ghost?: boolean;
   activeId?: string | null;
   /**
@@ -442,6 +444,7 @@ export default function Columns({
                     text={text}
                     lang={lang}
                     claims={claims}
+                    onboardingClaimId={lang === visible[0] ? onboardingClaimId : null}
                     links={links}
                     ghost={ghost}
                     activeId={activeId}

@@ -13,7 +13,7 @@ import LangBars from "./LangBars";
 import LangSwitch from "./LangSwitch";
 import Legend from "./Legend";
 import Loading from "./Loading";
-import { ClaimOnboardingDot, useOnboarding } from "./Onboarding";
+import { useOnboarding } from "./Onboarding";
 import Outage from "./Outage";
 import PreviewGate from "./PreviewGate";
 import SearchBox from "./SearchBox";
@@ -974,8 +974,6 @@ export default function Compare() {
         </div>
       )}
 
-      {onboarding.step === "claim" && <ClaimOnboardingDot claimCount={claims.length} />}
-
       {/* A funded comparison is one grid. A preview is three pieces: what was
           read, the seam, and what wasn't — so the boundary lands as a single
           rule across all three columns instead of three fades at three heights.
@@ -1000,6 +998,7 @@ export default function Compare() {
                 articles={articles}
                 visible={visible}
                 claims={claims}
+                onboardingClaimId={onboarding.step === "claim" ? claims[0]?.id : null}
                 activeId={card?.claim.id ?? null}
                 processedThrough={scope?.processedThrough}
                 part="head"
@@ -1020,6 +1019,7 @@ export default function Compare() {
                 articles={articles}
                 visible={visible}
                 claims={claims}
+                onboardingClaimId={onboarding.step === "claim" ? claims[0]?.id : null}
                 processedThrough={scope?.processedThrough}
                 part="tail"
                 onLink={navigate}
@@ -1030,6 +1030,7 @@ export default function Compare() {
               articles={articles}
               visible={visible}
               claims={claims}
+              onboardingClaimId={onboarding.step === "claim" ? claims[0]?.id : null}
               // Ghosts stand in for marks nobody has yet. The first real
               // difference retires them: drifting placeholders beside located
               // claims read as though the located ones were still moving.

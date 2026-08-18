@@ -2,6 +2,7 @@
 
 import type { Claim, Lang, LinkSpan } from "@/lib/types";
 import { ghostRanges } from "@/lib/ghost";
+import { OnboardingDot } from "./Onboarding";
 
 interface Range {
   start: number;
@@ -45,6 +46,7 @@ export default function Highlighted({
   text,
   lang,
   claims,
+  onboardingClaimId = null,
   links = [],
   ghost = false,
   activeId = null,
@@ -55,6 +57,7 @@ export default function Highlighted({
   text: string;
   lang: Lang;
   claims: Claim[];
+  onboardingClaimId?: string | null;
   links?: LinkSpan[];
   ghost?: boolean;
   activeId?: string | null;
@@ -81,6 +84,7 @@ export default function Highlighted({
   const linkAt = (i: number) => links.find((l) => i >= l.start && i < l.end);
 
   const nodes: React.ReactNode[] = [];
+  let onboardingDotPlaced = false;
   for (let k = 0; k < cuts.length - 1; k++) {
     const from = cuts[k];
     const to = cuts[k + 1];
@@ -110,6 +114,8 @@ export default function Highlighted({
     }
     if (mark?.claim) {
       const found = mark.claim;
+      const showOnboardingDot = onboardingClaimId === found.id && !onboardingDotPlaced;
+      if (showOnboardingDot) onboardingDotPlaced = true;
       node = (
         // A filled band in the difference's colour, carried across line breaks
         // with box-decoration-clone so a wrapped span reads as one mark. No
@@ -131,6 +137,7 @@ export default function Highlighted({
           onBlur={onLeave}
         >
           {node}
+          {showOnboardingDot && <OnboardingDot />}
         </mark>
       );
     } else if (mark?.seed !== undefined) {

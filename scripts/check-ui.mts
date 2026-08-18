@@ -914,24 +914,26 @@ check(!(await page.$(".card")), "Escape dismisses the card");
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("mark.claim", { timeout: 30000 });
   await page.waitForSelector(".onboarding-dot", { timeout: 5000 }).catch(() => {});
+  const onboardingDotCount = (await page.$$(".onboarding-dot")).length;
   check(
-    await page.evaluate(() => {
-      const first = document.querySelector("mark.claim");
-      const dot = document.querySelector(".onboarding-dot");
-      return !!first && !!dot && first.contains(dot);
-    }),
-    "the claim tour dot sits inside the first highlight",
+    onboardingDotCount === 1,
+    "the claim tour has one dot",
+    `${onboardingDotCount} dots`,
   );
-  const firstClaim = await page.$("mark.claim");
-  if (firstClaim) {
-    await firstClaim.scrollIntoViewIfNeeded();
-    await firstClaim.hover();
+  check(
+    !!(await page.$("mark.claim:has(.onboarding-dot)")),
+    "the claim tour dot sits inside a highlight",
+  );
+  const hintedClaim = await page.$("mark.claim:has(.onboarding-dot)");
+  if (hintedClaim) {
+    await hintedClaim.scrollIntoViewIfNeeded();
+    await hintedClaim.hover();
     await page.waitForTimeout(150);
   }
-  check((await page.$(".onboarding-dot")) === null, "seeing the first claim card dismisses the dot");
+  check((await page.$(".onboarding-dot")) === null, "seeing the hinted claim card dismisses the dot");
   check(
     (await page.evaluate(() => localStorage.getItem("wiki-compare:onboarding"))) === "done",
-    "seeing the first claim card finishes the tour",
+    "seeing the hinted claim card finishes the tour",
   );
   {
     const meta = (await page.textContent(".meta > span:first-child")) ?? "";
