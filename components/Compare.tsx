@@ -5,6 +5,7 @@ import ArticlesSkeleton from "./ArticlesSkeleton";
 import Columns from "./Columns";
 import { comparePath } from "./Highlighted";
 import CreditBar from "./CreditBar";
+import CreditsModal, { creditsExplained, markCreditsExplained } from "./CreditsModal";
 import DiffNav from "./DiffNav";
 import Footer from "./Footer";
 import Landing from "./landing/Landing";
@@ -213,6 +214,10 @@ export default function Compare() {
   const [docked, setDocked] = useState(false);
   /** Which feature the onboarding dot is on — see components/Onboarding.tsx. */
   const onboarding = useOnboarding(me);
+  /** The credit explainer, up over the first article a new account opens —
+   *  whether they searched their way to it or were sent back to it by the
+   *  login redirect. See components/CreditsModal.tsx. */
+  const [explaining, setExplaining] = useState(false);
 
   const reset = () => {
     setError(null);
@@ -512,6 +517,19 @@ export default function Compare() {
     [target, funding, data?.qid, refreshMe],
   );
 
+  // On the article, not on arrival: the modal's button spends credit on the
+  // page under it, so it waits for there to be a page under it.
+  useEffect(() => {
+    if (!me?.newcomer || creditsExplained()) return;
+    if (phase !== "comparing" && phase !== "done") return;
+    setExplaining(true);
+  }, [me, phase]);
+
+  const dismissExplainer = useCallback(() => {
+    markCreditsExplained();
+    setExplaining(false);
+  }, []);
+
   useEffect(() => {
     if (!thanks) return;
     const t = setTimeout(() => setThanks(false), 9000);
@@ -693,10 +711,6 @@ export default function Compare() {
             me={me}
             onDonate={() => goDonate("masthead")}
             onLogIn={() => goLogIn("masthead")}
-            // The last stop, and the only one that needs an account: the note
-            // describes the sign-up credit.
-            hint={onboarding.step === "credits" && !!me?.newcomer}
-            onHintDone={onboarding.done}
           />
         </div>
       </header>
@@ -1018,6 +1032,20 @@ export default function Compare() {
       )}
 
       {thanks && <ThankYou />}
+
+      {explaining && me && (
+        <CreditsModal
+          creditCents={me.creditCents}
+          processed={!!data && data.scope?.kind !== "preview"}
+          onProcess={() => {
+            dismissExplainer();
+            // Already processed — by the reader who came before, or because the
+            // preview never gated it — means there is nothing left to buy.
+            if (!data || data.scope?.kind === "preview") void fund("full");
+          }}
+          onDismiss={dismissExplainer}
+        />
+      )}
 
       {card && (
         <div
