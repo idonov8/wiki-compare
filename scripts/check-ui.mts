@@ -804,6 +804,18 @@ check(!(await page.$(".card")), "Escape dismisses the card");
   await page.route("**/api/onboarding", (route) =>
     route.fulfill({ contentType: "application/json", body: '{"ok":true}' }),
   );
+  await page.evaluate(() => localStorage.setItem("wiki-compare:onboarding", "highlight"));
+  await openGate();
+  await page.waitForSelector("mark.claim", { timeout: 30000 });
+  await page.waitForSelector("mark.claim .onboarding-dot", { timeout: 5000 }).catch(() => {});
+  check(!!(await page.$("mark.claim .onboarding-dot")), "the first visible highlight gets a dot");
+  const firstVisibleMark = await page.$("mark.claim:has(.onboarding-dot)");
+  await firstVisibleMark?.hover();
+  await page.waitForSelector(".card", { timeout: 5000 }).catch(() => {});
+  check(!!(await page.$(".card")), "seeing the first highlight opens its info");
+  await page.waitForFunction(() => !document.querySelector(".onboarding-dot"), null, { timeout: 5000 })
+    .catch(() => {});
+  check((await page.$(".onboarding-dot")) === null, "seeing its info removes the dot");
   await page.evaluate(() => localStorage.setItem("wiki-compare:onboarding", "credits"));
   await openGate();
   {

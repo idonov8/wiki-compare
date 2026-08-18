@@ -247,6 +247,9 @@ export default function Columns({
   onEnter,
   onLeave,
   onLink,
+  firstHighlight = false,
+  onFirstHighlightVisible,
+  onFirstHighlightSeen,
 }: {
   articles: Record<string, ArticleSnapshot>;
   visible: Lang[];
@@ -274,6 +277,9 @@ export default function Columns({
   onEnter?: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
   onLeave?: () => void;
   onLink?: (title: string, lang: Lang) => void;
+  firstHighlight?: boolean;
+  onFirstHighlightVisible?: () => void;
+  onFirstHighlightSeen?: () => void;
 }) {
   // One state for every column's "Key facts" accordion, so opening it in any
   // language opens it in all of them — they're the same disclosure, just
@@ -347,6 +353,12 @@ export default function Columns({
   /** How far in from each page edge the last edition standing sets its text. */
   const inset =
     layout.width > READING_WIDTH ? (layout.width - READING_WIDTH) / (2 * layout.width) : 0;
+  const firstHighlightId = claims.find((claim) =>
+    visible.some((lang) => claim.spans[lang]),
+  )?.id;
+  const firstHighlightLang = firstHighlightId
+    ? visible.find((lang) => claims.some((claim) => claim.id === firstHighlightId && claim.spans[lang]))
+    : undefined;
 
   const bodyOf = (lang: Lang): Section[] => {
     const article = articles[lang];
@@ -445,6 +457,10 @@ export default function Columns({
                     links={links}
                     ghost={ghost}
                     activeId={activeId}
+                    firstClaimId={lang === firstHighlightLang ? firstHighlightId : undefined}
+                    showOnboardingDot={firstHighlight}
+                    onFirstVisible={onFirstHighlightVisible}
+                    onFirstSeen={onFirstHighlightSeen}
                     onEnter={onEnter}
                     onLeave={onLeave}
                     onLink={onLink}

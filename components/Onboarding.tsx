@@ -8,10 +8,11 @@ import type { MeResponse } from "@/lib/types";
  * them: the length chart, the marks key, the credit meter. Dismissing the note
  * a feature opens moves the dot on, and only one dot exists at a time.
  */
-export type OnboardingStep = "bars" | "marks" | "credits";
+export type OnboardingStep = "highlight" | "bars" | "marks" | "credits";
 
 /** `null` is the end of the tour. */
 const NEXT: Record<OnboardingStep, OnboardingStep | null> = {
+  highlight: "bars",
   bars: "marks",
   marks: "credits",
   credits: null,
@@ -33,10 +34,10 @@ function readCursor(): OnboardingStep | null {
   try {
     const at = localStorage.getItem(CURSOR);
     if (at) return at in NEXT ? (at as OnboardingStep) : null;
-    return LEGACY.some((key) => localStorage.getItem(key) === "1") ? null : "bars";
+    return LEGACY.some((key) => localStorage.getItem(key) === "1") ? null : "highlight";
   } catch {
     // Storage denied (private mode). Worth running once even where it cannot stick.
-    return "bars";
+    return "highlight";
   }
 }
 
@@ -53,10 +54,13 @@ function writeCursor(step: OnboardingStep | null): void {
  */
 export function useOnboarding(me: MeResponse | null): {
   step: OnboardingStep | null;
+  highlightVisible: boolean;
+  onHighlightVisible: () => void;
   done: () => void;
 } {
   /** Starts `null` so no dot flashes in during hydration. */
   const [step, setStep] = useState<OnboardingStep | null>(null);
+  const [highlightVisible, setHighlightVisible] = useState(false);
 
   useEffect(() => {
     setStep(readCursor());
@@ -64,6 +68,7 @@ export function useOnboarding(me: MeResponse | null): {
 
   const settle = useCallback((next: OnboardingStep | null) => {
     setStep(next);
+    setHighlightVisible(false);
     writeCursor(next);
     // Fire-and-forget: this device goes by the cursor above, and a 401 for an
     // unauthenticated caller changes nothing.
@@ -84,6 +89,10 @@ export function useOnboarding(me: MeResponse | null): {
 
   return {
     step,
+    highlightVisible,
+    onHighlightVisible: useCallback(() => {
+      setHighlightVisible(true);
+    }, []),
     done: useCallback(() => settle(step ? NEXT[step] : null), [settle, step]),
   };
 }

@@ -453,6 +453,12 @@ export default function Compare() {
    *  that got stored. */
   const claims = data?.claims ?? liveClaims;
 
+  useEffect(() => {
+    if (onboarding.step === "highlight" && phase === "done" && claims.length === 0) {
+      onboarding.done();
+    }
+  }, [claims.length, onboarding.done, onboarding.step, phase]);
+
   const goDonate = useCallback((from: string) => {
     void track("gate_cta_clicked", { from });
     window.location.href = `/donate?from=${encodeURIComponent(from)}`;
@@ -885,6 +891,9 @@ export default function Compare() {
                 articles={articles}
                 visible={visible}
                 claims={claims}
+                firstHighlight={onboarding.step === "highlight" && onboarding.highlightVisible}
+                onFirstHighlightVisible={onboarding.onHighlightVisible}
+                onFirstHighlightSeen={onboarding.done}
                 activeId={card?.claim.id ?? null}
                 processedThrough={scope?.processedThrough}
                 part="head"
@@ -915,6 +924,9 @@ export default function Compare() {
               articles={articles}
               visible={visible}
               claims={claims}
+              firstHighlight={onboarding.step === "highlight" && onboarding.highlightVisible}
+              onFirstHighlightVisible={onboarding.onHighlightVisible}
+              onFirstHighlightSeen={onboarding.done}
               // Ghosts stand in for marks nobody has yet. The first real
               // difference retires them: drifting placeholders beside located
               // claims read as though the located ones were still moving.

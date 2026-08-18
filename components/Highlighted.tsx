@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { Claim, Lang, LinkSpan } from "@/lib/types";
 import { ghostRanges } from "@/lib/ghost";
+import { OnboardingDot } from "./Onboarding";
 
 interface Range {
   start: number;
@@ -51,6 +53,10 @@ export default function Highlighted({
   onEnter,
   onLeave,
   onLink,
+  firstClaimId,
+  showOnboardingDot = false,
+  onFirstVisible,
+  onFirstSeen,
 }: {
   text: string;
   lang: Lang;
@@ -61,8 +67,25 @@ export default function Highlighted({
   onEnter?: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
   onLeave?: () => void;
   onLink?: (title: string, lang: Lang) => void;
+  firstClaimId?: string;
+  showOnboardingDot?: boolean;
+  onFirstVisible?: () => void;
+  onFirstSeen?: () => void;
 }) {
+  const firstMark = useRef<HTMLElement>(null);
   const ranges: Range[] = ghost ? ghostRanges(text) : locate(text, lang, claims);
+
+  useEffect(() => {
+    if (!firstClaimId || !firstMark.current || !onFirstVisible) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) onFirstVisible();
+      },
+      { threshold: 0.01 },
+    );
+    observer.observe(firstMark.current);
+    return () => observer.disconnect();
+  }, [firstClaimId, onFirstVisible]);
   if (!ranges.length && !links.length)
     return (
       <span className="body-text whitespace-pre-wrap font-wiki text-[14.5px] leading-[1.62] text-wiki-text">
@@ -110,6 +133,7 @@ export default function Highlighted({
     }
     if (mark?.claim) {
       const found = mark.claim;
+      const first = found.id === firstClaimId;
       node = (
         // A filled band in the difference's colour, carried across line breaks
         // with box-decoration-clone so a wrapped span reads as one mark. No
@@ -118,18 +142,26 @@ export default function Highlighted({
         // across direction changes. A darker inset shadow under the band keeps
         // the type legible without relying on the fill colour alone.
         <mark
-          className="claim text-wiki-text bg-transparent rounded-[2px] py-[0.09em] box-decoration-clone cursor-help transition-[background-color,box-shadow] duration-[120ms] ease-[ease] data-[type=contradiction]:bg-mark-contradiction data-[type=contradiction]:inset-shadow-contradiction data-[type=unique]:bg-mark-unique data-[type=unique]:inset-shadow-unique data-[type=framing]:bg-mark-framing data-[type=framing]:inset-shadow-framing data-[active=true]:data-[type=contradiction]:bg-mark-contradiction-on data-[active=true]:data-[type=unique]:bg-mark-unique-on data-[active=true]:data-[type=framing]:bg-mark-framing-on"
+          ref={first ? firstMark : undefined}
+          className="claim relative text-wiki-text bg-transparent rounded-[2px] py-[0.09em] box-decoration-clone cursor-help transition-[background-color,box-shadow] duration-[120ms] ease-[ease] data-[type=contradiction]:bg-mark-contradiction data-[type=contradiction]:inset-shadow-contradiction data-[type=unique]:bg-mark-unique data-[type=unique]:inset-shadow-unique data-[type=framing]:bg-mark-framing data-[type=framing]:inset-shadow-framing data-[active=true]:data-[type=contradiction]:bg-mark-contradiction-on data-[active=true]:data-[type=unique]:bg-mark-unique-on data-[active=true]:data-[type=framing]:bg-mark-framing-on"
           tabIndex={0}
           role="button"
           aria-describedby={activeId === found.id ? "claim-card" : undefined}
           aria-label={`${found.type}: ${found.summary}`}
           data-type={found.type}
           data-active={activeId === found.id}
-          onMouseEnter={(e) => onEnter?.(found, e)}
-          onFocus={(e) => onEnter?.(found, e)}
+          onMouseEnter={(e) => {
+            onEnter?.(found, e);
+            if (first) onFirstSeen?.();
+          }}
+          onFocus={(e) => {
+            onEnter?.(found, e);
+            if (first) onFirstSeen?.();
+          }}
           onMouseLeave={onLeave}
           onBlur={onLeave}
         >
+          {first && showOnboardingDot && <OnboardingDot />}
           {node}
         </mark>
       );
