@@ -1131,15 +1131,12 @@ export default function Compare() {
 
       {thanks && <ThankYou />}
 
-      {explaining && me && (
+      {explaining && me && data?.scope?.kind === "preview" && (
         <CreditsModal
           creditCents={me.creditCents}
-          processed={!!data && data.scope?.kind !== "preview"}
           onProcess={() => {
             dismissExplainer();
-            // Already processed — by the reader who came before, or because the
-            // preview never gated it — means there is nothing left to buy.
-            if (!data || data.scope?.kind === "preview") void fund("full");
+            void fund("full");
           }}
           onDismiss={dismissExplainer}
         />

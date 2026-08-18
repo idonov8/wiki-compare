@@ -46,14 +46,10 @@ export function markCreditsExplained(): void {
  */
 export default function CreditsModal({
   creditCents,
-  processed,
   onProcess,
   onDismiss,
 }: {
   creditCents: number;
-  /** Whether the article underneath is already fully processed, in which case
-   *  there is nothing to buy and the button just puts the modal away. */
-  processed: boolean;
   onProcess: () => void;
   onDismiss: () => void;
 }) {
@@ -155,16 +151,14 @@ export default function CreditsModal({
               className="credits-modal-cta border border-ink bg-ink px-[32px] py-[15px] text-[17px] text-paper-raised transition-transform duration-150 ease-[ease] hover:enabled:-translate-y-[1px] disabled:cursor-progress disabled:opacity-45"
               onClick={onProcess}
             >
-              {processed ? "Read this article" : "Donate this article"}
+              Donate this article
             </button>
 
             {/* What pressing it means, under the button rather than in it — same
                 pairing as the gate's donate button. */}
-            {!processed && (
-              <p className="credits-modal-note mt-[15px] font-mono text-[13px] leading-[1.6] text-ink-soft">
-                This spends ~{formatCents(PRICE_PER_ARTICLE_CENTS)} of your {formatCents(creditCents)} credit
-              </p>
-            )}
+            <p className="credits-modal-note mt-[15px] font-mono text-[13px] leading-[1.6] text-ink-soft">
+              This spends ~{formatCents(PRICE_PER_ARTICLE_CENTS)} of your {formatCents(creditCents)} credit
+            </p>
           </div>
         </div>
       </div>
