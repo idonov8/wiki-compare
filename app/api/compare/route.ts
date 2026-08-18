@@ -337,6 +337,16 @@ export async function GET(request: Request) {
  * in a transaction with the run — the model call takes about a minute, and
  * holding a row lock across it would serialise every donor in the system behind
  * whoever is currently reading the longest article.
+ *
+ * `?stream=1` answers in the same NDJSON as GET, and for the same reason: a
+ * funded run is a minute of work whose articles are ready in a second and whose
+ * differences arrive one at a time. The reader who just paid for it is the last
+ * person who should be made to watch a spinner until the end.
+ *
+ * The split between the two shapes is the debit. Everything up to and including
+ * it answers with a status code, because not a byte has been written yet — "not
+ * enough credit" is a 402, not a 200 carrying bad news. Everything after it is a
+ * line in the stream, because by then the status is long spent.
  */
 export async function POST(request: Request) {
   const user = await getSessionUser(request.headers);
@@ -358,9 +368,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Add a title." }, { status: 400 });
   }
 
-  let charged = false;
+  const streaming = new URL(request.url).searchParams.get("stream") === "1";
+  const failed = (error: unknown) =>
+    NextResponse.json(
+      { error: error instanceof Error ? error.message : "Comparison failed." },
+      { status: 500 },
+    );
+
+  let target: Target;
+  let remaining: number;
   try {
-    const target = await resolveTarget(title, sourceLang);
+    target = await resolveTarget(title, sourceLang);
     const { qid, revids } = target;
     const fullKey = comparisonKey(qid, revids, PROMPT_VERSION, PARSER_VERSION, "full");
 
@@ -378,52 +396,80 @@ export async function POST(request: Request) {
       );
       if (existing && existing.result.scope?.kind !== "preview") {
         void bumpServedCount(existing.cacheKey);
-        return NextResponse.json({
-          ...existing.result,
-          fromCache: true,
-          charged: false,
-          cache: cacheInfo(existing.result, existing.computedAt, target),
-        });
+        const cache = cacheInfo(existing.result, existing.computedAt, target);
+        // A finished comparison is one `done` line. It still has to be a stream:
+        // the client asked for one, and answering in another shape would put an
+        // otherwise-unexercised branch on the paid path.
+        return streaming
+          ? ndjson(async (emit) =>
+              emit({ event: "done", result: existing.result, fromCache: true, cache }),
+            )
+          : NextResponse.json({ ...existing.result, fromCache: true, charged: false, cache });
       }
     }
 
-    const remaining = await debit(user.id, PRICE_PER_ARTICLE_CENTS);
-    if (remaining === null) {
+    const debited = await debit(user.id, PRICE_PER_ARTICLE_CENTS);
+    if (debited === null) {
       return NextResponse.json(
         { error: "Not enough credit for this article.", creditCents: user.creditCents },
         { status: 402 },
       );
     }
-    charged = true;
+    remaining = debited;
+  } catch (error) {
+    // Nothing has been charged on this path, so there is nothing to refund.
+    return failed(error);
+  }
 
-    const { result, cacheKey } = await computeAndStore(target, "full", {
-      overwrite: kind === "refresh",
-      fundedBy: user.id,
+  /** The read the credit just bought, handing it back if it does not arrive. */
+  const read = async (emit: (event: CompareEvent) => void) => {
+    try {
+      const { result, cacheKey } = await computeAndStore(target, "full", {
+        overwrite: kind === "refresh",
+        fundedBy: user.id,
+        emit,
+      });
+      await recordSpend({
+        userId: user.id,
+        qid: target.qid,
+        cacheKey,
+        kind,
+        chargedCents: PRICE_PER_ARTICLE_CENTS,
+        actualCostCents: Math.round((result.usage.costUsd ?? 0) * 100),
+      });
+      void capture(
+        "credits_spent",
+        {
+          qid: target.qid,
+          kind,
+          chargedCents: PRICE_PER_ARTICLE_CENTS,
+          costUsd: result.usage.costUsd ?? 0,
+        },
+        user.id,
+      );
+      return result;
+    } catch (error) {
+      await grant(user.id, PRICE_PER_ARTICLE_CENTS);
+      throw error;
+    }
+  };
+
+  if (streaming) {
+    // A failure here travels as a final `error` line on a 200 — `ndjson` writes
+    // it for anything `read` throws, after the refund above has gone through.
+    return ndjson(async (emit) => {
+      emit({ event: "done", result: await read(emit), fromCache: false });
     });
+  }
 
-    await recordSpend({
-      userId: user.id,
-      qid,
-      cacheKey,
-      kind,
-      chargedCents: PRICE_PER_ARTICLE_CENTS,
-      actualCostCents: Math.round((result.usage.costUsd ?? 0) * 100),
-    });
-    void capture(
-      "credits_spent",
-      { qid, kind, chargedCents: PRICE_PER_ARTICLE_CENTS, costUsd: result.usage.costUsd ?? 0 },
-      user.id,
-    );
-
+  try {
     return NextResponse.json({
-      ...result,
+      ...(await read(() => {})),
       fromCache: false,
       charged: true,
       creditCents: remaining,
     });
   } catch (error) {
-    if (charged) await grant(user.id, PRICE_PER_ARTICLE_CENTS);
-    const message = error instanceof Error ? error.message : "Comparison failed.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return failed(error);
   }
 }

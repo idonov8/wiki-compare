@@ -268,6 +268,17 @@ the end of it would be thanking somebody for waiting. `/api/me` reports `newcome
 is still the sign-up grant, untouched — which is what raises the note beside the meter explaining
 where the credit came from.
 
+The funded run answers in the same NDJSON stream the free one does, so that minute is spent
+watching the article being read rather than a disabled button. Nothing on the page moves on the
+press — a donation can still be refused, and blanking the article optimistically would flash it
+away for a request that never started. The handover happens on the first line the server sends:
+the gate goes when the `scope` line says the read is now `full`, and the differences replace the
+preview's as they are found. The split between the two response shapes is the debit. Everything up
+to and including it answers with a status code, because not a byte has been written yet — "not
+enough credit" is a 402, not a 200 carrying bad news. Everything after it is a line in the stream,
+because by then the status is long spent, and a run that fails there emits an `error` line once
+the credit has been handed back.
+
 Payment is a mock. The pay button records the amount, the running-costs contribution and whether
 it was meant to repeat monthly, then admits it cannot take the money and grants $5 anyway. The row
 it writes is the entire point: the count of people who tried to give money to something that could
@@ -410,6 +421,7 @@ can overlap without either being lost.
 
 ```
 app/api/compare/route.ts   GET: cache, or a free preview. POST: debits a credit, reads it all
+                           both stream NDJSON under ?stream=1; `done` is the last line either way
 app/api/recent/route.ts    the recently cached list, for the landing page
 app/api/auth/[...all]/     Better Auth: sign-in, callback, session
 app/api/me/route.ts        balance, and what this account's donations have been read

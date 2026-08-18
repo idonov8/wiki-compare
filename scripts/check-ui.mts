@@ -867,9 +867,23 @@ check(!(await page.$(".card")), "Escape dismisses the card");
           postData: undefined,
         })
       ).json();
+      // The funded run reports as it goes, exactly as the free one does, so the
+      // reply is NDJSON and not a single object: the articles, the scope that
+      // retires the gate, then the differences, then the result. `fulfill` can
+      // only hand over a whole body at once, so what this checks is that the
+      // client reads every one of those lines off a POST — the pacing itself is
+      // the same code `open` runs against the real stream above.
+      const result = { ...json, scope: { kind: "full" } };
+      const lines = [
+        { event: "articles", qid: json.qid, articles: json.articles },
+        { event: "scope", scope: { kind: "full" } },
+        { event: "coverage", coverage: json.coverage ?? [] },
+        ...(json.claims ?? []).map((claim: unknown) => ({ event: "claim", claim })),
+        { event: "done", result, fromCache: false },
+      ];
       route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify({ ...json, scope: { kind: "full" }, fromCache: false, charged: true }),
+        contentType: "application/x-ndjson",
+        body: lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
       });
     },
   );
@@ -890,6 +904,14 @@ check(!(await page.$(".card")), "Escape dismisses the card");
   await page.waitForTimeout(5200);
   check((await page.$(".thanks")) === null, "and takes itself away after five seconds");
   check((await page.$(".gate")) === null, "the funded article no longer carries a gate");
+  check(
+    (await page.$$("mark.claim")).length > 0,
+    "and the differences the stream sent are marked in it",
+  );
+  {
+    const meta = (await page.textContent(".meta > span:first-child")) ?? "";
+    check(!/preview/.test(meta), "and the strip no longer calls the read a preview", meta);
+  }
   await page.unroute((url) => url.pathname === "/api/compare");
 
   // Out of credit: the one state where the ask really is money.
