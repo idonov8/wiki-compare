@@ -199,9 +199,10 @@ check(
 await page.waitForTimeout(1000);
 const charts = await page.$$eval(".recent li button", (els) =>
   els.map((el) => ({
-    bars: [...el.querySelectorAll(".recent-words > span")].map(
+    bars: [...el.querySelectorAll(".recent-bars > span")].map(
       (bar) => (bar as HTMLElement).getBoundingClientRect().height,
     ),
+    codes: (el.querySelector(".recent-words")?.textContent ?? "").trim(),
     segments: el.querySelectorAll(".recent-ratio > span").length,
     words: el.querySelector(".recent-words")?.getAttribute("title") ?? "",
     ratio: el.querySelector(".recent-ratio")?.getAttribute("title") ?? "",
@@ -216,6 +217,11 @@ check(
   charts[1].bars[0] <= 1 && charts[1].bars[2] > charts[1].bars[1],
   "an edition the subject does not have draws a stub, not a bar",
   charts[1].bars.join("/"),
+);
+check(
+  charts.every((c) => c.codes === "enhear"),
+  "and names the edition each bar stands for, in that order",
+  charts.map((c) => c.codes).join("; "),
 );
 check(
   charts[0].segments === 3 && charts[1].segments === 0,
