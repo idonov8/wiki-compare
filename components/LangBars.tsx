@@ -179,9 +179,6 @@ export default function LangBars({
           role="status"
           className="langbars-note absolute z-50 top-[calc(100%_+_10px)] start-0 w-[min(340px,calc(100vw_-_44px))] px-[15px] pt-[12px] pb-[14px] bg-paper-raised border border-ink rounded-[2px] shadow-offset text-ink animate-reveal-in"
         >
-          <p className="m-0 mb-[8px] font-mono text-[11px] tracking-[0.09em] uppercase text-ink-soft">
-            what the bars mean
-          </p>
           <p className="m-0 text-[14px] leading-[1.6] text-ink-soft">
             The bars show word-count of each article. Click a language to toggle its visibility.
           </p>

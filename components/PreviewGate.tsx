@@ -96,7 +96,7 @@ export default function PreviewGate({
           </>
         ) : (
           <>
-            We use AI to compare the articles
+            We use AI to find the gaps
           </>
         )}
       </p>

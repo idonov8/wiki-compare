@@ -1,8 +1,8 @@
 import SignIn from "@/components/SignIn";
 
 export const metadata = {
-  title: "Log in — wiki-compare",
-  description: "A link in your inbox, and five articles to open for everyone.",
+  title: "Log in to Wiki Compare",
+  description: "Log in for free to compare full articles",
 };
 
 export default function Page() {
