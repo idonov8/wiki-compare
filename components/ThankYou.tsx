@@ -16,15 +16,17 @@
 export default function ThankYou() {
   return (
     <div
-      className="thanks fixed z-[100] bottom-[5%] max-cols:bottom-[76px] left-1/2 -translate-x-1/2 w-[max-content] max-w-[min(420px,calc(100vw_-_32px))] px-[18px] py-[13px] bg-paper-raised border border-ink rounded-[2px] shadow-offset text-center pointer-events-none animate-reveal-in"
+      className="thanks fixed isolate z-[100] bottom-[5%] max-cols:bottom-[76px] left-1/2 -translate-x-1/2 w-[max-content] max-w-[min(420px,calc(100vw_-_32px))] p-[2px] rounded-[4px] shadow-offset text-center pointer-events-none animate-reveal-in"
       role="status"
     >
-      <strong className="thanks-title block font-display text-[22px] font-normal leading-[1.2]">
-        Thank you
-      </strong>
-      <span className="thanks-note mt-[4px] block font-mono text-[11px] leading-[1.55] tracking-[0.04em] text-ink-soft">
-        Your donation makes the site better for everyone
-      </span>
+      <div className="relative z-10 px-[18px] py-[13px] bg-paper-raised border border-ink rounded-[2px]">
+        <strong className="thanks-title block font-display text-[22px] font-normal leading-[1.2]">
+          Thank you
+        </strong>
+        <span className="thanks-note mt-[4px] block font-mono text-[11px] leading-[1.55] tracking-[0.04em] text-ink-soft">
+          Your donation makes the site better for everyone
+        </span>
+      </div>
     </div>
   );
 }
