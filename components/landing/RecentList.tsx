@@ -46,7 +46,11 @@ const claimsSaid = (claims: RecentArticle["claims"]): string =>
     .join(", ") || "no differences found";
 
 /**
- * How much each edition has written, as three bars in a fixed en·he·ar order.
+ * How much each edition has written, as three bars in a fixed en·he·ar order,
+ * each over its own code — the same pairing of bar and language the masthead
+ * chart makes, since a bar nobody can attribute to a language is a texture
+ * rather than a reading. Fixed order, so the codes stay where a reader who has
+ * looked at one row already expects to find them.
  *
  * Scaled against this subject's own longest edition rather than the ledger's:
  * the fact worth reading off a row is how lopsided its editions are, and a
@@ -56,26 +60,37 @@ const claimsSaid = (claims: RecentArticle["claims"]): string =>
 function WordBars({ words, delay }: { words: RecentArticle["words"]; delay: number }) {
   const longest = Math.max(1, ...LANGS.map((lang) => words[lang] ?? 0));
   return (
-    <span
-      className="recent-words flex h-[18px] items-end gap-[3px]"
-      title={wordsSaid(words)}
-      aria-hidden
-    >
-      {LANGS.map((lang, index) => {
-        const count = words[lang] ?? 0;
-        return (
+    <span className="recent-words flex flex-col" title={wordsSaid(words)} aria-hidden>
+      <span className="recent-bars flex h-[18px] items-end gap-[4px] border-b border-rule pb-[3px]">
+        {LANGS.map((lang, index) => {
+          const count = words[lang] ?? 0;
+          return (
+            <span
+              key={lang}
+              className={`w-[12px] origin-bottom animate-bar-rise ${
+                count ? "bg-ink-soft group-hover:bg-ink" : "bg-ink-wash-strong"
+              }`}
+              style={{
+                height: count ? Math.max(SHORTEST, Math.round((count / longest) * TALLEST)) : 1,
+                animationDelay: `${delay + index * 40}ms`,
+              }}
+            />
+          );
+        })}
+      </span>
+      {/* A code over an edition the subject does not have is printed in the same
+          wash as its stub: the pair still says "asked for, not there", which is
+          a different fact from a language the ledger never mentions. */}
+      <span className="mt-[4px] flex gap-[4px] font-mono text-[9px] leading-none tracking-[0.06em] uppercase">
+        {LANGS.map((lang) => (
           <span
             key={lang}
-            className={`w-[6px] origin-bottom animate-bar-rise ${
-              count ? "bg-ink-soft group-hover:bg-ink" : "bg-ink-wash-strong"
-            }`}
-            style={{
-              height: count ? Math.max(SHORTEST, Math.round((count / longest) * TALLEST)) : 1,
-              animationDelay: `${delay + index * 40}ms`,
-            }}
-          />
-        );
-      })}
+            className={`w-[12px] text-center ${words[lang] ? "text-ink-soft" : "text-ink-wash-strong"}`}
+          >
+            {lang}
+          </span>
+        ))}
+      </span>
     </span>
   );
 }
@@ -90,15 +105,20 @@ function WordBars({ words, delay }: { words: RecentArticle["words"]; delay: numb
  */
 function RatioLine({ claims, delay }: { claims: RecentArticle["claims"]; delay: number }) {
   return (
-    <span
-      className="recent-ratio flex h-[6px] w-[84px] origin-left animate-line-draw gap-px bg-ink-wash max-tight:w-[54px]"
-      title={claimsSaid(claims)}
-      style={{ animationDelay: `${delay + 140}ms` }}
-      aria-hidden
-    >
-      {KINDS.filter(({ kind }) => claims[kind]).map(({ kind, fill }) => (
-        <span key={kind} className={fill} style={{ flex: `${claims[kind]} 0 0%` }} />
-      ))}
+    // Padded down to the height of the bar zone beside it so the two rules meet
+    // into one axis across the mark, the same way the masthead's baselines run
+    // unbroken under all three of its bars.
+    <span className="mt-[9px] border-b border-rule pb-[3px]">
+      <span
+        className="recent-ratio flex h-[6px] w-[84px] origin-left animate-line-draw gap-px bg-ink-wash max-tight:w-[54px]"
+        title={claimsSaid(claims)}
+        style={{ animationDelay: `${delay + 140}ms` }}
+        aria-hidden
+      >
+        {KINDS.filter(({ kind }) => claims[kind]).map(({ kind, fill }) => (
+          <span key={kind} className={fill} style={{ flex: `${claims[kind]} 0 0%` }} />
+        ))}
+      </span>
     </span>
   );
 }
@@ -175,13 +195,13 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                     >
                       Loading recent article title
                     </span>
-                    <span className="flex shrink-0 items-end gap-[12px] self-center border-b border-rule pb-[3px] max-tight:gap-[8px]">
+                    <span className="flex shrink-0 items-start gap-[12px] self-center border-b border-rule pb-[3px] max-tight:gap-[8px]">
                       <span
-                        className="h-[18px] w-[24px] animate-chip-breathe bg-ink-wash-strong"
+                        className="h-[18px] w-[44px] animate-chip-breathe bg-ink-wash-strong"
                         style={{ animationDelay: `${i * -0.3}s` }}
                       />
                       <span
-                        className="h-[6px] w-[84px] animate-chip-breathe bg-ink-wash-strong max-tight:w-[54px]"
+                        className="mt-[9px] h-[6px] w-[84px] animate-chip-breathe bg-ink-wash-strong max-tight:w-[54px]"
                         style={{ animationDelay: `${i * -0.3}s` }}
                       />
                     </span>
@@ -216,7 +236,7 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                         on it and the difference line runs along it, so the two
                         read as one reading of the row rather than as two
                         widgets that happen to be adjacent. */}
-                    <span className="flex shrink-0 items-end gap-[12px] self-center border-b border-rule pb-[3px] max-tight:gap-[8px]">
+                    <span className="flex shrink-0 items-start gap-[12px] self-center max-tight:gap-[8px]">
                       {/* The ledger plots itself once, top down, as the fetch
                           lands. Capped a few rows in: past that the cascade is
                           a queue rather than a reading, and a row scrolled to
@@ -253,8 +273,9 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
 
       {/* What the two marks on every row mean, said once under the ledger rather
           than as column headings: the rows are the thing being read, and a
-          header strip repeating three language codes twelve rows above the bars
-          it labels would be the louder half of the page. */}
+          header strip twelve rows above the marks it labels would be the louder
+          half of the page. The bars name their own languages in the row, so all
+          this has left to say is what is being counted. */}
       <div className="mt-[11px] flex flex-wrap items-center gap-x-[18px] gap-y-[6px] px-[8px] font-mono text-[10px] tracking-[0.09em] uppercase text-ink-soft">
         <span className="flex items-center gap-[6px]">
           <span className="flex h-[9px] items-end gap-[2px]" aria-hidden>
@@ -262,7 +283,7 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
             <span className="h-[4px] w-[3px] bg-ink-soft" />
             <span className="h-[2px] w-[3px] bg-ink-soft" />
           </span>
-          words per version, en·he·ar
+          words per version
         </span>
         {KINDS.map(({ kind, fill, noun }) => (
           <span key={kind} className="flex items-center gap-[6px]">
