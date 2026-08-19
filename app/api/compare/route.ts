@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import {
-  CACHE_WINDOW_DAYS,
   type CacheInfo,
   type CompareEvent,
   type ComparisonResult,
@@ -145,14 +144,8 @@ function editedSince(result: ComparisonResult, target: Target): Lang[] {
   return target.langs.filter((l) => result.articles[l]?.revid !== target.revids[l]);
 }
 
-function cacheInfo(result: ComparisonResult, computedAt: string, target: Target) {
-  return {
-    computedAt,
-    expiresAt: new Date(
-      new Date(computedAt).getTime() + CACHE_WINDOW_DAYS * 86_400_000,
-    ).toISOString(),
-    edited: editedSince(result, target),
-  };
+function cacheInfo(result: ComparisonResult, computedAt: string, target: Target): CacheInfo {
+  return { computedAt, edited: editedSince(result, target) };
 }
 
 /**
@@ -392,7 +385,7 @@ export async function POST(request: Request) {
         fullKey,
         PROMPT_VERSION,
         PARSER_VERSION,
-        0,
+        true,
       );
       if (existing && existing.result.scope?.kind !== "preview") {
         void bumpServedCount(existing.cacheKey);
