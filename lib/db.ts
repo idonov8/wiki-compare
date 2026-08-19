@@ -1,6 +1,5 @@
 import { neon } from "@neondatabase/serverless";
 import {
-  CACHE_WINDOW_DAYS,
   LANGS,
   type ArticleSnapshot,
   type ComparisonResult,
@@ -24,8 +23,9 @@ function sql() {
  * comparison on all three revids plus the prompt version means the model runs
  * again only when an article actually changed or the prompt did.
  *
- * Rows are still never overwritten by that rule alone, but reads are looser than
- * writes: see CACHE_WINDOW_DAYS in lib/types.ts.
+ * Reads are looser than writes: a stored comparison keeps answering after the
+ * revisions it was computed from have moved on, until somebody pays to have the
+ * article read again. See `getCachedComparison`.
  */
 
 export async function getArticle(
@@ -86,34 +86,46 @@ export interface CachedComparison {
 /**
  * The comparison to serve for `qid`, or null if none is usable.
  *
- * One statement covers both reads. An exact key match is preferred whatever its
- * age — it describes exactly the revisions being asked about, so it is never
- * stale — and otherwise the newest row inside the window answers. Sorting on key
- * equality first is what makes that preference hold rather than merely usually
- * hold, since a row for superseded revisions can be the more recently written of
- * the two.
+ * One statement covers both reads. An exact key match is preferred — it
+ * describes exactly the revisions being asked about — and otherwise the newest
+ * row for the subject answers, however old it is. Sorting on key equality first
+ * is what makes that preference hold rather than merely usually hold, since a
+ * row for superseded revisions can be the more recently written of the two.
  *
- * The window forgives one thing only: revision ids that have moved on. A row
- * computed under a different prompt or parser version is never reused for
- * revisions it was not keyed to, because those two versions are the whole way we
- * say "our reading of this changed" — letting them ride the window would make
- * every prompt fix invisible for three days on precisely the busy articles it
- * was written for. The versions are read out of the stored result rather than
- * parsed back off the key, which keeps the key's shape an implementation detail
- * of `comparisonKey`.
+ * Answering past an edit is the point rather than a concession. A Wikipedia
+ * article of any prominence is edited several times a day, most of those edits
+ * touching a category or a citation, and a cache that stopped answering for them
+ * would re-read the whole article — three fetches, a parse and the model —
+ * because somebody moved a comma. Nothing is hidden by serving the older answer:
+ * the key still records exactly which revisions it describes, so `edited` says
+ * which editions have moved and the badge offers the re-read. Reprocessing is
+ * something a reader asks for, never something that happens to them for opening
+ * a page.
+ *
+ * What is never reused is a row computed under a different prompt or parser
+ * version, for revisions it was not keyed to: those two versions are the whole
+ * way we say "our reading of this changed", and reusing across them would make
+ * every prompt fix invisible on precisely the articles it was written for. The
+ * versions are read out of the stored result rather than parsed back off the
+ * key, which keeps the key's shape an implementation detail of `comparisonKey`.
  *
  * Scope adds a second preference, and it sits above exactness rather than below
  * it: a full comparison wins over a preview even when the preview is the exact
- * one and the full run is riding the window. A preview read four sections and
- * stopped; a full run read the article. Serving the preview because its revision
- * ids match more precisely would fade out most of the page in order to be
- * pedantic about revisions that, by the window's own argument, have usually only
- * moved by a citation. Nothing is hidden by the choice — an answer older than
- * live still carries the `cached` badge, whatever its scope.
+ * one and the full run describes superseded revisions. A preview read four
+ * sections and stopped; a full run read the article. Serving the preview because
+ * its revision ids match more precisely would fade out most of the page in order
+ * to be pedantic about revisions that have usually only moved by a citation.
+ * Nothing is hidden by the choice — an answer older than live still carries the
+ * `cached` badge, whatever its scope.
  *
  * So the ranking is: the exact full run, then the newest full run, then the
  * exact preview, then the newest preview. Rows written before previews existed
  * have no `scope` at all and COALESCE reads them as full, which is what they are.
+ *
+ * `exactOnly` drops everything but the two keys, and exists for the check the
+ * funded path makes before it charges: there the question is "does this exact
+ * comparison already exist", and an answer about neighbouring revisions would
+ * hand somebody a different comparison than the one they pressed the button for.
  */
 export async function getCachedComparison(
   qid: string,
@@ -121,7 +133,7 @@ export async function getCachedComparison(
   previewKey: string,
   promptVersion: string,
   parserVersion: string,
-  windowDays: number = CACHE_WINDOW_DAYS,
+  exactOnly = false,
 ): Promise<CachedComparison | null> {
   const rows = await sql()`
     SELECT cache_key, result, computed_at
@@ -130,7 +142,7 @@ export async function getCachedComparison(
       AND (
         cache_key IN (${fullKey}, ${previewKey})
         OR (
-          computed_at > now() - make_interval(days => ${windowDays}::int)
+          NOT ${exactOnly}::boolean
           AND result->>'promptVersion' = ${promptVersion}
           AND result->>'parserVersion' IS NOT DISTINCT FROM ${parserVersion}
         )
