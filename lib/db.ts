@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless";
+import { PROMPT_VERSION } from "./compare";
 import {
   LANGS,
   type ArticleSnapshot,
@@ -7,6 +8,7 @@ import {
   type RecentArticle,
   type ScopeKind,
 } from "./types";
+import { PARSER_VERSION } from "./wikipedia";
 
 function sql() {
   const url = process.env.DATABASE_URL;
@@ -181,11 +183,20 @@ export async function bumpServedCount(cacheKey: string): Promise<void> {
 }
 
 /**
- * The most recently computed comparison for each subject, newest first.
+ * The most recently computed *valid* comparison for each subject, newest first.
  *
  * Every cached subject, not a page of them: the ledger on the landing page is
  * the whole record of what has been read, and a cap there would quietly retire
  * older articles from it. One row per subject is the only reduction.
+ *
+ * "Valid" means the same thing it means in `getCachedComparison`: computed
+ * under the current prompt and parser version. A row left behind by an older
+ * version is not a comparison the site would still serve, so it has no
+ * business in a ledger that reads as a promise every row can be opened —
+ * clicking it would silently recompute (or charge, on a funded subject)
+ * rather than show what the row claimed to be. Rows written before previews
+ * existed have no `scope`, but they do carry a `promptVersion`, so this filter
+ * still applies to them.
  *
  * Titles, language lists, word counts and claim tallies are all projected out
  * in SQL rather than in TypeScript: `result` holds every article's full section
@@ -233,6 +244,11 @@ export async function recentComparisons(): Promise<RecentArticle[]> {
         COALESCE(result->'scope'->>'kind', 'full') AS scope,
         computed_at
       FROM comparisons
+      -- Same validity test as getCachedComparison's fallback match: a row
+      -- computed under a since-retired prompt or parser version is not one
+      -- the site would still serve, so it does not belong in the ledger.
+      WHERE result->>'promptVersion' = ${PROMPT_VERSION}
+        AND result->>'parserVersion' IS NOT DISTINCT FROM ${PARSER_VERSION}
       ORDER BY qid, computed_at DESC
     ) latest
     WHERE title IS NOT NULL
