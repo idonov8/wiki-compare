@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ArticlesSkeleton from "./ArticlesSkeleton";
+import ClaimRatio, { claimsSaid, countClaims } from "./ClaimRatio";
 import Columns from "./Columns";
 import { comparePath } from "./Highlighted";
 import CreditBar from "./CreditBar";
@@ -22,7 +23,7 @@ import { useNarrow } from "./useNarrow";
 import { useSwipe } from "./useSwipe";
 import Wordmark from "./Wordmark";
 import { initAnalytics, track } from "@/lib/analytics";
-import { formatCost, storedCost } from "@/lib/pricing";
+import { PRICE_PER_ARTICLE_CENTS, formatCost, storedCost } from "@/lib/pricing";
 import { readNdjson } from "@/lib/ndjson";
 import {
   LANGS,
@@ -79,9 +80,11 @@ function cacheNote(cache: CacheInfo): string {
  * figure is `storedCost`'s estimate from the token totals rather than the price
  * struck on the day. That is worth saying and worth marking: "about $0.18" reads
  * as an estimate on sight, without a legend and without a reader having to know
- * that a stored row can be missing a field. The title attribute carries why, and
- * that the estimate errs high. Only a run with no usable totals at all says
- * nothing — there, any number would be invented.
+ * that a stored row can be missing a field. Only a run with no usable totals at
+ * all says nothing — there, any number would be invented.
+ *
+ * A preview is not priced here at all: what it owes the reader is the offer to
+ * finish the article, and a figure beside that offer only reads as its price.
  */
 function costNote(data: ComparePayload): string | null {
   const cost = storedCost(data.usage);
@@ -93,29 +96,10 @@ function costNote(data: ComparePayload): string | null {
         : `about ${formatCost(cost.usd)}`
       : formatCost(cost.usd)
     : null;
-  // A preview is the one case where the scope matters more than the money: it
-  // says what it is first, because the columns below it fade out.
-  if (data.scope?.kind === "preview") return amount ? `preview · ${amount}` : "preview";
   if (!amount) return null;
   return data.fromCache
     ? `${amount} was paid to process this article`
     : `${amount} to process this article`;
-}
-
-/** The token breakdown, which stays in the title attribute: two numbers nobody
- *  can price without a rate card do not belong in the strip itself. An estimated
- *  figure explains itself here too — an approximation a reader cannot check the
- *  provenance of is only a guess with a decimal point. */
-function tokenNote(data: ComparePayload): string {
-  const counts =
-    `${data.usage.inputTokens.toLocaleString()} tokens in, ` +
-    `${data.usage.outputTokens.toLocaleString()} out`;
-  const when = data.fromCache ? `${counts}, on the run that processed this article` : counts;
-  return storedCost(data.usage)?.approximate
-    ? `${when}. This run predates the per-model breakdown, so its tokens are ` +
-        `priced at the more expensive of the two models it used: the figure is ` +
-        `an upper bound on what was actually paid.`
-    : when;
 }
 
 const KIND_LABEL: Record<Claim["type"], string> = {
@@ -451,6 +435,9 @@ export default function Compare() {
    *  supersedes rather than merges, once there is a `data` to supersede with. */
   const scope = data?.scope ?? liveScope;
   const preview = scope?.kind === "preview";
+  /** Whether pressing "donate this article" would actually read it, or has to
+   *  ask for a login or a top-up first. Same three states the gate offers. */
+  const canFund = !!me && me.creditCents >= PRICE_PER_ARTICLE_CENTS;
   /** What is marked on the page right now: the finished run's claims, or the
    *  ones that have arrived so far while it is still reading. The finished run
    *  supersedes rather than merges — it is the same list, and it is the copy
@@ -836,21 +823,82 @@ export default function Compare() {
           {/* A line of its own below `cols`, rather than whatever is left over
               beside the legend: given the leftover, it squeezes the legend into
               wrapping labels it has the room to set on one line each. */}
-          <div className="meta text-ink-soft ms-auto max-cols:ms-0 max-tight:basis-full">
-            {/* What it cost to process this article, whoever paid it and
-                whenever they did — see `costNote`. The badge beside it says
-                "cached" in its own right, so the sentence never repeats it. */}
-            {data ? (
-              <span title={tokenNote(data)}>
-                {data.qid} · {claims.length} marked
-                {costNote(data) ? ` · ${costNote(data)}` : ""}
-              </span>
-            ) : claims.length ? (
-              // Mid-run: the qid and the cost are not known yet, but the count
-              // is, and it is climbing on the page beside this line.
-              `${claims.length} marked so far…`
+          <div className="meta flex items-center gap-[12px] text-ink-soft ms-auto max-cols:ms-0 max-tight:basis-full max-tight:flex-wrap max-tight:gap-[10px]">
+            {preview ? (
+              // A part-read article says so here first. The flag is the one
+              // filled thing in the strip — everything else on this line is
+              // hairlines and soft grey — because it is the fact that decides
+              // how the columns below should be read, and the offer to finish
+              // the article stands directly beside it rather than a page
+              // further down at the seam.
+              <>
+                <span className="preview-flag inline-flex items-center gap-[7px] border border-ink bg-ink px-[9px] py-[4px] font-mono text-[10px] leading-none tracking-[0.14em] uppercase text-paper-raised">
+                  <span
+                    className="h-[5px] w-[5px] rounded-full bg-paper-raised animate-attention-pulse"
+                    aria-hidden
+                  />
+                  Preview
+                </span>
+                {/* The cut itself, drawn: the flag ends and the line stops
+                    being solid, which is exactly what the article does a
+                    screen below. */}
+                <span className="h-0 w-[22px] border-t border-dashed border-ink-wash-strong max-tight:hidden" aria-hidden />
+                <span className="preview-said normal-case tracking-normal">
+                  Only the opening section has been read
+                </span>
+                <button
+                  type="button"
+                  className="preview-cta border border-ink px-[12px] py-[5px] font-mono text-[11px] tracking-[0.07em] uppercase text-ink transition-colors duration-[120ms] ease-[ease] hover:enabled:bg-ink hover:enabled:text-paper-raised disabled:opacity-45 disabled:cursor-progress"
+                  disabled={funding}
+                  onClick={() =>
+                    canFund
+                      ? void fund("full")
+                      : me
+                        ? goDonate("preview-strip")
+                        : goLogIn("preview-strip")
+                  }
+                >
+                  {funding
+                    ? "Reading the rest…"
+                    : canFund
+                      ? "Donate this article"
+                      : me
+                        ? "Top up to donate it"
+                        : "Log in to process it"}
+                </button>
+              </>
             ) : (
-              "reading all three…"
+              // A processed article: what the run found, in the proportions the
+              // ledger draws it in — the same line a reader may have pressed to
+              // get here — and what somebody paid for it. No count beside the
+              // line: the marks are on the page under it, and the proportion is
+              // the reading the number was standing in for.
+              <>
+                {/* Padded onto a hairline of its own, so the line stands on the
+                    same axis the length chart's bars do further along the
+                    strip. */}
+                <span className="inline-flex border-b border-rule pb-[4px]">
+                  <ClaimRatio
+                    counts={countClaims(claims)}
+                    className="h-[7px] w-[132px] max-tight:w-[96px]"
+                    delay={140}
+                    title={
+                      data
+                        ? claimsSaid(countClaims(claims))
+                        : `${claimsSaid(countClaims(claims))} so far`
+                    }
+                  />
+                </span>
+                {data ? (
+                  costNote(data) && <span className="meta-cost">{costNote(data)}</span>
+                ) : (
+                  // Mid-run: the cost is not known yet, and the line beside
+                  // this is still filling in.
+                  <span className="meta-cost">
+                    {claims.length ? "still reading…" : "reading all three…"}
+                  </span>
+                )}
+              </>
             )}
             {/* Only when the cached answer and Wikipedia have actually diverged.
                 An exact-revision hit is cached too, but it describes the live

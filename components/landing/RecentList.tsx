@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ClaimRatio, { CLAIM_KINDS } from "@/components/ClaimRatio";
 import Section from "./Section";
-import { LANGS, LANG_META, type ClaimType, type RecentArticle, type ScopeKind } from "@/lib/types";
+import { LANGS, LANG_META, type RecentArticle, type ScopeKind } from "@/lib/types";
 
 interface Props {
   recent: RecentArticle[];
@@ -27,14 +28,6 @@ const SKELETON_ROWS = Array.from({ length: 12 }, (_, i) => i);
 const TALLEST = 18;
 const SHORTEST = 2;
 
-/** The three inks, in the order the legend prints them. `noun` is written after
- *  a count, so it is already the shape a plural takes. */
-const KINDS: { kind: ClaimType; fill: string; noun: string }[] = [
-  { kind: "contradiction", fill: "bg-contradiction", noun: "contradictions" },
-  { kind: "unique", fill: "bg-unique", noun: "only in one version" },
-  { kind: "framing", fill: "bg-framing", noun: "different framing" },
-];
-
 const wordsSaid = (words: RecentArticle["words"]): string =>
   LANGS.filter((lang) => words[lang])
     .map((lang) => `${LANG_META[lang].label} ${words[lang]!.toLocaleString()} words`)
@@ -43,7 +36,7 @@ const wordsSaid = (words: RecentArticle["words"]): string =>
 const claimsSaid = (claims: RecentArticle["claims"], scope: ScopeKind): string =>
   scope === "preview"
     ? "differences not counted — cached run read the free preview"
-    : KINDS.filter(({ kind }) => claims[kind])
+    : CLAIM_KINDS.filter(({ kind }) => claims[kind])
         .map(({ kind, noun }) => `${claims[kind]} ${noun}`)
         .join(", ") || "no differences found";
 
@@ -137,16 +130,12 @@ function RatioLine({
     // into one axis across the mark, the same way the masthead's baselines run
     // unbroken under all three of its bars.
     <span className="mt-[9px] border-b border-rule pb-[3px]">
-      <span
-        className="recent-ratio flex h-[6px] w-[84px] origin-left animate-line-draw gap-px bg-ink-wash max-tight:w-[54px]"
+      <ClaimRatio
+        counts={claims}
+        className="h-[6px] w-[84px] max-tight:w-[54px]"
+        delay={delay + 140}
         title={claimsSaid(claims, scope)}
-        style={{ animationDelay: `${delay + 140}ms` }}
-        aria-hidden
-      >
-        {KINDS.filter(({ kind }) => claims[kind]).map(({ kind, fill }) => (
-          <span key={kind} className={fill} style={{ flex: `${claims[kind]} 0 0%` }} />
-        ))}
-      </span>
+      />
     </span>
   );
 }
@@ -296,7 +285,7 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
           </span>
           words per version
         </span>
-        {KINDS.map(({ kind, fill, noun }) => (
+        {CLAIM_KINDS.map(({ kind, fill, noun }) => (
           <span key={kind} className="flex items-center gap-[6px]">
             <span className={`h-[5px] w-[14px] ${fill}`} aria-hidden />
             {noun}
