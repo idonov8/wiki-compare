@@ -394,11 +394,20 @@ the space while the list is empty. Each row sets its own `dir`, so a Hebrew or A
 orders its characters correctly, but titles stay left-aligned regardless — the list is a
 left-to-right piece of interface whichever script a title happens to be in, and letting alignment
 resolve per row left the RTL titles floating mid-row while the English ones sat at the margin.
-`/api/recent` projects the titles and language sets out in SQL rather than in TypeScript, because
-`result` holds every article's full section text and selecting the column to pick two strings off
-it would pull megabytes over the wire to render a dozen rows. It also never fails the caller: an
-unreachable or absent database leaves the landing page one section shorter rather than showing an
-error for something nobody asked for.
+Each row carries two marks where the cached-at time used to be: a bar per edition over its own
+`EN`/`HE`/`AR` code, scaled within that row rather than across the ledger so the fact it shows is
+how lopsided one subject's versions are, and one line divided in proportion between the three inks
+for the kinds of difference the run found. An edition the subject does not have draws a faint stub
+under a code in the same wash, which is a different fact from a very short article. The line is
+left empty for a preview: a preview's tallies come from the opening section, and a proportion drawn
+from a fraction of one version would read as the shape of the whole disagreement. Both marks stand
+on one hairline axis and name their exact figures on hover; the cached-at time is still in the
+row's label, where a screen reader gets it.
+`/api/recent` projects the titles, language sets, word counts and claim tallies out in SQL rather
+than in TypeScript, because `result` holds every article's full section text and selecting the
+column to reduce it in the client would pull megabytes over the wire to render a dozen rows. It
+also never fails the caller: an unreachable or absent database leaves the landing page one section
+shorter rather than showing an error for something nobody asked for.
 
 The `cached` badge on the meta line appears only when the served comparison and Wikipedia have
 actually diverged — an exact-revision hit is cached too, but it describes the live text, so
