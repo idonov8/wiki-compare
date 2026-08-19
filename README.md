@@ -170,18 +170,22 @@ comparison, so iterating on the prompt never means deleting rows.
 Writes stay exact; reads are looser. Keying reads on revision ids too was correct and far too
 eager — a Wikipedia article of any prominence is edited several times a day, most of those edits
 touching a category or a citation, and every one of them missed the cache and bought three article
-fetches, a parse and a model run. So a stored comparison keeps answering for `CACHE_WINDOW_DAYS`
-(3) after the revisions it was computed from have moved on. Nothing is overwritten to make that
-work: the key still records exactly which revisions an answer describes, which is how a request
-reusing one across an edit knows it is serving something older than live and can say so, rather
-than presenting stale text as current. An exact key match is preferred whatever its age, and is
-never flagged — it is by definition a description of the live revisions.
+fetches, a parse and a model run. So a stored comparison keeps answering after the revisions it
+was computed from have moved on, for as long as it is the newest one there is. Nothing is
+overwritten to make that work: the key still records exactly which revisions an answer describes,
+which is how a request reusing one across an edit knows it is serving something older than live
+and can say so, rather than presenting stale text as current. An exact key match is preferred
+whatever its age, and is never flagged — it is by definition a description of the live revisions.
 
-The window forgives revision ids and nothing else. A row computed under a different
+Age alone never invalidates a row. A cached comparison is replaced when somebody pays to have the
+article read again — the `cached` badge is that offer — and not because it has been sitting there
+a while: an expiry would have opening an old article silently spend tokens on a re-read nobody
+asked for, which is the opposite of what a cache is for.
+
+Revision ids are the only thing that leniency forgives. A row computed under a different
 `PROMPT_VERSION` or `PARSER_VERSION` is never reused for revisions it wasn't keyed to: those two
-versions are the whole way the code says *our reading of this changed*, so letting them ride the
-window would make each prompt fix invisible for three days on exactly the busy articles it was
-written for.
+versions are the whole way the code says *our reading of this changed*, so reusing across them
+would make each prompt fix invisible on exactly the busy articles it was written for.
 
 Before any model call, `lib/deterministic.ts` does the work that doesn't need one: linked-concept
 coverage is pure set arithmetic over Wikidata ids, and numeric divergence — with Arabic-Indic
@@ -238,7 +242,7 @@ A preview and a full run of the same revisions are separate rows. Sharing a cach
 whichever ran first won permanently — the preview would keep satisfying the cache and the funded
 run would have nowhere to be stored, so somebody would pay for a comparison nobody could ever be
 served. `getCachedComparison` prefers a full run over a preview even when the preview is the
-exact-revision one and the full run is riding the freshness window: a preview read four sections
+exact-revision one and the full run describes superseded revisions: a preview read four sections
 and stopped, and being pedantic about revision ids that have probably only moved by a citation is
 not worth fading out most of the page for. Either way the reader is told, because an answer older
 than live still carries the `cached` badge.
@@ -414,7 +418,7 @@ shorter rather than showing an error for something nobody asked for.
 The `cached` badge on the meta line appears only when the served comparison and Wikipedia have
 actually diverged — an exact-revision hit is cached too, but it describes the live text, so
 badging it would cry wolf on the ordinary case. Hovering or focusing it names which languages were
-edited since, and when the answer expires. Its tooltip is plain CSS rather than the claim card's
+edited since, and offers the re-read that replaces the answer. Its tooltip is plain CSS rather than the claim card's
 measured placement: there is one of these and it is anchored to the top of the page, so it never
 needs to dodge the viewport edge.
 

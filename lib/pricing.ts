@@ -5,7 +5,7 @@ import type { Usage } from "./types";
  *
  * Pure arithmetic over a rate table, with no database driver and no SDK, because
  * both the server (which prices a run as it finishes) and the browser (which
- * prints the figure) need it — the same reason CACHE_WINDOW_DAYS lives in
+ * prints the figure) need it — the same reason the shared shapes live in
  * lib/types.ts rather than in lib/db.ts.
  */
 

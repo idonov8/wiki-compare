@@ -122,7 +122,6 @@ await page.route(
     const usage = USAGE[stored];
     const cache = {
       computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
-      expiresAt: new Date(Date.now() + 86400_000).toISOString(),
       edited: ["he", "ar"],
     };
     // A preview stops part-way through every edition, so each one carries a cut.
