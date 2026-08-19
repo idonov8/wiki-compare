@@ -66,6 +66,18 @@ await page.route("**/api/recent", (route) =>
           scope: "preview",
           computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
           words: { he: 900, ar: 1500 },
+          // Counted, and still not drawn: a preview's tallies come from the
+          // opening section, so the row is what proves they stay off the line.
+          claims: { contradiction: 2, unique: 1, framing: 0 },
+        },
+        {
+          qid: "Q3",
+          title: "Rothschild Boulevard",
+          lang: "en",
+          langs: ["en", "he"],
+          scope: "full",
+          computedAt: new Date(Date.now() - 5 * 86400_000).toISOString(),
+          words: { en: 2000, he: 3000 },
           claims: { contradiction: 0, unique: 0, framing: 0 },
         },
       ],
@@ -174,7 +186,7 @@ const recent = await page.$$eval(".recent li button", (els) =>
     };
   }),
 );
-check(recent.length === 2, "recently cached articles list before any search", `${recent.length} rows`);
+check(recent.length === 3, "recently cached articles list before any search", `${recent.length} rows`);
 check(
   recent.some((r) => r.dir === "rtl") && recent.some((r) => r.dir === "ltr"),
   "each row carries its own direction",
@@ -224,9 +236,14 @@ check(
   charts.map((c) => c.codes).join("; "),
 );
 check(
-  charts[0].segments === 3 && charts[1].segments === 0,
+  charts[0].segments === 3 && charts[2].segments === 0,
   "the difference line carries one segment per kind found, and none when there were none",
   charts.map((c) => `${c.segments}`).join("; "),
+);
+check(
+  charts[1].segments === 0 && /free preview/.test(charts[1].ratio),
+  "a preview's line stays empty however many differences its opening section held",
+  `${charts[1].segments} segments, ${charts[1].ratio}`,
 );
 check(
   /English 8,400 words/.test(charts[0].words) && /4 contradictions/.test(charts[0].ratio),
@@ -234,9 +251,9 @@ check(
   `${charts[0].words} | ${charts[0].ratio}`,
 );
 check(
-  /no differences found/.test(charts[1].ratio),
-  "a run that found nothing says so rather than showing an unexplained empty line",
-  charts[1].ratio,
+  /no differences found/.test(charts[2].ratio),
+  "a full run that found nothing says so rather than showing an unexplained empty line",
+  charts[2].ratio,
 );
 
 // The ledger holds every cached subject, so the toggle is how a reader gets to
@@ -245,9 +262,9 @@ check(
 const rowCount = () => page.$$eval(".recent li button", (els) => els.length);
 const toggle = await page.$(".recent-filter");
 await toggle?.click();
-check((await rowCount()) === 1, "the full-only toggle drops the preview rows", `${await rowCount()} rows`);
+check((await rowCount()) === 2, "the full-only toggle drops the preview rows", `${await rowCount()} rows`);
 await toggle?.click();
-check((await rowCount()) === 2, "releasing it brings them back", `${await rowCount()} rows`);
+check((await rowCount()) === 3, "releasing it brings them back", `${await rowCount()} rows`);
 
 // The list is a history, so a row has to actually open its comparison.
 await page.click(".recent li:first-child button");

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Section from "./Section";
-import { LANGS, LANG_META, type ClaimType, type RecentArticle } from "@/lib/types";
+import { LANGS, LANG_META, type ClaimType, type RecentArticle, type ScopeKind } from "@/lib/types";
 
 interface Props {
   recent: RecentArticle[];
@@ -40,10 +40,12 @@ const wordsSaid = (words: RecentArticle["words"]): string =>
     .map((lang) => `${LANG_META[lang].label} ${words[lang]!.toLocaleString()} words`)
     .join(", ");
 
-const claimsSaid = (claims: RecentArticle["claims"]): string =>
-  KINDS.filter(({ kind }) => claims[kind])
-    .map(({ kind, noun }) => `${claims[kind]} ${noun}`)
-    .join(", ") || "no differences found";
+const claimsSaid = (claims: RecentArticle["claims"], scope: ScopeKind): string =>
+  scope === "preview"
+    ? "differences not counted — cached run read the free preview"
+    : KINDS.filter(({ kind }) => claims[kind])
+        .map(({ kind, noun }) => `${claims[kind]} ${noun}`)
+        .join(", ") || "no differences found";
 
 /**
  * How much each edition has written, as three bars in a fixed en·he·ar order,
@@ -102,8 +104,21 @@ function WordBars({ words, delay }: { words: RecentArticle["words"]; delay: numb
  * framing, which is the character of a disagreement rather than its size. The
  * empty track stays visible when nothing was found, because a row that drew
  * nothing there would read as a row that was never read.
+ *
+ * Left empty for a preview, whose counts are whatever the opening section
+ * happened to contain rather than what the article says: a proportion drawn
+ * from a fraction of one version would be read as the shape of the whole
+ * disagreement, and the track's own emptiness is the honest reading.
  */
-function RatioLine({ claims, delay }: { claims: RecentArticle["claims"]; delay: number }) {
+function RatioLine({
+  claims,
+  scope,
+  delay,
+}: {
+  claims: RecentArticle["claims"];
+  scope: ScopeKind;
+  delay: number;
+}) {
   return (
     // Padded down to the height of the bar zone beside it so the two rules meet
     // into one axis across the mark, the same way the masthead's baselines run
@@ -111,13 +126,15 @@ function RatioLine({ claims, delay }: { claims: RecentArticle["claims"]; delay: 
     <span className="mt-[9px] border-b border-rule pb-[3px]">
       <span
         className="recent-ratio flex h-[6px] w-[84px] origin-left animate-line-draw gap-px bg-ink-wash max-tight:w-[54px]"
-        title={claimsSaid(claims)}
+        title={claimsSaid(claims, scope)}
         style={{ animationDelay: `${delay + 140}ms` }}
         aria-hidden
       >
-        {KINDS.filter(({ kind }) => claims[kind]).map(({ kind, fill }) => (
-          <span key={kind} className={fill} style={{ flex: `${claims[kind]} 0 0%` }} />
-        ))}
+        {scope === "preview"
+          ? null
+          : KINDS.filter(({ kind }) => claims[kind]).map(({ kind, fill }) => (
+              <span key={kind} className={fill} style={{ flex: `${claims[kind]} 0 0%` }} />
+            ))}
       </span>
     </span>
   );
@@ -222,7 +239,7 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                     onClick={() => onOpen(item.title, item.lang)}
                     aria-label={`Compare ${item.title}, ${item.scope} cached ${relative(
                       item.computedAt,
-                    )}, ${wordsSaid(item.words)}, ${claimsSaid(item.claims)}`}
+                    )}, ${wordsSaid(item.words)}, ${claimsSaid(item.claims, item.scope)}`}
                   >
                     <span
                       className="recent-title min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left group-hover:underline"
@@ -242,7 +259,11 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                           a queue rather than a reading, and a row scrolled to
                           is better already drawn than drawing. */}
                       <WordBars words={item.words} delay={Math.min(index, 8) * 45} />
-                      <RatioLine claims={item.claims} delay={Math.min(index, 8) * 45} />
+                      <RatioLine
+                        claims={item.claims}
+                        scope={item.scope}
+                        delay={Math.min(index, 8) * 45}
+                      />
                     </span>
                     {/* What's cached, not what a click will cost: a preview reads
                         free and a full run was already paid for, so the badge just
