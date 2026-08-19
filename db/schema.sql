@@ -42,9 +42,10 @@ CREATE TABLE IF NOT EXISTS comparisons (
 
 CREATE INDEX IF NOT EXISTS comparisons_qid_idx ON comparisons (qid);
 
--- Serves both the "recently cached" list on the landing page and the freshness
--- window: a comparison stays servable for three days even after the underlying
--- revision ids move on, so an edit on Wikipedia doesn't force a re-read.
+-- Serves both the "recently cached" list on the landing page and the newest-first
+-- tiebreak when several stored comparisons for one subject could answer: a row
+-- keeps serving after the revision ids move on, so an edit on Wikipedia doesn't
+-- force a re-read. Only a paid refresh replaces it.
 CREATE INDEX IF NOT EXISTS comparisons_computed_at_idx ON comparisons (computed_at DESC);
 
 -- Wikidata labels for the coverage diff. Cheap to refill, safe to truncate.

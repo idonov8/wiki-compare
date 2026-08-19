@@ -25,7 +25,6 @@ import { initAnalytics, track } from "@/lib/analytics";
 import { formatCost, storedCost } from "@/lib/pricing";
 import { readNdjson } from "@/lib/ndjson";
 import {
-  CACHE_WINDOW_DAYS,
   LANGS,
   LANG_META,
   OUT_OF_CREDIT,
