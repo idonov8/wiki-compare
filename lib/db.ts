@@ -175,16 +175,36 @@ export async function bumpServedCount(cacheKey: string): Promise<void> {
  * the whole record of what has been read, and a cap there would quietly retire
  * older articles from it. One row per subject is the only reduction.
  *
- * Titles and language lists are projected out in SQL rather than in TypeScript:
- * `result` holds every article's full section text, so selecting the column to
- * pick two strings off it would pull megabytes across the wire to render a
- * list of titles.
+ * Titles, language lists, word counts and claim tallies are all projected out
+ * in SQL rather than in TypeScript: `result` holds every article's full section
+ * text, so selecting the column to reduce it here would pull megabytes across
+ * the wire to render a list of rows a few numbers wide.
  */
 export async function recentComparisons(): Promise<RecentArticle[]> {
   const rows = await sql()`
-    SELECT qid, title, lang, langs, scope, computed_at FROM (
+    SELECT
+      qid, title, lang, langs, scope, computed_at,
+      -- The same count articleWords() does in the client: whitespace-separated
+      -- words per section, summed over the edition.
+      (
+        SELECT jsonb_object_agg(article.key, (
+          SELECT COALESCE(SUM(array_length(regexp_split_to_array(btrim(section->>'text'), '\\s+'), 1)), 0)
+          FROM jsonb_array_elements(article.value->'sections') section
+          WHERE btrim(section->>'text') <> ''
+        ))
+        FROM jsonb_each(result->'articles') article
+      ) AS words,
+      (
+        SELECT jsonb_object_agg(kind, n) FROM (
+          SELECT claim->>'type' AS kind, count(*) AS n
+          FROM jsonb_array_elements(result->'claims') claim
+          GROUP BY 1
+        ) tally
+      ) AS claims
+    FROM (
       SELECT DISTINCT ON (qid)
         qid,
+        result,
         COALESCE(
           result->'articles'->'en'->>'title',
           result->'articles'->'he'->>'title',
@@ -214,6 +234,8 @@ export async function recentComparisons(): Promise<RecentArticle[]> {
     langs: LANGS.filter((l) => (row.langs as string[]).includes(l)),
     scope: row.scope as ScopeKind,
     computedAt: new Date(row.computed_at as string).toISOString(),
+    words: (row.words ?? {}) as Partial<Record<Lang, number>>,
+    claims: { contradiction: 0, unique: 0, framing: 0, ...((row.claims ?? {}) as object) },
   }));
 }
 
