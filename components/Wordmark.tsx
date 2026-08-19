@@ -1,7 +1,4 @@
-/** Where the beta badge sends a reader — an invite to the group testing the
- *  redesign, not the app itself, so it opens in its own tab rather than
- *  navigating away from a comparison in progress. */
-const BETA_GROUP_URL = "https://chat.whatsapp.com/L8T9rwmdALzJD8IqYZ292y?s=cl&p=i&ilr=4";
+import { BETA_GROUP_URL } from "@/lib/contact";
 
 /**
  * The site's name, plus the one glyph this brand gets to have: three bars in
