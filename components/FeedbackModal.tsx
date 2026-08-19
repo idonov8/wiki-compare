@@ -122,7 +122,7 @@ export default function FeedbackModal({ onDismiss }: { onDismiss: () => void }) 
               <button
                 type="submit"
                 disabled={sending || !email.trim() || !message.trim()}
-                className="mt-[2px] border border-ink bg-ink px-[24px] py-[11px] font-mono text-[12px] tracking-[0.08em] text-paper-raised transition-transform duration-150 ease-[ease] hover:enabled:-translate-y-[1px] disabled:cursor-progress disabled:opacity-45"
+                className="mt-[2px] justify-self-start border border-ink bg-ink px-[24px] py-[11px] font-mono text-[12px] tracking-[0.08em] text-paper-raised transition-transform duration-150 ease-[ease] hover:enabled:-translate-y-[1px] disabled:cursor-progress disabled:opacity-45"
               >
                 {sending ? "Sending…" : "Send"}
               </button>
