@@ -7,24 +7,6 @@ export const LANG_META: Record<Lang, { label: string; native: string; dir: "ltr"
   ar: { label: "Arabic", native: "العربية", dir: "rtl" },
 };
 
-/**
- * How long a stored comparison keeps answering after the revisions it was
- * computed from have moved on.
- *
- * Keying on revision ids exactly is correct and far too eager. A Wikipedia
- * article of any prominence is edited several times a day, most of those edits
- * touching a category or a citation, and every one of them missed the cache and
- * bought a full re-read: three article fetches, a parse, and the model. Reading
- * within a window decouples the two — the key still records exactly which
- * revisions an answer describes, so a request reusing one across an edit knows
- * it is serving something older than live and can say so, rather than quietly
- * presenting stale text as current.
- *
- * Lives here rather than in lib/db.ts so the client can read it without pulling
- * the database driver into the browser bundle.
- */
-export const CACHE_WINDOW_DAYS = 3;
-
 /** Synthetic headings. The lead has none of its own, and the key-facts block is
  *  assembled from the infobox rather than lifted from a heading in the article. */
 export const LEAD_HEADING = "(lead)";
@@ -178,8 +160,6 @@ export interface ComparisonResult {
 /** Provenance of a comparison that came out of the cache. Present only then. */
 export interface CacheInfo {
   computedAt: string;
-  /** When this comparison stops answering for revisions other than its own. */
-  expiresAt: string;
   /** Languages whose live revision has moved on since this was computed. Empty
    *  means the cached answer still describes exactly what is on Wikipedia now,
    *  which is the ordinary case and needs no badge. */
