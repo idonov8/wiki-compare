@@ -105,10 +105,11 @@ function WordBars({ words, delay }: { words: RecentArticle["words"]; delay: numb
  * empty track stays visible when nothing was found, because a row that drew
  * nothing there would read as a row that was never read.
  *
- * Left empty for a preview, whose counts are whatever the opening section
- * happened to contain rather than what the article says: a proportion drawn
- * from a fraction of one version would be read as the shape of the whole
- * disagreement, and the track's own emptiness is the honest reading.
+ * A preview draws the word instead of a line. Its counts are whatever the
+ * opening section happened to contain rather than what the article says, so a
+ * proportion drawn from them would read as the shape of the whole disagreement;
+ * saying so in the line's own place is both the honest reading and the only
+ * thing the row still needs to say about how much was read.
  */
 function RatioLine({
   claims,
@@ -119,6 +120,18 @@ function RatioLine({
   scope: ScopeKind;
   delay: number;
 }) {
+  if (scope === "preview") {
+    return (
+      <span className="mt-[5px] border-b border-rule pb-[3px]">
+        <span
+          className="recent-ratio block w-[84px] text-center font-mono text-[10px] leading-[10px] tracking-[0.09em] uppercase text-ink-soft max-tight:w-[54px]"
+          title="Cached run read the free preview — differences not counted"
+        >
+          Preview
+        </span>
+      </span>
+    );
+  }
   return (
     // Padded down to the height of the bar zone beside it so the two rules meet
     // into one axis across the mark, the same way the masthead's baselines run
@@ -130,11 +143,9 @@ function RatioLine({
         style={{ animationDelay: `${delay + 140}ms` }}
         aria-hidden
       >
-        {scope === "preview"
-          ? null
-          : KINDS.filter(({ kind }) => claims[kind]).map(({ kind, fill }) => (
-              <span key={kind} className={fill} style={{ flex: `${claims[kind]} 0 0%` }} />
-            ))}
+        {KINDS.filter(({ kind }) => claims[kind]).map(({ kind, fill }) => (
+          <span key={kind} className={fill} style={{ flex: `${claims[kind]} 0 0%` }} />
+        ))}
       </span>
     </span>
   );
@@ -222,12 +233,6 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                         style={{ animationDelay: `${i * -0.3}s` }}
                       />
                     </span>
-                    <span
-                      className="recent-scope w-14.5 shrink-0 animate-chip-breathe rounded-[2px] border border-transparent bg-ink-wash-strong px-1.25 py-px text-center font-mono text-[10px] tracking-[0.09em] text-transparent"
-                      style={{ animationDelay: `${i * -0.3}s` }}
-                    >
-                      full
-                    </span>
                   </div>
                 </li>
               ))
@@ -264,21 +269,6 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                         scope={item.scope}
                         delay={Math.min(index, 8) * 45}
                       />
-                    </span>
-                    {/* What's cached, not what a click will cost: a preview reads
-                        free and a full run was already paid for, so the badge just
-                        names which one is sitting in the cache right now. */}
-                    <span
-                      className={`recent-scope w-14.5 shrink-0 border border-rule px-1.25 py-px text-center font-mono text-[10px] tracking-[0.09em] uppercase text-ink-soft ${
-                        item.scope === "full" ? "font-bold" : "opacity-80"
-                      }`}
-                      title={
-                        item.scope === "preview"
-                          ? "Cached run read the free preview"
-                          : "Cached run read the whole article"
-                      }
-                    >
-                      {item.scope}
                     </span>
                   </button>
                 </li>
