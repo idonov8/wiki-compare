@@ -398,11 +398,13 @@ Each row carries two marks where the cached-at time used to be: a bar per editio
 `EN`/`HE`/`AR` code, scaled within that row rather than across the ledger so the fact it shows is
 how lopsided one subject's versions are, and one line divided in proportion between the three inks
 for the kinds of difference the run found. An edition the subject does not have draws a faint stub
-under a code in the same wash, which is a different fact from a very short article. The line is
-left empty for a preview: a preview's tallies come from the opening section, and a proportion drawn
-from a fraction of one version would read as the shape of the whole disagreement. Both marks stand
-on one hairline axis and name their exact figures on hover; the cached-at time is still in the
-row's label, where a screen reader gets it.
+under a code in the same wash, which is a different fact from a very short article. A preview row
+prints the word `Preview` in the line's place instead: a preview's tallies come from the opening
+section, and a proportion drawn from a fraction of one version would read as the shape of the whole
+disagreement. That word also retired the `full`/`preview` badge that used to sit at the end of every
+row — a coloured line and a word are already the difference between the two, and the badge was a
+third column repeating it. Both marks stand on one hairline axis and name their exact figures on
+hover; the cached-at time is still in the row's label, where a screen reader gets it.
 `/api/recent` projects the titles, language sets, word counts and claim tallies out in SQL rather
 than in TypeScript, because `result` holds every article's full section text and selecting the
 column to reduce it in the client would pull megabytes over the wire to render a dozen rows. It

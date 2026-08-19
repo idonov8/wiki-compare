@@ -182,7 +182,7 @@ const recent = await page.$$eval(".recent li button", (els) =>
     return {
       title: title?.textContent ?? "",
       dir: title?.getAttribute("dir") ?? "",
-      scope: el.querySelector(".recent-scope")?.textContent ?? "",
+      badges: el.querySelectorAll(".recent-scope").length,
     };
   }),
 );
@@ -193,9 +193,9 @@ check(
   recent.map((r) => `${r.title}=${r.dir}`).join("; "),
 );
 check(
-  recent.every((r) => r.scope === "full" || r.scope === "preview"),
-  "each row says how much of the article the cached run read",
-  recent.map((r) => `${r.title}=${r.scope || "—"}`).join("; "),
+  recent.every((r) => r.badges === 0),
+  "how much was read is the line's own business, not a badge beside it",
+  recent.map((r) => `${r.title}=${r.badges}`).join("; "),
 );
 check(
   (await page.$$(".recent h2, .recent h3")).length === 0,
@@ -216,6 +216,7 @@ const charts = await page.$$eval(".recent li button", (els) =>
     ),
     codes: (el.querySelector(".recent-words")?.textContent ?? "").trim(),
     segments: el.querySelectorAll(".recent-ratio > span").length,
+    line: (el.querySelector(".recent-ratio")?.textContent ?? "").trim(),
     words: el.querySelector(".recent-words")?.getAttribute("title") ?? "",
     ratio: el.querySelector(".recent-ratio")?.getAttribute("title") ?? "",
   })),
@@ -241,9 +242,11 @@ check(
   charts.map((c) => `${c.segments}`).join("; "),
 );
 check(
-  charts[1].segments === 0 && /free preview/.test(charts[1].ratio),
-  "a preview's line stays empty however many differences its opening section held",
-  `${charts[1].segments} segments, ${charts[1].ratio}`,
+  charts[1].segments === 0 &&
+    /^preview$/i.test(charts[1].line) &&
+    /free preview/.test(charts[1].ratio),
+  "a preview says so in the line's place, however many differences its opening section held",
+  `${charts[1].segments} segments, "${charts[1].line}", ${charts[1].ratio}`,
 );
 check(
   /English 8,400 words/.test(charts[0].words) && /4 contradictions/.test(charts[0].ratio),
