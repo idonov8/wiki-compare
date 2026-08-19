@@ -125,6 +125,22 @@ export default function Landing({
               />
               <figcaption className="flex items-baseline justify-between gap-4 pt-2 font-mono text-[10px] tracking-[0.08em] uppercase text-ink-soft">
                 <span>Wikipedia edit wars</span>
+                <span className="normal-case tracking-normal">
+                  <a
+                    href="https://commons.wikimedia.org/wiki/File:Wikipedia_Edit_Wars.jpg"
+                    className="text-ink-soft underline underline-offset-[3px] hover:text-ink"
+                  >
+                    Časopis Respekt, Pavel Reisenauer
+                  </a>
+                  {", "}
+                  <a
+                    href="https://creativecommons.org/licenses/by-sa/4.0"
+                    className="text-ink-soft underline underline-offset-[3px] hover:text-ink"
+                  >
+                    CC BY-SA 4.0
+                  </a>
+                  , via Wikimedia Commons
+                </span>
               </figcaption>
             </figure>
           </div>
