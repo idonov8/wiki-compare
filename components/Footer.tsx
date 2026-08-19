@@ -1,10 +1,7 @@
 "use client";
 
 import { MEASURE } from "./landing/Section";
-
-/** Where a correction request lands. The same address as the privacy notice's,
- *  deliberately: one inbox that is actually read beats two that are not. */
-const CONTACT = "contact@wikicompare.app";
+import { CONTACT_EMAIL } from "@/lib/contact";
 
 /**
  * The colophon, at the foot of every page: the standing caveat, a route to
@@ -18,9 +15,11 @@ const CONTACT = "contact@wikicompare.app";
  */
 export default function Footer({
   onDonate,
+  onFeedback,
   className = "",
 }: {
   onDonate: () => void;
+  onFeedback: () => void;
   className?: string;
 }) {
   return (
@@ -34,7 +33,7 @@ export default function Footer({
           Comparisons are machine-generated and can be wrong. Treat marked differences as pointers to
           check the sources, not as findings.{" "}
           <a
-            href={`mailto:${CONTACT}?subject=${encodeURIComponent("Wiki Compare: correction")}`}
+            href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Wiki Compare: correction")}`}
             className="text-ink hover:underline"
           >
             Report a problem
@@ -64,6 +63,10 @@ export default function Footer({
             <a href="/privacy" className="text-ink hover:underline">
               Privacy
             </a>
+            {" · "}
+            <button type="button" className="text-ink hover:underline" onClick={onFeedback}>
+              Feedback
+            </button>
           </span>
           <button
             type="button"

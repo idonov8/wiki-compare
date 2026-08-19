@@ -21,6 +21,7 @@ interface Props {
   recentLoading: boolean;
   relative: (iso: string) => string;
   onDonate: () => void;
+  onFeedback: () => void;
   /** Told when the hero's search field has scrolled out of reach, so the
    *  masthead can grow one of its own. */
   onDocked: (docked: boolean) => void;
@@ -44,6 +45,7 @@ export default function Landing({
   recentLoading,
   relative,
   onDonate,
+  onFeedback,
   onDocked,
 }: Props) {
   const sentinel = useRef<HTMLDivElement | null>(null);
@@ -147,7 +149,7 @@ export default function Landing({
         </Section>
 
         <RecentList recent={recent} onOpen={onOpen} relative={relative} loading={recentLoading} />
-        <Footer onDonate={onDonate} />
+        <Footer onDonate={onDonate} onFeedback={onFeedback} />
       </div>
     </main>
   );
