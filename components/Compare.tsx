@@ -843,9 +843,6 @@ export default function Compare() {
                     being solid, which is exactly what the article does a
                     screen below. */}
                 <span className="h-0 w-[22px] border-t border-dashed border-ink-wash-strong max-tight:hidden" aria-hidden />
-                <span className="preview-said normal-case tracking-normal">
-                  Only the opening section has been read
-                </span>
                 <button
                   type="button"
                   className="preview-cta border border-ink px-[12px] py-[5px] font-mono text-[11px] tracking-[0.07em] uppercase text-ink transition-colors duration-[120ms] ease-[ease] hover:enabled:bg-ink hover:enabled:text-paper-raised disabled:opacity-45 disabled:cursor-progress"
