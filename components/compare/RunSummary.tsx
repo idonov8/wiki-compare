@@ -53,18 +53,18 @@ export default function RunSummary({
     <>
       {/* Padded onto a hairline of its own, so the line stands on the same axis
           the length chart's bars do further along the strip. */}
-      <span className="inline-flex border-b border-rule pb-[4px]">
+      <span className="inline-flex grow border-b border-rule pb-[4px]">
         <ClaimRatio
           counts={counts}
-          className="h-[7px] w-[132px] max-tight:w-[96px]"
+          className="h-[7px] w-full"
           delay={140}
           title={data ? claimsSaid(counts) : `${claimsSaid(counts)} so far`}
         />
       </span>
       {data ? (
-        cost && <span className="meta-cost">{cost}</span>
+        cost && <span className="meta-cost ml-auto">{cost}</span>
       ) : (
-        <span className="meta-cost">
+        <span className="meta-cost ml-auto">
           {claims.length ? "still reading…" : "reading all three…"}
         </span>
       )}
