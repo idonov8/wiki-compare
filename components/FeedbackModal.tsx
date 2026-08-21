@@ -75,9 +75,11 @@ export default function FeedbackModal({ onDismiss }: { onDismiss: () => void }) 
             id="feedback-modal-title"
             className="m-0 mb-[20px] font-display text-[30px] font-normal leading-[1.15] max-tight:text-[27px]"
           >
-            Send feedback
+            Send Feedback
           </h2>
-
+          <p className="m-0 mb-[20px] font-mono text-[13px] text-ink-soft">
+            Ideas? Questions? Bugs? We'd love to hear them.
+          </p>
           {sent ? (
             <p className="m-0 font-mono text-[13px] text-ink-soft">Sent. Thanks.</p>
           ) : (
@@ -129,17 +131,19 @@ export default function FeedbackModal({ onDismiss }: { onDismiss: () => void }) 
             </form>
           )}
 
-          <div className="mt-[26px] grid gap-[5px] border-t border-rule pt-[20px] font-mono text-[12px] leading-[1.5] text-ink-soft">
+          <div className="mt-[26px] border-t border-rule pt-[20px] font-mono text-[12px] leading-[1.5] text-ink-soft">
+            Reach us via&nbsp;
             <a className="w-fit hover:text-ink hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
               {CONTACT_EMAIL}
             </a>
-            <a
+            <br />
+            Or join the&nbsp;<a
               className="w-fit hover:text-ink hover:underline"
               href={BETA_GROUP_URL}
               target="_blank"
               rel="noopener noreferrer"
             >
-              Beta group on WhatsApp
+              Beta WhatsApp group :)
             </a>
           </div>
         </div>
