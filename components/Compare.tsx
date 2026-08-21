@@ -9,6 +9,7 @@ import ControlStrip from "./compare/ControlStrip";
 import CreditsModal from "./CreditsModal";
 import DiffNav from "./DiffNav";
 import ErrorState from "./compare/ErrorState";
+import FeedbackModal from "./FeedbackModal";
 import Footer from "./Footer";
 import Landing from "./landing/Landing";
 import LangSwitch from "./LangSwitch";
@@ -65,6 +66,7 @@ export default function Compare() {
   const onboarding = useOnboarding(me);
   /** Set once the landing page's own search field has scrolled out of reach. */
   const [docked, setDocked] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   useEffect(() => {
     initAnalytics();
@@ -73,6 +75,11 @@ export default function Compare() {
   const goDonate = useCallback((from: string) => {
     void track("gate_cta_clicked", { from });
     window.location.href = `/donate?from=${encodeURIComponent(from)}`;
+  }, []);
+
+  const goFeedback = useCallback((from: string) => {
+    void track("feedback_opened", { from });
+    setFeedbackOpen(true);
   }, []);
 
   /** Off to sign in, and back to this exact article afterwards, so somebody who
@@ -109,6 +116,7 @@ export default function Compare() {
         me={me}
         onDonate={() => goDonate("masthead")}
         onLogIn={() => goLogIn("masthead")}
+        onFeedback={() => goFeedback("masthead")}
       />
 
       {onArticle && hasColumns && (
@@ -171,6 +179,7 @@ export default function Compare() {
           recentLoading={recentLoading}
           relative={relative}
           onDonate={() => goDonate("landing_footer")}
+          onFeedback={() => goFeedback("landing_footer")}
           onDocked={setDocked}
         />
       )}
@@ -238,7 +247,11 @@ export default function Compare() {
           is the footer for everything else — including a preview, where the
           faded remainder now stops rather than scrolling on into nothing. */}
       {!landing && (
-        <Footer onDonate={() => goDonate("footer")} className={langSwitch ? "pb-[76px]" : ""} />
+        <Footer
+          onDonate={() => goDonate("footer")}
+          onFeedback={() => goFeedback("footer")}
+          className={langSwitch ? "pb-[76px]" : ""}
+        />
       )}
 
       {thanks && <ThankYou />}
@@ -253,6 +266,8 @@ export default function Compare() {
           onDismiss={explainer.dismiss}
         />
       )}
+
+      {feedbackOpen && <FeedbackModal onDismiss={() => setFeedbackOpen(false)} />}
 
       {card && <ClaimCard card={card} />}
     </>

@@ -1,8 +1,3 @@
-/** Where the beta badge sends a reader — an invite to the group testing the
- *  redesign, not the app itself, so it opens in its own tab rather than
- *  navigating away from a comparison in progress. */
-const BETA_GROUP_URL = "https://chat.whatsapp.com/L8T9rwmdALzJD8IqYZ292y?s=cl&p=i&ilr=4";
-
 /**
  * The site's name, plus the one glyph this brand gets to have: three bars in
  * the same three colours the diff rail and the legend use for contradiction,
@@ -16,17 +11,12 @@ const BETA_GROUP_URL = "https://chat.whatsapp.com/L8T9rwmdALzJD8IqYZ292y?s=cl&p=
  * length. The mark makes the site's argument twice: three colours for three
  * readings, and a lopsided chart for how unevenly they are written.
  *
- * `beta` rides low on the baseline, the way a trademark mark sits off a
- * wordmark rather than floating centred beside it, and is its own link —
- * `<a>` cannot nest inside `<a>` — to the WhatsApp group for people testing
- * the redesign. Its own hover throws the same three colours through it in
- * one diagonal pass: the strand's palette, reused rather than a generic
- * shine, so the two live marks read as one idea even though only one of
- * them leaves the site.
+ * `beta` is a static stamp over the lower-right corner of the wordmark. It
+ * shrinks at the tight breakpoint so the masthead remains compact on phones.
  */
 export default function Wordmark() {
   return (
-    <span className="wordmark-group inline-flex items-end gap-2.5">
+    <span className="wordmark-group relative inline-flex">
       <a href="/" aria-label="Wiki Compare" className="wordmark group inline-flex items-end no-underline">
         <span className="wordmark-type font-wordmark text-[29px] max-tight:text-[26px] leading-none tracking-[-0.01em] text-ink italic">
           wiki
@@ -41,19 +31,9 @@ export default function Wordmark() {
 
 function BetaBadge() {
   return (
-    <a
-      href={BETA_GROUP_URL}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label="Join the Wiki Compare beta testers group on WhatsApp"
-      className="beta-badge group/beta relative mb-[3px] inline-block overflow-hidden rounded-xs border border-rule bg-paper-raised px-[6px] py-[2px] font-mono text-[10px] leading-none tracking-[0.09em] text-ink-soft uppercase no-underline transition-transform duration-150 ease-out hover:-translate-y-[1px] hover:-rotate-[3deg] hover:border-ink hover:text-ink focus-visible:-translate-y-[1px] focus-visible:-rotate-[3deg] focus-visible:border-ink focus-visible:text-ink"
-    >
+    <span className="beta-badge pointer-events-none absolute z-10 -right-2.5 -bottom-4.75 inline-block rounded-xs border border-rule bg-paper-raised px-[6px] py-[2px] font-mono text-[10px] leading-none tracking-[0.09em] text-ink-soft uppercase max-tight:-right-1.5 max-tight:-bottom-3 max-tight:px-1 max-tight:py-px max-tight:text-[8px]">
       beta
-      <i
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-y-[-2px] left-0 w-[60%] -translate-x-[170%] skew-x-[-18deg] bg-gradient-to-r from-framing via-contradiction to-unique opacity-0 transition-[transform,opacity] duration-500 ease-out group-hover/beta:translate-x-[230%] group-hover/beta:opacity-80 group-focus-visible/beta:translate-x-[230%] group-focus-visible/beta:opacity-80"
-      />
-    </a>
+    </span>
   );
 }
 
