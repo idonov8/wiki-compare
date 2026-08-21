@@ -29,10 +29,10 @@ export default function PreviewCta({
   onLogIn: () => void;
 }) {
   return (
-    <div className="preview-cta-group flex items-center gap-x-[10px]">
+    <div className="preview-cta-group flex min-w-0 items-center gap-x-[10px] max-tight:gap-x-[8px]">
       <button
         type="button"
-        className="preview-cta border border-ink bg-ink px-[12px] py-[5px] font-body text-[13px] text-paper-raised disabled:cursor-progress disabled:opacity-45"
+        className="preview-cta shrink-0 border border-ink bg-ink px-[12px] py-[5px] max-tight:px-[9px] max-tight:py-[4px] font-body text-[13px] max-tight:text-[11px] text-paper-raised disabled:cursor-progress disabled:opacity-45"
         disabled={busy}
         onClick={canFund ? onFund : signedIn ? onTopUp : onLogIn}
       >
@@ -47,8 +47,10 @@ export default function PreviewCta({
 
       {/* What pressing it means, beside the button rather than in it, same as
           the gate below — just alongside instead of underneath, since this
-          copy sits in a slim row rather than a standalone panel. */}
-      <p className="preview-cta-note font-mono text-[11px] leading-[1.6] text-ink-soft">
+          copy sits in a slim row rather than a standalone panel. Free text
+          rather than a fixed label, so on a phone it gets a bounded box and
+          an ellipsis instead of pushing the strip onto a second line. */}
+      <p className="preview-cta-note min-w-0 font-mono text-[11px] leading-[1.6] text-ink-soft max-tight:truncate max-tight:text-[10px]">
         {canFund ? (
           <>
             This spends ~{formatCents(PRICE_PER_ARTICLE_CENTS)} of your{" "}

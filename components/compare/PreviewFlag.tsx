@@ -14,7 +14,7 @@
 export default function PreviewFlag({ className = "" }: { className?: string }) {
   return (
     <span
-      className={`preview-flag inline-flex items-center rounded-[8px] px-[16px] py-[6px] font-wiki text-[26px] font-normal leading-none text-ink-soft ${className}`}
+      className={`preview-flag inline-flex items-center rounded-[8px] px-[16px] py-[6px] max-tight:rounded-[6px] max-tight:px-[10px] max-tight:py-[3px] font-wiki text-[26px] max-tight:text-[17px] font-normal leading-none text-ink-soft ${className}`}
     >
       Preview
     </span>

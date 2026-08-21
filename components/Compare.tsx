@@ -129,7 +129,11 @@ export default function Compare() {
           meta={
             <>
               {preview ? (
-                <>
+                // One flex item as far as the strip is concerned, so a narrow
+                // screen can't wrap the flag onto its own line the way it would
+                // two separate items — the note inside `PreviewCta` is what
+                // gives, truncating before the flag ever loses its spot.
+                <div className="flex min-w-0 items-center gap-x-[10px] max-tight:gap-x-[8px]">
                   <PreviewCta
                     busy={funding}
                     signedIn={!!me}
@@ -139,12 +143,8 @@ export default function Compare() {
                     onTopUp={() => goDonate("preview-strip")}
                     onLogIn={() => goLogIn("preview-strip")}
                   />
-                  <span
-                    className="h-0 w-[22px] grow border-t border-dashed border-ink-wash-strong max-tight:hidden"
-                    aria-hidden
-                  />
-                  <PreviewFlag className="max-tight:ml-auto" />
-                </>
+                  <PreviewFlag className="ml-auto shrink-0" />
+                </div>
               ) : (
                 <RunSummary claims={claims} data={data} />
               )}

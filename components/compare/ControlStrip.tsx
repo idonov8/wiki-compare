@@ -32,7 +32,7 @@ export default function ControlStrip({
   meta: ReactNode;
 }) {
   return (
-    <div className="controls border-b border-rule px-[24px] py-[12px] max-tight:px-[18px] max-tight:py-[10px] flex gap-x-[28px] gap-y-[20px] max-cols:gap-x-[16px] max-cols:gap-y-[10px] items-center flex-wrap font-mono text-[12px]">
+    <div className="controls border-b border-rule px-[24px] py-[12px] max-tight:px-[18px] max-tight:py-[10px] flex gap-x-[28px] gap-y-[20px] max-cols:gap-x-[16px] max-cols:gap-y-[10px] max-tight:gap-x-[12px] max-tight:gap-y-[8px] items-center flex-wrap font-mono text-[12px]">
       <LangBars
         langs={langs}
         articles={articles}
