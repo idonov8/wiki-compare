@@ -813,10 +813,10 @@ export default function Compare() {
         <div className="ms-auto flex shrink-0 items-center gap-[8px] max-tight:gap-[5px]">
           <button
             type="button"
-            className="border border-rule px-[10px] py-[4px] font-mono text-[11px] tracking-[0.04em] text-ink-soft transition-colors duration-[120ms] hover:border-ink hover:text-ink"
+            className="font-mono text-[12px] tracking-[0.04em] text-ink-soft hover:border-ink hover:text-ink"
             onClick={() => goFeedback("masthead")}
           >
-            Feedback
+            <span className="max-tight:hidden">Send </span>Feedback<span className="max-tight:hidden">!</span>
           </button>
           <CreditBar
             me={me}
