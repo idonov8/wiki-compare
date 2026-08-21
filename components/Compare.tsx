@@ -816,7 +816,7 @@ export default function Compare() {
             className="font-mono text-[12px] tracking-[0.04em] text-ink-soft hover:border-ink hover:text-ink"
             onClick={() => goFeedback("masthead")}
           >
-            send feedback
+            <span className="max-[398px]:hidden">send </span>feedback
           </button>
           <CreditBar
             me={me}

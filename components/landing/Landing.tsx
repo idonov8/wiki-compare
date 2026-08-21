@@ -100,7 +100,7 @@ export default function Landing({
           heading=""
           className="border-y border-rule bg-paper-22 pt-[max(6vh,48px)] pb-[max(7vh,52px)]"
         >
-          <div className="mt-7 grid gap-10 md:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] md:items-center md:gap-14">
+          <div className="mt-7 grid gap-8 md:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] md:items-center md:gap-14">
             <div className="max-w-136">
               <p className="mb-5 font-mono text-[11px] tracking-[0.12em] uppercase text-ink-soft">
                 Why Compare?
@@ -125,9 +125,9 @@ export default function Landing({
                 alt="Wikipedia edit wars"
                 className="aspect-4/3 w-full object-cover pt-1"
               />
-              <figcaption className="flex items-baseline justify-between gap-4 pt-2 font-mono text-[10px] tracking-[0.08em] uppercase text-ink-soft">
+              <figcaption className="flex items-baseline justify-between gap-4 pt-2 font-mono text-[10px] tracking-[0.08em] uppercase text-ink-soft max-tight:flex-col max-tight:items-start max-tight:gap-1">
                 <span className="shrink-0">Wikipedia edit wars</span>
-                <span className="min-w-0 flex-1 truncate text-[8px] normal-case tracking-normal">
+                <span className="min-w-0 flex-1 truncate text-[8px] normal-case tracking-normal max-tight:w-full max-tight:overflow-visible max-tight:text-clip max-tight:whitespace-normal">
                   <a
                     href="https://commons.wikimedia.org/wiki/File:Wikipedia_Edit_Wars.jpg"
                     className="text-ink-soft underline underline-offset-[3px] hover:text-ink"
