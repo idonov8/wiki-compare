@@ -5,6 +5,7 @@ import { Pool, neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
 import { SIGNUP_GRANT_CENTS } from "./pricing";
 import { capture } from "./analytics";
+import { sendMail } from "./mail";
 
 /**
  * A second connection to the same database, on a different driver.
@@ -169,34 +170,11 @@ export const auth = betterAuth({
  * which lands on the console branch — right for local `next dev` and for CI.
  */
 export async function sendLoginEmail(email: string, url: string): Promise<void> {
-  const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    if (process.env.VERCEL_ENV === "production") {
-      throw new Error("RESEND_API_KEY is not set, so the login link cannot be delivered.");
-    }
-    console.log(`[auth] login link for ${email}: ${url}`);
-    return;
-  }
-
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      // Resend's shared onboarding sender, which works before any domain is
-      // verified. Swap it for an address on a verified domain once there is one;
-      // until then this is the difference between mail sending and mail 403ing.
-      from: "wiki-compare <onboarding@resend.dev>",
-      to: [email],
-      subject: "Your sign-in link",
-      text: `Sign in to wiki-compare:\n\n${url}\n\nIf you did not ask for this, ignore it.`,
-    }),
+  await sendMail({
+    to: email,
+    subject: "Your sign-in link",
+    text: `Sign in to wiki-compare:\n\n${url}\n\nIf you did not ask for this, ignore it.`,
   });
-
-  if (!response.ok) {
-    // Resend's body carries the reason the address or key was rejected, and it
-    // is the only place that reason exists. Swallowing it leaves a bare 4xx.
-    throw new Error(`Resend rejected the login email (${response.status}): ${await response.text()}`);
-  }
 }
 
 /** The signed-in user, with our two columns, as route handlers need them. */

@@ -58,6 +58,8 @@ export const EVENTS = [
   /** The language stamp on the search field was opened. Until it can offer a
    *  choice, this counts the demand for one. */
   "language_menu_opened",
+  /** The feedback form was opened from a named surface. */
+  "feedback_opened",
 ] as const;
 
 export type AnalyticsEvent = (typeof EVENTS)[number];

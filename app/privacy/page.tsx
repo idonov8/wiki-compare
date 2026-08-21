@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MEASURE } from "@/components/landing/Section";
+import { CONTACT_EMAIL } from "@/lib/contact";
 
 export const metadata = {
   title: "Privacy — Wiki Compare",
@@ -24,7 +25,6 @@ export const metadata = {
  */
 
 const UPDATED = "August 2026";
-const CONTACT = "contact@wikicompare.app";
 
 export default function Page() {
   return (
@@ -58,8 +58,8 @@ export default function Page() {
             <p>
               This site is run by Ido Nov as a personal project. Questions about your data, requests
               to see it, correct it or delete it, all go to{" "}
-              <a href={`mailto:${CONTACT}`} className="text-ink underline">
-                {CONTACT}
+              <a href={`mailto:${CONTACT_EMAIL}`} className="text-ink underline">
+                {CONTACT_EMAIL}
               </a>
               , and are answered by a person rather than a process.
             </p>
@@ -140,8 +140,8 @@ export default function Page() {
             <p>
               Under the Protection of Privacy Law you may ask to see the data held about you, to
               have it corrected if it is wrong, and to have it deleted. Write to{" "}
-              <a href={`mailto:${CONTACT}`} className="text-ink underline">
-                {CONTACT}
+              <a href={`mailto:${CONTACT_EMAIL}`} className="text-ink underline">
+                {CONTACT_EMAIL}
               </a>{" "}
               and you will get an answer within 30 days. Providing any of this is voluntary — the
               only consequence of withholding it is that you cannot have an account or credit.
@@ -171,8 +171,8 @@ export default function Page() {
               Comparisons are written by a language model from the articles, so they can be wrong or
               incomplete, and a marked difference is a pointer to check the sources rather than a
               finding. If one says something false about you, write to{" "}
-              <a href={`mailto:${CONTACT}`} className="text-ink underline">
-                {CONTACT}
+              <a href={`mailto:${CONTACT_EMAIL}`} className="text-ink underline">
+                {CONTACT_EMAIL}
               </a>{" "}
               and the comparison comes down while it is looked at.
             </p>

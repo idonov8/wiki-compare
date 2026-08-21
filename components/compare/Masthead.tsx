@@ -27,6 +27,7 @@ export default function Masthead({
   me,
   onDonate,
   onLogIn,
+  onFeedback,
 }: {
   sticky: boolean;
   showSearch: boolean;
@@ -37,6 +38,7 @@ export default function Masthead({
   me: MeResponse | null;
   onDonate: () => void;
   onLogIn: () => void;
+  onFeedback: () => void;
 }) {
   return (
     <header
@@ -58,7 +60,14 @@ export default function Masthead({
           busy={busy}
         />
       )}
-      <div className="ms-auto">
+      <div className="ms-auto flex shrink-0 items-center gap-[8px] max-tight:gap-[5px]">
+        <button
+          type="button"
+          className="font-mono text-[12px] tracking-[0.04em] text-ink-soft hover:border-ink hover:text-ink"
+          onClick={onFeedback}
+        >
+          <span className="max-[398px]:hidden">send </span>feedback
+        </button>
         <CreditBar me={me} onDonate={onDonate} onLogIn={onLogIn} />
       </div>
     </header>
