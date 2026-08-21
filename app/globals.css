@@ -587,6 +587,30 @@
 }
 
 /* ============================================================================
+   The preview flag's ring.
+   ========================================================================= */
+
+/* The fill is the same raised paper every panel on the site sits on, but not
+   a flat one: the first layer is a radial fade rather than a solid, so the
+   ring's own gradient — the second layer, clipped all the way to the border
+   box — shows faintly through its thin edge instead of stopping dead at the
+   ring. The centre, where the text sits, stays fully opaque paper, so the
+   colour reads as light escaping in from the frame rather than a wash over
+   the word. */
+.preview-flag {
+  border: 2px solid transparent;
+  background-image:
+    radial-gradient(
+      ellipse at center,
+      var(--color-paper-raised) 55%,
+      color-mix(in srgb, var(--color-paper-raised) 70%, transparent) 100%
+    ),
+    linear-gradient(100deg, var(--color-contradiction), var(--color-unique), var(--color-framing));
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+
+/* ============================================================================
    Element defaults. Everything that applies before a class does — and nothing
    that a class could say instead.
    ========================================================================= */
