@@ -126,6 +126,7 @@ export default function Compare() {
                     busy={funding}
                     signedIn={!!me}
                     canFund={canFund}
+                    creditCents={me?.creditCents ?? 0}
                     onFund={() => void fund("full")}
                     onTopUp={() => goDonate("preview-strip")}
                     onLogIn={() => goLogIn("preview-strip")}
