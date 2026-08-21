@@ -62,9 +62,11 @@ export default function RunSummary({
         />
       </span>
       {data ? (
-        cost && <span className="meta-cost ml-auto">{cost}</span>
+        cost && (
+          <span className="meta-cost ml-auto min-w-0 max-tight:truncate max-tight:text-[11px]">{cost}</span>
+        )
       ) : (
-        <span className="meta-cost ml-auto">
+        <span className="meta-cost ml-auto min-w-0 max-tight:truncate max-tight:text-[11px]">
           {claims.length ? "still reading…" : "reading all three…"}
         </span>
       )}

@@ -43,7 +43,7 @@ export default function CachedBadge({
 }) {
   return (
     <span
-      className="cached-badge group relative inline-flex items-center gap-[5px] ms-[9px] px-[7px] py-[2px] border border-rule bg-paper-raised font-mono text-[10px] tracking-[0.09em] uppercase text-ink-soft cursor-default before:content-[''] before:w-[5px] before:h-[5px] before:rounded-full before:bg-framing"
+      className="cached-badge group relative inline-flex items-center gap-[5px] ms-[9px] max-tight:ms-[6px] px-[7px] py-[2px] max-tight:px-[5px] max-tight:py-[1px] border border-rule bg-paper-raised font-mono text-[10px] max-tight:text-[9px] tracking-[0.09em] uppercase text-ink-soft cursor-default before:content-[''] before:w-[5px] before:h-[5px] before:rounded-full before:bg-framing"
       tabIndex={0}
       aria-describedby="cached-note"
     >
@@ -65,7 +65,7 @@ export default function CachedBadge({
             where a link would read as the end of that sentence instead of the
             answer to it. */}
         <button
-          className="cached-update px-[11px] py-[5px] border border-ink rounded-[2px] bg-ink text-paper-raised font-mono text-[11px] tracking-[0.07em] uppercase hover:enabled:bg-ink-soft hover:enabled:border-ink-soft disabled:opacity-50 disabled:cursor-progress"
+          className="cached-update px-[11px] py-[5px] max-tight:px-[9px] max-tight:py-[4px] border border-ink rounded-[2px] bg-ink text-paper-raised font-mono text-[11px] max-tight:text-[10px] tracking-[0.07em] uppercase hover:enabled:bg-ink-soft hover:enabled:border-ink-soft disabled:opacity-50 disabled:cursor-progress"
           disabled={busy}
           onClick={signedIn ? onUpdate : onDonate}
         >
