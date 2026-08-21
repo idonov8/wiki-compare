@@ -1,3 +1,5 @@
+import { CONTACT_EMAIL } from "./contact";
+
 import { type HTMLElement, type Node, parse } from "node-html-parser";
 import type { ArticleImage, ArticleSnapshot, Lang, LinkSpan, Section } from "./types";
 import { KEY_FACTS_HEADING, LANGS, LEAD_HEADING } from "./types";
@@ -26,7 +28,7 @@ export const PARSER_VERSION = "v6";
  * contact has to be something that actually reaches a maintainer.
  * https://foundation.wikimedia.org/wiki/Policy:User-Agent_policy
  */
-const CONTACT = process.env.WIKI_CONTACT || "https://wikicompare.app; contact@wikicompare.app";
+const CONTACT = process.env.WIKI_CONTACT || `https://wikicompare.app; ${CONTACT_EMAIL}`;
 const UA = `wiki-compare/0.1 (${CONTACT})`;
 const MAX_SECTION_CHARS = 4000;
 const MAX_LINKS = 400;

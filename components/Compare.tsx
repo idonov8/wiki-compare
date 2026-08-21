@@ -7,6 +7,7 @@ import { comparePath } from "./Highlighted";
 import CreditBar from "./CreditBar";
 import CreditsModal, { creditsExplained, markCreditsExplained } from "./CreditsModal";
 import DiffNav from "./DiffNav";
+import FeedbackModal from "./FeedbackModal";
 import Footer from "./Footer";
 import Landing from "./landing/Landing";
 import LangBars from "./LangBars";
@@ -217,6 +218,7 @@ export default function Compare() {
    *  whether they searched their way to it or were sent back to it by the
    *  login redirect. See components/CreditsModal.tsx. */
   const [explaining, setExplaining] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const reset = () => {
     setError(null);
@@ -460,6 +462,11 @@ export default function Compare() {
   const goDonate = useCallback((from: string) => {
     void track("gate_cta_clicked", { from });
     window.location.href = `/donate?from=${encodeURIComponent(from)}`;
+  }, []);
+
+  const goFeedback = useCallback((from: string) => {
+    void track("feedback_opened", { from });
+    setFeedbackOpen(true);
   }, []);
 
   /**
@@ -803,7 +810,14 @@ export default function Compare() {
             busy={busy}
           />
         )}
-        <div className="ms-auto">
+        <div className="ms-auto flex shrink-0 items-center gap-[8px] max-tight:gap-[5px]">
+          <button
+            type="button"
+            className="font-mono text-[12px] tracking-[0.04em] text-ink-soft hover:border-ink hover:text-ink"
+            onClick={() => goFeedback("masthead")}
+          >
+            <span className="max-[398px]:hidden">send </span>feedback
+          </button>
           <CreditBar
             me={me}
             onDonate={() => goDonate("masthead")}
@@ -931,6 +945,7 @@ export default function Compare() {
           recentLoading={recentLoading}
           relative={relative}
           onDonate={() => goDonate("landing_footer")}
+          onFeedback={() => goFeedback("landing_footer")}
           onDocked={setDocked}
         />
       )}
@@ -1124,6 +1139,7 @@ export default function Compare() {
       {!landing && (
         <Footer
           onDonate={() => goDonate("footer")}
+          onFeedback={() => goFeedback("footer")}
           className={langSwitch ? "pb-[76px]" : ""}
         />
       )}
@@ -1140,6 +1156,8 @@ export default function Compare() {
           onDismiss={dismissExplainer}
         />
       )}
+
+      {feedbackOpen && <FeedbackModal onDismiss={() => setFeedbackOpen(false)} />}
 
       {card && (
         <div
