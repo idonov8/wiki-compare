@@ -13,6 +13,7 @@ import { guessLang, parseWikipediaUrl } from "../lib/wikipedia.js";
 import { ghostRanges } from "../lib/ghost.js";
 import { isOutOfCredit } from "../lib/compare.js";
 import { couponEndLabel, couponExpired } from "../lib/coupons.js";
+import { validateFeedback } from "../lib/feedback.js";
 
 let failures = 0;
 const check = (label: string, fn: () => void) => {
@@ -155,6 +156,36 @@ check("a code with no deadline never runs out", () =>
 
 check("the banner prints the day the server refuses after", () =>
   assert.equal(couponEndLabel("WELCOME3"), "26 August"),
+);
+
+console.log("\nFeedback");
+
+check("a normal submission is accepted", () =>
+  assert.deepEqual(
+    validateFeedback({ name: "Ada", email: "ada@example.com", message: "Hello there." }),
+    { ok: true, value: { name: "Ada", email: "ada@example.com", message: "Hello there." } },
+  ),
+);
+
+check("an empty message is rejected", () =>
+  assert.equal(
+    validateFeedback({ name: "", email: "ada@example.com", message: "  " }).ok,
+    false,
+  ),
+);
+
+check("an over-long message is rejected", () =>
+  assert.equal(
+    validateFeedback({ name: "", email: "ada@example.com", message: "x".repeat(4001) }).ok,
+    false,
+  ),
+);
+
+check("a malformed email is rejected", () =>
+  assert.equal(
+    validateFeedback({ name: "", email: "ada@", message: "Hello there." }).ok,
+    false,
+  ),
 );
 
 console.log(failures ? `\n${failures} check(s) failed\n` : "\nall checks passed\n");

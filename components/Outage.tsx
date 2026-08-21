@@ -1,6 +1,7 @@
 "use client";
 
 import { OUT_OF_CREDIT } from "@/lib/types";
+import { CONTACT_EMAIL } from "@/lib/contact";
 
 /**
  * The site is out of model credit, said plainly and in the first person.
@@ -18,8 +19,8 @@ export default function Outage({ from }: { from: string }) {
       <p className="m-0 mb-[14px]">{OUT_OF_CREDIT}</p>
       <p className="m-0 mb-[14px]">
         If you want the site to come back please donate, and{" "}
-        <a className="text-ink underline underline-offset-[3px]" href="mailto:contact@wikicompare.app">
-          email me at contact@wikicompare.app
+        <a className="text-ink underline underline-offset-[3px]" href={`mailto:${CONTACT_EMAIL}`}>
+          email me at {CONTACT_EMAIL}
         </a>
         .
       </p>
