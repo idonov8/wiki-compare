@@ -105,7 +105,11 @@ async function alignHeadings(articles: ArticleSnapshot[], usage: Usage): Promise
 
   const message = await client().messages.create({
     model: ALIGN_MODEL,
-    max_tokens: 1500,
+    // Sized for the worst article, not the typical one. At 1500 a long article's
+    // group list was cut off mid-JSON, the parse failed, and the run silently
+    // compared only the lead and the infobox — a funded "full" read that read
+    // almost nothing. Roughly 25 tokens per group, so this covers ~300 groups.
+    max_tokens: 8000,
     system:
       "You match section headings of the same Wikipedia article written in different languages. " +
       "Headings are in the article's own language and rarely translate one-to-one. " +
@@ -123,11 +127,19 @@ async function alignHeadings(articles: ArticleSnapshot[], usage: Usage): Promise
   });
   addUsage(usage, message, ALIGN_MODEL);
 
+  // A truncated or unparseable group list must fail the run, not shrink it.
+  // Falling back to an empty list meant everything below still "worked": the
+  // diff ran on the lead and key facts alone, the result was stored as a full
+  // comparison, and the reader who paid for the whole article got its top. An
+  // error instead means the funded path refunds and nothing wrong is cached.
+  if (message.stop_reason === "max_tokens") {
+    throw new Error("Heading alignment was cut off before it finished; nothing was compared.");
+  }
   let parsed: { groups?: Record<string, string | number>[] };
   try {
     parsed = parseJson(textOf(message));
   } catch {
-    parsed = { groups: [] };
+    throw new Error("Heading alignment returned no usable groups; nothing was compared.");
   }
 
   const groups: SectionGroup[] = [leads, keyFacts].filter((g) => Object.keys(g.sections).length > 0);
