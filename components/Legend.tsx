@@ -65,20 +65,21 @@ export default function Legend({
     // anchored to; `.legend` inside it stays the key itself, so it can be a
     // button without a `<dl>` ending up inside one.
     //
-    // A column beside the length chart on a phone, rather than a row under it.
-    // Set as a row there the three kinds wrap onto two ragged lines and push
-    // the strip down a third one, all while the space to the chart's right sits
-    // empty — which is exactly where a key to the chart wants to be anyway.
+    // A column beside the length chart once the three article columns stop
+    // fitting side by side, rather than a row under it. Set as a row there the
+    // three kinds wrap onto two ragged lines and push the strip down a third
+    // one, all while the space to the chart's right sits empty — which is
+    // exactly where a key to the chart wants to be anyway.
     //
     // `basis-0` rather than letting the strip wrap it there: a legend that
     // drops below the chart the moment it stops fitting costs a line of height
-    // on the narrowest screens, which are the ones that can least afford one.
-    // Sized from zero it never pushes itself onto a line of its own, and
-    // `min-w-fit` then claims back exactly the width its longest label needs —
-    // so the leftover goes to the chart, which is the half of the strip that
-    // can actually use it, and neither of them wraps down to 320px.
+    // on the screens that can least afford one. Sized from zero it never pushes
+    // itself onto a line of its own, and `min-w-fit` then claims back exactly
+    // the width its longest label needs — so the leftover goes to the chart,
+    // which is the half of the strip that can actually use it, and neither of
+    // them wraps down to 320px.
     <div
-      className="legend-key relative max-tight:min-w-fit max-tight:flex-1 max-tight:basis-0"
+      className="legend-key relative max-cols:min-w-fit max-cols:flex-1 max-cols:basis-0"
       {...(hint && !open ? hintTriggers(() => setOpen(true)) : {})}
     >
       {hint && !open && <OnboardingDot />}
@@ -89,7 +90,7 @@ export default function Legend({
           what it now is. */}
       <button
         type="button"
-        className="legend flex flex-wrap gap-[16px] max-cols:gap-x-[12px] max-cols:gap-y-[6px] text-start text-ink max-tight:flex-col max-tight:flex-nowrap max-tight:gap-y-[8px] cursor-help hover:underline focus-visible:underline decoration-rule underline-offset-[3px]"
+        className="legend flex flex-wrap gap-[16px] max-cols:flex-col max-cols:flex-nowrap max-cols:gap-x-[12px] max-cols:gap-y-[8px] text-start text-ink cursor-help hover:underline focus-visible:underline decoration-rule underline-offset-[3px]"
         aria-expanded={open}
         aria-controls="legend-note"
         onClick={() => (open ? close() : setOpen(true))}
@@ -115,7 +116,7 @@ export default function Legend({
         <div
           id="legend-note"
           role="status"
-          className="legend-note absolute z-50 top-[calc(100%_+_10px)] start-0 max-tight:start-auto max-tight:end-0 w-[min(620px,calc(100vw_-_44px))] max-cols:w-[min(320px,calc(100vw_-_36px))] px-[15px] pt-[12px] pb-[14px] bg-paper-raised border border-ink rounded-[2px] shadow-offset font-body normal-case tracking-normal text-ink animate-reveal-in"
+          className="legend-note absolute z-50 top-[calc(100%_+_10px)] start-0 max-cols:start-auto max-cols:end-0 w-[min(620px,calc(100vw_-_44px))] max-cols:w-[min(320px,calc(100vw_-_36px))] px-[15px] pt-[12px] pb-[14px] bg-paper-raised border border-ink rounded-[2px] shadow-offset font-body normal-case tracking-normal text-ink animate-reveal-in"
         >
           <Described />
           <button
