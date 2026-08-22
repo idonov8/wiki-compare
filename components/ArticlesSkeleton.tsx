@@ -64,13 +64,13 @@ const BAR = "rounded-[2px] bg-ink-wash-strong animate-chip-breathe";
  */
 function LangBarsSkeleton() {
   return (
-    <div className="langbars-key max-tight:flex-1 max-tight:basis-0">
+    <div className="langbars-key max-cols:flex-1 max-cols:basis-0">
       <div className="toggles flex">
         {LANGS.map((lang, index) => (
-          <span key={lang} className="toggle flex w-[44px] flex-col items-center max-tight:flex-1">
+          <span key={lang} className="toggle flex w-[44px] flex-col items-center max-cols:flex-1">
             <span className="relative flex w-full items-end justify-center" style={{ height: 40 }}>
               <span
-                className={`${BAR} w-[22px] max-tight:w-[28px]`}
+                className={`${BAR} w-[22px] max-cols:w-[28px]`}
                 style={{ height: 13, animationDelay: `${index * -0.3}s` }}
               />
             </span>
@@ -100,7 +100,7 @@ function ControlStripSkeleton() {
       aria-hidden="true"
     >
       <LangBarsSkeleton />
-      <div className="legend-key flex flex-wrap gap-[16px] max-cols:gap-x-[12px] max-cols:gap-y-[6px] max-tight:min-w-fit max-tight:flex-1 max-tight:basis-0 max-tight:flex-col max-tight:flex-nowrap max-tight:gap-y-[8px] text-ink">
+      <div className="legend-key flex max-cols:min-w-fit max-cols:flex-1 max-cols:basis-0 max-cols:flex-col max-cols:flex-nowrap gap-[16px] max-cols:gap-x-[12px] max-cols:gap-y-[8px] text-ink">
         {LEGEND.map(({ swatch, label }) => (
           <span key={label} className="flex items-center gap-[6px]">
             <i className={`inline-block w-[15px] h-[15px] rounded-[2px] ${swatch}`} />

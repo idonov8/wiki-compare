@@ -12,13 +12,14 @@
  * readings, and a lopsided chart for how unevenly they are written.
  *
  * `beta` is a static stamp over the lower-right corner of the wordmark. It
- * shrinks at the tight breakpoint so the masthead remains compact on phones.
+ * shrinks once the three columns no longer fit, so the masthead stays compact
+ * through the mid-width band as well as on phones.
  */
 export default function Wordmark() {
   return (
     <span className="wordmark-group relative inline-flex">
       <a href="/" aria-label="Wiki Compare" className="wordmark group inline-flex items-end no-underline">
-        <span className="wordmark-type font-wordmark text-[29px] max-tight:text-[26px] leading-none tracking-[-0.01em] text-ink italic">
+        <span className="wordmark-type font-wordmark text-[29px] max-cols:text-[26px] leading-none tracking-[-0.01em] text-ink italic">
           wiki
           <Strand />
           compare
@@ -31,7 +32,7 @@ export default function Wordmark() {
 
 function BetaBadge() {
   return (
-    <span className="beta-badge pointer-events-none absolute z-10 -right-2.5 -bottom-4.75 inline-block rounded-xs border border-rule bg-paper-raised px-[6px] py-[2px] font-mono text-[10px] leading-none tracking-[0.09em] text-ink-soft uppercase max-tight:-right-1.5 max-tight:-bottom-3 max-tight:px-1 max-tight:py-px max-tight:text-[8px]">
+    <span className="beta-badge pointer-events-none absolute z-10 -right-2.5 -bottom-4.75 inline-block rounded-xs border border-rule bg-paper-raised px-[6px] py-[2px] font-mono text-[10px] leading-none tracking-[0.09em] text-ink-soft uppercase max-cols:-right-1.5 max-cols:-bottom-3 max-cols:px-1 max-cols:py-px max-cols:text-[8px]">
       beta
     </span>
   );
