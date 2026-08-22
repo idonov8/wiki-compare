@@ -42,7 +42,7 @@ export default function Masthead({
 }) {
   return (
     <header
-      className={`masthead z-40 overflow-x-clip border-b border-rule bg-paper px-[24px] py-[20px] flex gap-[24px] items-center flex-wrap max-tight:px-[18px] max-tight:py-[14px] max-tight:gap-[14px] ${
+      className={`masthead z-40 overflow-x-clip border-b border-rule bg-paper px-[24px] py-[20px] flex gap-[24px] items-center flex-wrap max-cols:px-[18px] max-cols:py-[14px] max-cols:gap-[14px] ${
         sticky ? "sticky top-0" : ""
       }`}
     >
@@ -50,23 +50,24 @@ export default function Masthead({
       {showSearch && (
         <SearchBox
           variant="bar"
-          // Last and full width on a phone, so the masthead is the wordmark and
-          // the credit meter on one line with the field under them, rather than
-          // the field taking a line and leaving the meter alone on a third.
-          className="animate-reveal-in flex-[1_1_320px] max-tight:order-last max-tight:basis-full"
+          // Last and full width once the three columns no longer fit side by
+          // side, so the masthead is the wordmark and the credit meter on one
+          // line with the field under them, rather than the field taking a line
+          // and leaving the meter alone on a third.
+          className="animate-reveal-in flex-[1_1_320px] max-cols:order-last max-cols:basis-full"
           value={query}
           onChange={onQueryChange}
           onSubmit={onSearch}
           busy={busy}
         />
       )}
-      <div className="ms-auto flex shrink-0 items-center gap-[8px] max-tight:gap-[5px]">
+      <div className="ms-auto flex shrink-0 items-center gap-[8px] max-cols:gap-[5px]">
         <button
           type="button"
           className="font-mono text-[12px] tracking-[0.04em] text-ink-soft hover:border-ink hover:text-ink"
           onClick={onFeedback}
         >
-          <span className="max-[398px]:hidden">send </span>feedback
+          <span className="max-[410px]:hidden">send </span>feedback
         </button>
         <CreditBar me={me} onDonate={onDonate} onLogIn={onLogIn} />
       </div>

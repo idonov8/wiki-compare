@@ -95,13 +95,13 @@ export default function LangBars({
     // sizing; `.toggles` inside stays the chart itself, the same split `Legend`
     // makes between `.legend-key` and `.legend`.
     //
-    // Given a share of the width on a phone rather than sitting at its natural
-    // size against the left margin, which left the strip crowded into two
-    // thirds of the screen with the rest blank. The slots widen and the bars
-    // spread; the buttons stay flush against each other, because the axis under
-    // them is only continuous while they are.
+    // Given a share of the width once the three columns no longer fit side by
+    // side, rather than sitting at its natural size against the left margin,
+    // which left the strip crowded into two thirds of the screen with the rest
+    // blank. The slots widen and the bars spread; the buttons stay flush against
+    // each other, because the axis under them is only continuous while they are.
     <div
-      className="langbars-key relative max-tight:flex-1 max-tight:basis-0"
+      className="langbars-key relative max-cols:flex-1 max-cols:basis-0"
       {...(hint && !open ? hintTriggers(() => setOpen(true)) : {})}
     >
       {hint && !open && <OnboardingDot />}
@@ -114,7 +114,7 @@ export default function LangBars({
               key={lang}
               // No gap between the buttons, so the baselines below the bars meet
               // into one unbroken axis across all three.
-              className="toggle group flex w-[44px] flex-col items-center bg-transparent max-tight:flex-1"
+              className="toggle group flex w-[44px] flex-col items-center bg-transparent max-cols:flex-1"
               aria-pressed={on}
               aria-label={`${LANG_META[lang].label}, ${words[lang].toLocaleString()} words`}
               onClick={() => onPick(lang)}
@@ -141,7 +141,7 @@ export default function LangBars({
                   // bar drawn to the same height either way is what makes the
                   // hidden version's size still readable, which is the only
                   // reason a reader would press it back on.
-                  className={`langbar w-[22px] max-tight:w-[28px] origin-bottom animate-bar-rise transition-[background-color] duration-[120ms] ease-[ease] ${
+                  className={`langbar w-[22px] max-cols:w-[28px] origin-bottom animate-bar-rise transition-[background-color] duration-[120ms] ease-[ease] ${
                     on
                       ? "bg-ink group-hover:bg-ink-soft"
                       : "border border-rule bg-ink-wash-strong group-hover:bg-ink-view-edge"

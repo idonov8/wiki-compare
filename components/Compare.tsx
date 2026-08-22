@@ -133,7 +133,7 @@ export default function Compare() {
                 // screen can't wrap the flag onto its own line the way it would
                 // two separate items — the note inside `PreviewCta` is what
                 // gives, truncating before the flag ever loses its spot.
-                <div className="flex min-w-0 items-center gap-x-[10px] max-tight:gap-x-[8px]">
+                <div className="flex min-w-0 grow items-center gap-x-[10px] max-cols:basis-full max-cols:gap-x-[8px]">
                   <PreviewCta
                     busy={funding}
                     signedIn={!!me}

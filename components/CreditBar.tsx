@@ -107,10 +107,10 @@ export default function CreditBar({
       </span>
       <span className="credit-balance absolute top-full start-0 pt-[5px] tracking-[0.04em] whitespace-nowrap text-ink">
         <b className="font-semibold">{formatCents(me.creditCents)}</b> left{" "}
-        {/* Dropped at the tight breakpoint: what has been given away is what
-            makes the masthead too wide to share a line with the logo there,
-            and the detail panel below says it anyway. */}
-        <span className="text-ink-soft max-tight:hidden">
+        {/* Dropped once the three columns no longer fit: what has been given
+            away is what makes the masthead too wide to share a line with the
+            logo there, and the detail panel below says it anyway. */}
+        <span className="text-ink-soft max-cols:hidden">
           · {formatCents(used)} used
         </span>
       </span>
