@@ -84,7 +84,7 @@ export default function CreditBar({
     // `group` drives the detail panel below: it opens on hover or focus of this
     // container, not of the panel itself.
     <div
-      className="credit group relative flex flex-col gap-[5px] min-w-[148px] max-cols:min-w-0 max-cols:flex-none font-mono text-[11px] text-ink-soft cursor-help"
+      className="credit group relative min-w-[148px] max-cols:min-w-0 max-cols:flex-none font-mono text-[11px] text-ink-soft cursor-help"
       tabIndex={0}
       aria-describedby="credit-detail-text"
     >
@@ -97,7 +97,7 @@ export default function CreditBar({
         // is the widest thing in the masthead, and the bar has no business
         // being that long. `self-start` opts it out of stretching and the
         // fixed width gives it a length of its own.
-        className="credit-meter h-[3px] rounded-[2px] bg-ink-track overflow-hidden max-cols:w-[90px] max-cols:self-start"
+        className="credit-meter block h-[3px] rounded-[2px] bg-ink-track overflow-hidden max-cols:w-[90px]"
         aria-hidden="true"
       >
         <span
@@ -105,7 +105,7 @@ export default function CreditBar({
           style={{ width: `${(fill * 100).toFixed(1)}%` }}
         />
       </span>
-      <span className="credit-balance tracking-[0.04em] whitespace-nowrap text-ink">
+      <span className="credit-balance absolute top-full start-0 pt-[5px] tracking-[0.04em] whitespace-nowrap text-ink">
         <b className="font-semibold">{formatCents(me.creditCents)}</b> left{" "}
         {/* Dropped at the tight breakpoint: what has been given away is what
             makes the masthead too wide to share a line with the logo there,
@@ -129,7 +129,7 @@ export default function CreditBar({
           can transition and so a Playwright suite can read
           `getComputedStyle(el).visibility` directly. */}
       <div
-        className="credit-detail absolute z-50 top-[calc(100%_+_8px)] end-0 w-[300px] max-cols:w-[min(300px,calc(100vw_-_48px))] pt-[11px] px-[13px] pb-[12px] bg-paper-raised border border-ink rounded-[2px] shadow-offset font-body text-[13px] leading-[1.55] tracking-normal normal-case text-start text-ink cursor-default invisible opacity-0 pointer-events-none transition-opacity duration-[120ms] ease-[ease] group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 group-focus-within:pointer-events-auto before:content-[''] before:absolute before:-inset-x-px before:-top-[10px] before:h-[10px]"
+        className="credit-detail absolute z-50 top-[calc(100%_+_29px)] end-0 w-[300px] max-cols:w-[min(300px,calc(100vw_-_48px))] pt-[11px] px-[13px] pb-[12px] bg-paper-raised border border-ink rounded-[2px] shadow-offset font-body text-[13px] leading-[1.55] tracking-normal normal-case text-start text-ink cursor-default invisible opacity-0 pointer-events-none transition-opacity duration-[120ms] ease-[ease] group-hover:visible group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:visible group-focus-within:opacity-100 group-focus-within:pointer-events-auto before:content-[''] before:absolute before:-inset-x-px before:-top-[10px] before:h-[10px]"
       >
         {/* The trip from the figures down to the panel crosses 8px of nothing,
             and a pointer over nothing is a pointer that has left `.credit` —
