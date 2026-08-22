@@ -97,7 +97,7 @@ export default function CreditBar({
         // is the widest thing in the masthead, and the bar has no business
         // being that long. `self-start` opts it out of stretching and the
         // fixed width gives it a length of its own.
-        className="credit-meter h-[3px] rounded-[2px] bg-ink-track overflow-hidden max-cols:w-27.5 max-cols:self-start"
+        className="credit-meter h-[3px] rounded-[2px] bg-ink-track overflow-hidden max-cols:w-[90px] max-cols:self-start"
         aria-hidden="true"
       >
         <span
