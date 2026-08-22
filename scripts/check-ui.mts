@@ -278,56 +278,72 @@ check(/[?&]title=/.test(page.url()), "clicking a recent article opens it", page.
 // A cache hit is not free and must never say so: somebody paid to process this
 // article and everyone since has read it for nothing, which is the argument the
 // whole site rests on. The figure is the one stored with the answer.
-const metaSpan = () =>
-  page.$eval(".meta > span:first-child", (el) => ({
-    text: el.textContent ?? "",
-    title: el.getAttribute("title") ?? "",
-  }));
+const metaSpan = () => page.$eval(".meta-cost", (el) => el.textContent ?? "");
 
 const reopen = async (as: Stored) => {
   stored = as;
   await page.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
   await page.waitForSelector("mark.claim", { timeout: 30000 });
-  return metaSpan();
 };
 
 {
   const meta = await metaSpan();
   check(
-    /\$0\.19 was paid to process this article/.test(meta.text),
+    /\$0\.19 was paid to process this article/.test(meta),
     "a cached comparison reports what was paid to process it",
-    meta.text,
+    meta,
   );
-  check(!/free/i.test(meta.text), "nothing in the strip calls a cached comparison free", meta.text);
+  check(!/free/i.test(meta), "nothing in the strip calls a cached comparison free", meta);
   check(
-    /14,203 tokens in, 5,110 out/.test(meta.title),
-    "the token breakdown stays in the title attribute",
-    meta.title,
+    (await page.$eval(".meta-cost", (el) => el.getAttribute("title"))) === null,
+    "the processing cost carries no title attribute",
   );
-  check(!/upper bound/.test(meta.title), "a priced run is not hedged as an estimate", meta.title);
+  check(
+    (await page.$$eval(".meta [title]", (els) =>
+      els.some((el) => /tokens/i.test(el.getAttribute("title") ?? "")),
+    )) === false,
+    "the strip carries no token breakdown title",
+  );
+  check(
+    /contradiction/i.test(
+      (await page.$eval(".meta .recent-ratio", (el) => el.getAttribute("title") ?? "")),
+    ),
+    "the ratio title reports the claim counts",
+  );
+  const processedRatio = await page.$eval(".meta .recent-ratio", (el) =>
+    [...el.children].map((child) => [...child.classList].find((name) => name.startsWith("bg-")) ?? ""),
+  );
+  check(
+    processedRatio.length === 3 &&
+      new Set(processedRatio).size === 3 &&
+      ["bg-contradiction", "bg-unique", "bg-framing"].every((kind) => processedRatio.includes(kind)),
+    "a processed strip draws one colored segment per claim kind present",
+    processedRatio.join(", "),
+  );
+  check(
+    !!(await page.$(".meta .recent-ratio")) && !/marked/i.test((await page.textContent(".meta")) ?? ""),
+    "the processed strip shows the ratio rather than a marked count",
+    (await page.textContent(".meta")) ?? "",
+  );
 }
 
 // The common case, and the one that decides whether any of this was worth
 // saying: a row from before costs were recorded still has true token totals, so
 // it reports an estimate priced off them. It has to read as an estimate on
 // sight — a reader must be able to tell it from the exact figure above without
-// a legend — and the title has to admit why and which way it errs.
+// a legend.
 {
-  const meta = await reopen("legacy");
+  await reopen("legacy");
+  const meta = await metaSpan();
   check(
-    /about \$0\.12 was paid to process this article/.test(meta.text),
+    /about \$0\.12 was paid to process this article/.test(meta),
     "a comparison priced from its tokens says so as an estimate",
-    meta.text,
+    meta,
   );
   check(
-    !/\$0\.19/.test(meta.text) && !/free/i.test(meta.text),
+    !/\$0\.19/.test(meta) && !/free/i.test(meta),
     "and does not pass the estimate off as the exact figure",
-    meta.text,
-  );
-  check(
-    /predates the per-model breakdown/.test(meta.title) && /upper bound/.test(meta.title),
-    "the title says why it is approximate and that it errs high",
-    meta.title,
+    meta,
   );
 }
 
@@ -335,13 +351,14 @@ const reopen = async (as: Stored) => {
 // cost. It says the first without claiming the second — "$0.00" would be the
 // same lie the word "free" was, and so would a figure derived from nothing.
 {
-  const meta = await reopen("silent");
+  await reopen("silent");
+  const meta = (await page.textContent(".meta")) ?? "";
   check(
-    /marked/.test(meta.text) && !/\$/.test(meta.text) && !/free/i.test(meta.text),
-    "a comparison with no usable totals claims no cost at all",
-    meta.text,
+    (await page.$(".meta-cost")) === null && !!(await page.$(".meta .recent-ratio")),
+    "a comparison with no usable totals still draws its ratio without a cost line",
+    meta,
   );
-  check(!/about/.test(meta.text), "and offers no estimate either", meta.text);
+  check(!/\$|free|about/i.test(meta), "and offers no cost, free, or estimate text", meta);
 }
 
 await reopen("priced");
@@ -456,7 +473,7 @@ check(!!(await page.$(".cached-badge")), "a cached comparison served past an edi
     "the offer to update carries its control inside the panel",
   );
   check(
-    (await page.$$(".meta > button")).length === 0,
+    (await page.$$(".meta > .cached-update")).length === 0,
     "and no longer beside the badge",
   );
   const vp = page.viewportSize()!;
@@ -529,6 +546,7 @@ check(!!(await page.$(".cached-badge")), "a cached comparison served past an edi
 // ---- the comparison itself --------------------------------------------------
 
 await page.goto(BASE, { waitUntil: "domcontentloaded" });
+await page.waitForLoadState("networkidle");
 await page.fill('input[aria-label="Article title"]', `demo:${FIXTURE}`);
 // `demo:` skips the search-and-confirm flow and compares the fixture directly.
 await page.click('button[aria-label="Search"]');
@@ -840,6 +858,12 @@ check(!(await page.$(".card")), "Escape dismisses the card");
   });
 
   await openGate();
+  check(!!(await page.$(".meta .preview-flag")), "a preview strip carries its preview flag");
+  check(
+    (await page.textContent(".preview-cta")) === "Log in to process it",
+    "signed out, the preview strip asks for a login",
+    (await page.textContent(".preview-cta")) ?? "",
+  );
   check(
     (await page.textContent(".credit-cta")) === "Log in",
     "signed out, the masthead asks for a login rather than a donation",
@@ -853,6 +877,20 @@ check(!(await page.$(".card")), "Escape dismisses the card");
   }
   // The gate has to reach the login screen and come back to this article, or a
   // reader loses the page they were on to sign in for it.
+  await page.route("**/login*", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<html><body>login</body></html>" }),
+  );
+  await page.click(".preview-cta");
+  await page.waitForFunction(() => location.pathname === "/login", null, { timeout: 5000 })
+    .catch(() => {});
+  check(
+    /\/login\?next=%2F%3Ftitle%3Ddemo/.test(page.url()),
+    "clicking the signed-out preview CTA goes to login with a return path",
+    page.url(),
+  );
+  await page.unroute("**/login*");
+  await page.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector(".gate", { timeout: 30000 });
   await page.click(".gate-cta");
   await page.waitForFunction(() => location.pathname === "/login", null, { timeout: 5000 })
     .catch(() => {});
@@ -882,6 +920,12 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     localStorage.removeItem("wiki-compare:credits-explained");
   });
   await openGate();
+  check(!!(await page.$(".meta .preview-flag")), "credit-backed preview still carries its preview flag");
+  check(
+    (await page.textContent(".preview-cta")) === "Donate this article",
+    "with credit, the preview strip asks for the donation",
+    (await page.textContent(".preview-cta")) ?? "",
+  );
   // The credit system, explained over the first article a new account opens —
   // a modal, not a note beside the meter, because the meter only explained it
   // to readers who happened to hover a 3px bar.
@@ -945,7 +989,7 @@ check(!(await page.$(".card")), "Escape dismisses the card");
       // only hand over a whole body at once, so what this checks is that the
       // client reads every one of those lines off a POST — the pacing itself is
       // the same code `open` runs against the real stream above.
-      const result = { ...json, scope: { kind: "full" } };
+      const result = { ...json, usage: USAGE[stored], scope: { kind: "full" } };
       const lines = [
         { event: "articles", qid: json.qid, articles: json.articles },
         { event: "scope", scope: { kind: "full" } },
@@ -981,8 +1025,13 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     "and the differences the stream sent are marked in it",
   );
   {
-    const meta = (await page.textContent(".meta > span:first-child")) ?? "";
-    check(!/preview/.test(meta), "and the strip no longer calls the read a preview", meta);
+    check((await page.$(".preview-flag")) === null, "the funded strip drops its preview flag");
+    check((await page.$(".preview-cta")) === null, "the funded strip drops its preview CTA");
+    check(
+      !!(await page.$(".meta-cost")),
+      "the funded strip carries its processing cost",
+      (await page.textContent(".meta")) ?? "",
+    );
   }
   await page.unroute((url) => url.pathname === "/api/compare");
 
@@ -997,6 +1046,12 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     onboardingDone: true,
   };
   await openGate();
+  check(!!(await page.$(".meta .preview-flag")), "an empty balance preview carries its preview flag");
+  check(
+    (await page.textContent(".preview-cta")) === "Top up to donate it",
+    "with no credit, the preview strip asks for a top-up",
+    (await page.textContent(".preview-cta")) ?? "",
+  );
   {
     const { cta, note } = await gate();
     check(/^Top up credit to donate this article$/.test(cta),
@@ -1008,6 +1063,19 @@ check(!(await page.$(".card")), "Escape dismisses the card");
 
   check((await page.$(".onboarding-dot")) === null,
     "and an account already through the tour is not shown it again");
+
+  await page.route("**/donate*", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<html><body>donate</body></html>" }),
+  );
+  await page.click(".preview-cta");
+  await page.waitForFunction(() => location.pathname === "/donate", null, { timeout: 5000 })
+    .catch(() => {});
+  check(
+    /\/donate\?from=preview-strip/.test(page.url()),
+    "clicking the zero-credit preview CTA goes to donate",
+    page.url(),
+  );
+  await page.unroute("**/donate*");
 
   asPreview = false;
   me = null;
