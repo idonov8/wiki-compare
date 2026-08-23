@@ -27,6 +27,11 @@ function cacheNote(cache: CacheInfo): string {
  * badge; the button is a control beside it, reachable by pointer and by Tab.
  * Signed out it goes to the donate page rather than to a 401 — it should never
  * be a dead end for the reader who believed the sentence above it.
+ *
+ * The badge is always the last thing in whichever row of the strip it belongs
+ * to. That costs a phone no line of its own to say one word, and it is what
+ * puts the panel below on screen: hung from a badge that ends its row, it opens
+ * inside the page's margins rather than off the edge.
  */
 export default function CachedBadge({
   cache,
@@ -43,12 +48,19 @@ export default function CachedBadge({
 }) {
   return (
     <span
-      className="cached-badge group relative inline-flex items-center gap-[5px] ms-[9px] max-tight:ms-[6px] px-[7px] py-[2px] max-tight:px-[5px] max-tight:py-[1px] border border-rule bg-paper-raised font-mono text-[10px] max-tight:text-[9px] tracking-[0.09em] uppercase text-ink-soft cursor-default before:content-[''] before:w-[5px] before:h-[5px] before:rounded-full before:bg-framing"
+      className="cached-badge group relative shrink-0 inline-flex items-center gap-[5px] ms-[9px] max-tight:ms-[6px] px-[7px] py-[2px] max-tight:px-[5px] max-tight:py-[1px] border border-rule bg-paper-raised font-mono text-[10px] max-tight:text-[9px] tracking-[0.09em] uppercase text-ink-soft cursor-default before:content-[''] before:w-[5px] before:h-[5px] before:rounded-full before:bg-framing"
       tabIndex={0}
       aria-describedby="cached-note"
     >
       cached
-      {/* The panel is a DOM child of the badge, so `group-hover` /
+      {/* Hung from the badge's far edge, which is why the badge ending its row
+          matters to more than the strip's height: a 300px panel measured back
+          from a badge stranded in the middle of a phone starts off the near
+          edge of the screen. Ending the row, the badge sits against the page's
+          own margin, and the panel — never wider than the page between its
+          margins — lands inside it.
+
+          The panel is a DOM child of the badge, so `group-hover` /
           `group-focus-within` keep it open while the pointer or focus is
           anywhere inside it — except for the 8px gap between the badge's bottom
           edge and the panel's top edge, where nothing is painted at all.
