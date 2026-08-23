@@ -7,6 +7,7 @@ import {
   type Lang,
   type RecentArticle,
   type ScopeKind,
+  type Source,
 } from "./types";
 import { PARSER_VERSION } from "./wikipedia";
 
@@ -48,6 +49,42 @@ export async function putArticle(snapshot: ArticleSnapshot, parserVersion: strin
     INSERT INTO articles (lang, revid, parser_version, title, snapshot)
     VALUES (${snapshot.lang}, ${snapshot.revid}, ${parserVersion}, ${snapshot.title}, ${JSON.stringify(snapshot)})
     ON CONFLICT (lang, revid, parser_version) DO NOTHING
+  `;
+}
+
+/**
+ * The footnotes of one revision.
+ *
+ * A third cache of the same shape as the two above, and separate from them for
+ * the same reason they are separate from each other: a sources list is read out
+ * of the part of the page the article parser throws away, so nothing about it
+ * changes when the parser or the prompt does. Folded into `articles`, every
+ * change to either version would have thrown away a comparison to re-read a
+ * reference list that had not changed a character.
+ */
+export async function getSources(
+  lang: Lang,
+  revid: number,
+  sourcesVersion: string,
+): Promise<Source[] | null> {
+  const rows = await sql()`
+    SELECT sources FROM article_sources
+    WHERE lang = ${lang} AND revid = ${revid} AND sources_version = ${sourcesVersion}
+    LIMIT 1
+  `;
+  return rows.length ? (rows[0].sources as Source[]) : null;
+}
+
+export async function putSources(
+  lang: Lang,
+  revid: number,
+  sourcesVersion: string,
+  sources: Source[],
+): Promise<void> {
+  await sql()`
+    INSERT INTO article_sources (lang, revid, sources_version, sources)
+    VALUES (${lang}, ${revid}, ${sourcesVersion}, ${JSON.stringify(sources)})
+    ON CONFLICT (lang, revid, sources_version) DO NOTHING
   `;
 }
 

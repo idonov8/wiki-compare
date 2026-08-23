@@ -1083,6 +1083,131 @@ check(!(await page.$(".card")), "Escape dismisses the card");
   await page.unroute("**/api/onboarding");
 }
 
+// ---- the sources, and the blindspots in them -------------------------------
+
+// Which sources a version shares with the others is arithmetic done on the
+// server; what this checks is that the arithmetic reaches the page as three
+// distinguishable states, and that pressing "highlight blindspots" marks
+// exactly the entries the other versions cite and this one does not. The
+// payload is stubbed rather than parsed out of the fixture, because the fixture
+// articles happen to share no source across all three languages and the
+// strikethrough is the state most worth checking: it is the strongest claim the
+// panel makes.
+{
+  const entry = (i: number, citedIn: string[], title: string, domain: string) => ({
+    text: `${title} — citation line`,
+    title,
+    url: `https://${domain}/${i}`,
+    domain,
+    group: `g${i}`,
+    citedIn,
+  });
+  const sources = {
+    langs: ["en", "he", "ar"],
+    sources: {
+      en: [
+        entry(1, ["en"], "Only English read this", "cfr.org"),
+        entry(2, ["en", "he"], "English and Hebrew read this", "haaretz.co.il"),
+        entry(3, ["en", "he", "ar"], "All three read this", "bbc.com"),
+      ],
+      he: [
+        entry(2, ["en", "he"], "אנגלית ועברית קראו את זה", "haaretz.co.il"),
+        entry(3, ["en", "he", "ar"], "שלושתן קראו את זה", "bbc.com"),
+        entry(4, ["he"], "רק עברית קראה את זה", "ynet.co.il"),
+      ],
+      ar: [
+        entry(3, ["en", "he", "ar"], "الثلاثة قرأوا هذا", "bbc.com"),
+        entry(5, ["ar"], "العربية وحدها قرأت هذا", "wafa.ps"),
+      ],
+    },
+  };
+  await page.route("**/api/sources**", (route) =>
+    route.fulfill({ contentType: "application/json", body: JSON.stringify(sources) }),
+  );
+
+  await page.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("#sources", { timeout: 30000 });
+  // The list loads on approach rather than with the article: it is an appendix,
+  // and a reader who never scrolls to it should never cause it to be fetched.
+  check(
+    (await page.$("#sources .source-entry")) === null,
+    "the sources are not fetched before the reader is anywhere near them",
+  );
+  await page.$eval("#sources", (el) => el.scrollIntoView({ block: "start" }));
+  await page.waitForSelector("#sources .source-entry", { timeout: 30000 });
+
+  check(
+    (await page.$$("#sources .sources-column")).length === 3,
+    "one list per language the comparison covered",
+  );
+
+  const shown = (lang: string) =>
+    page.$$eval(`[data-sources="${lang}"] .source-entry`, (els) =>
+      els.map((el) => ({
+        cited: el.getAttribute("data-cited") ?? "",
+        badge: el.querySelector(".source-badge")?.textContent ?? null,
+        note: el.getAttribute("title"),
+        struck: getComputedStyle(el.querySelector(".source-title")!).textDecorationLine,
+        faded: Number(getComputedStyle(el).opacity),
+      })),
+    );
+
+  const en = await shown("en");
+  check(en[0].badge === null && en[0].faded === 1,
+    "a source only one version cites is in full ink and wears no badge", JSON.stringify(en[0]));
+  check(en[1].badge === "he" && en[1].faded < 1,
+    "one shared with another version is faded and names it", JSON.stringify(en[1]));
+  check(
+    en[1].note === "This source is cited in the English and Hebrew versions.",
+    "and says which versions in words, for the hover",
+    en[1].note ?? "",
+  );
+  check(en[2].badge === "he · ar" && en[2].struck.includes("line-through"),
+    "one every version cites is struck through", JSON.stringify(en[2]));
+  check(!en[0].struck.includes("line-through"),
+    "and a source not every version cites is not", JSON.stringify(en[0]));
+
+  // The Hebrew and Arabic lists are the same three states read the other way
+  // round, which is what proves the badges are not just the English column's
+  // view of itself.
+  const he = await shown("he");
+  check(he[0].badge === "en", "the Hebrew list names English on the source they share", he[0].badge ?? "");
+  check((await shown("ar"))[1].badge === null, "and lists the one only Arabic cites in full ink");
+
+  const marked = () =>
+    page.$$eval("#sources .source-entry[data-missing]", (els) =>
+      els.map((el) => el.getAttribute("data-cited") ?? ""),
+    );
+
+  check((await marked()).length === 0, "nothing is marked until a blindspot is asked for");
+  await page.click('[data-sources="en"] .blindspot-toggle');
+  // The bands and the fade are a transition; measured on the same tick they are
+  // still on their way there.
+  await page.waitForTimeout(300);
+  check(
+    JSON.stringify(await marked()) === JSON.stringify(["he", "ar"]),
+    "English's blindspots are exactly the sources the others cite and it does not",
+    (await marked()).join(" | "),
+  );
+  check(
+    /^2 sources the other versions cite/.test(
+      (await page.textContent('[data-sources="en"] [role="status"]')) ?? "",
+    ),
+    "and the column counts them",
+    (await page.textContent('[data-sources="en"] [role="status"]')) ?? "",
+  );
+  const dimmed = await page.$$eval('[data-sources="en"] .source-entry', (els) =>
+    els.every((el) => Number(getComputedStyle(el).opacity) < 0.5),
+  );
+  check(dimmed, "while the version doing the asking steps back");
+
+  await page.click('[data-sources="en"] .blindspot-toggle');
+  await page.waitForTimeout(300);
+  check((await marked()).length === 0, "and clearing it puts the lists back");
+
+  await page.unroute("**/api/sources**");
+}
+
 // ---- one language at a time, on a phone ------------------------------------
 
 // Below the `cols` breakpoint the three columns cannot sit side by side, so the

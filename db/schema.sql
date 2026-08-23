@@ -30,6 +30,19 @@ BEGIN
   END IF;
 END $$;
 
+-- The reference list of one revision, parsed into sources. Same write-once
+-- keying as `articles` and, deliberately, its own version column: sources come
+-- out of the part of the page the article parser strips, so a parser fix has no
+-- bearing on them and should not throw them away.
+CREATE TABLE IF NOT EXISTS article_sources (
+  lang            TEXT        NOT NULL,
+  revid           BIGINT      NOT NULL,
+  sources_version TEXT        NOT NULL,
+  sources         JSONB       NOT NULL,
+  fetched_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (lang, revid, sources_version)
+);
+
 -- Comparison output, keyed by every participating revision id plus the prompt
 -- version. A steady-state article costs zero tokens on every request after the
 -- first one.
