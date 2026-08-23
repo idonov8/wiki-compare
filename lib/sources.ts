@@ -19,8 +19,9 @@ export const SOURCES_VERSION = "s1";
 const MAX_TEXT = 300;
 
 /** Inside a footnote: the caret back to the body, the template stylesheet, the
- *  date we retrieved it on, and the maintenance notes Wikipedia hides in CSS.
- *  All of it would otherwise land in the one line this reduces to. */
+ *  date we retrieved it on, the maintenance notes Wikipedia hides in CSS, and
+ *  the metadata blob below — read first, then removed. All of it would
+ *  otherwise land in the one line a footnote reduces to. */
 const CITE_CHROME = [
   "style",
   ".mw-cite-backlink",
@@ -185,13 +186,6 @@ function titleOf(raw: string | null | undefined): string | undefined {
   return /\p{L}{3}/u.test(title) ? title : undefined;
 }
 
-/** Whether a footnote cites anything at all. Explanatory notes — "Dweik was
- *  Speaker following the 2006 election" — are footnotes too, and belong in the
- *  article rather than in a list of what it was written from. */
-function isCitation(source: Source): boolean {
-  return source.keys.length > 0;
-}
-
 /**
  * The footnotes of one article, in the order it prints them.
  *
@@ -250,6 +244,13 @@ export function parseSources(html: string): Source[] {
       // snapshot of it.
       const url = links.find((l) => unwrapArchive(l) === l) ?? links[0];
 
+      // Nothing to recognise it by is not a source. Explanatory notes — "Dweik
+      // was Speaker following the 2006 election" — are footnotes too, and
+      // belong in the article rather than in a list of what it was written
+      // from; so is a printed book cited with no link, ISBN or stated title,
+      // which nothing could match across languages anyway.
+      if (!keys.size || !text) continue;
+
       const source: Source = {
         text: text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT).trimEnd()}…` : text,
         title,
@@ -257,7 +258,6 @@ export function parseSources(html: string): Source[] {
         domain: url ? hostOf(url) : undefined,
         keys: [...keys],
       };
-      if (!isCitation(source) || !source.text) continue;
 
       // The same source cited from three different sentences is three footnotes
       // in some editions and one named reference in others. Here it is one

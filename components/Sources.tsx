@@ -96,9 +96,8 @@ function Entry({
         )}
       </div>
       {source.domain && (
-        // `bdi` rather than `dir="ltr"` on the line: the host reads
-        // left-to-right wherever it is printed, but the line it sits on belongs
-        // to the column and has to start where the title above it starts.
+        // `bdi` rather than `dir` on the line: the host reads left-to-right
+        // wherever it is printed, but the line it sits on belongs to the column.
         <div className="mt-[2px] font-mono text-[10.5px] text-ink-soft">
           <bdi>{source.domain}</bdi>
         </div>
