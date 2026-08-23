@@ -103,6 +103,17 @@ export default function Compare() {
   /** Whether the floating language switch is over the bottom of the page, which
    *  the footer has to keep its last line clear of. */
   const langSwitch = narrow && !!solo && hasColumns && onArticle && available.length > 1;
+  /** Built here rather than inline in the strip, because both shapes the strip
+   *  takes — previewed and processed — end their last row with it. */
+  const badge = stale && data?.cache && (
+    <CachedBadge
+      cache={data.cache}
+      busy={funding}
+      signedIn={!!me}
+      onUpdate={() => void fund("refresh")}
+      onDonate={() => goDonate("stale-badge")}
+    />
+  );
 
   return (
     <>
@@ -127,37 +138,32 @@ export default function Compare() {
           onPick={narrow ? readIn : toggle}
           onboarding={onboarding}
           meta={
-            <>
-              {preview ? (
-                // One flex item as far as the strip is concerned, so a narrow
-                // screen can't wrap the flag onto its own line the way it would
-                // two separate items — the note inside `PreviewCta` is what
-                // gives, truncating before the flag ever loses its spot.
-                <div className="flex min-w-0 grow items-center gap-x-[10px] max-cols:basis-full max-cols:gap-x-[8px]">
-                  <PreviewCta
-                    busy={funding}
-                    signedIn={!!me}
-                    canFund={canFund}
-                    creditCents={me?.creditCents ?? 0}
-                    onFund={() => void fund("full")}
-                    onTopUp={() => goDonate("preview-strip")}
-                    onLogIn={() => goLogIn("preview-strip")}
-                  />
-                  <PreviewFlag className="ml-auto shrink-0" />
-                </div>
-              ) : (
-                <RunSummary claims={claims} data={data} />
-              )}
-              {stale && data?.cache && (
-                <CachedBadge
-                  cache={data.cache}
+            preview ? (
+              // One flex item as far as the strip is concerned, so a narrow
+              // screen can't wrap the flag onto its own line the way it would
+              // two separate items — the note inside `PreviewCta` is what
+              // gives, truncating before the flag ever loses its spot. The
+              // badge rides inside it for the same reason: left outside, it is
+              // what wrapped, taking a line of the article to say one word.
+              <div className="flex min-w-0 grow items-center gap-x-[10px] max-cols:basis-full max-cols:gap-x-[8px]">
+                <PreviewCta
                   busy={funding}
                   signedIn={!!me}
-                  onUpdate={() => void fund("refresh")}
-                  onDonate={() => goDonate("stale-badge")}
+                  canFund={canFund}
+                  creditCents={me?.creditCents ?? 0}
+                  onFund={() => void fund("full")}
+                  onTopUp={() => goDonate("preview-strip")}
+                  onLogIn={() => goLogIn("preview-strip")}
                 />
-              )}
-            </>
+                <PreviewFlag className="ml-auto shrink-0" />
+                {badge}
+              </div>
+            ) : (
+              <>
+                <RunSummary claims={claims} data={data} />
+                {badge}
+              </>
+            )
           }
         />
       )}

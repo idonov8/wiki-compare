@@ -52,8 +52,14 @@ export default function RunSummary({
   return (
     <>
       {/* Padded onto a hairline of its own, so the line stands on the same axis
-          the length chart's bars do further along the strip. */}
-      <span className="inline-flex grow border-b border-rule pb-[4px]">
+          the length chart's bars do further along the strip.
+          Once the chart and the key have the strip's width to themselves, the
+          line takes a row of its own under them and runs the full width: beside
+          the key it was reduced to a forty-pixel stub, which is a proportion
+          nobody can read. On its own row it needs no hairline either — there is
+          no bar left to share an axis with, and a rule across the whole strip
+          would read as a divider rather than as the ground the line stands on. */}
+      <span className="inline-flex grow border-b border-rule pb-[4px] max-cols:basis-full max-cols:border-b-0 max-cols:pb-0">
         <ClaimRatio
           counts={counts}
           className="h-[7px] w-full"
@@ -61,12 +67,16 @@ export default function RunSummary({
           title={data ? claimsSaid(counts) : `${claimsSaid(counts)} so far`}
         />
       </span>
+      {/* Truncating from the width the columns break at rather than only on the
+          narrowest screens: past that the cost line shares its row with the
+          cached badge, and a line that grows instead of cutting pushes the badge
+          onto a row of its own. */}
       {data ? (
         cost && (
-          <span className="meta-cost ml-auto min-w-0 max-tight:truncate max-tight:text-[11px]">{cost}</span>
+          <span className="meta-cost ml-auto min-w-0 max-cols:truncate max-tight:text-[11px]">{cost}</span>
         )
       ) : (
-        <span className="meta-cost ml-auto min-w-0 max-tight:truncate max-tight:text-[11px]">
+        <span className="meta-cost ml-auto min-w-0 max-cols:truncate max-tight:text-[11px]">
           {claims.length ? "still reading…" : "reading all three…"}
         </span>
       )}
