@@ -12,6 +12,7 @@
 /** Code → cents of credit. Keys are upper case; see `normalizeCoupon`. */
 export const COUPONS: Record<string, number> = {
   WELCOME3: 300,
+  THANKU5: 500,
 };
 
 /**
