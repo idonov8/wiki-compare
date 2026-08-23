@@ -60,6 +60,13 @@ export const EVENTS = [
   "language_menu_opened",
   /** The feedback form was opened from a named surface. */
   "feedback_opened",
+  /** The reader scrolled far enough to reach the sources panel and it loaded.
+   *  How many people read that far is the first thing worth knowing about an
+   *  appendix. */
+  "sources_viewed",
+  /** One version's blindspots were highlighted in the others' lists — the
+   *  question the panel is really for, and the only one it has to be asked. */
+  "sources_blindspots_highlighted",
 ] as const;
 
 export type AnalyticsEvent = (typeof EVENTS)[number];
