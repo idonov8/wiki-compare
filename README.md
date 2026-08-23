@@ -18,6 +18,9 @@ Live at [wikicompare.app](https://wikicompare.app).
    rather than trusted as offsets.
 4. Results are cached by article revision so a stable article costs tokens only once
    (`lib/db.ts`).
+5. Separately, and without a model, the reference lists are read and matched across the
+   languages by URL, DOI, ISBN and title (`lib/sources.ts`), which is what the sources panel
+   under the article draws its shared entries and blindspots from.
 
 Reading an already-compared article is always free. Running a new comparison costs a small
 amount of credit, funded either by a signup grant or a donation, so the run is paid for once and
@@ -31,6 +34,7 @@ app/
   api/search/                candidate articles for a query or pasted URL
   api/articles/               sitelinks + revisions, ahead of the comparison
   api/compare/                the comparison itself (cache read, preview, or paid full run)
+  api/sources/                each version's footnotes, matched across languages
   api/recent/                 recently cached comparisons, for the landing page
   api/auth/[...all]/          Better Auth: sign-in, callback, session
   api/me/, api/donate/, api/coupon/   balance, mock payment, coupon redemption
@@ -42,6 +46,7 @@ components/                  UI: search/compare flow, side-by-side columns and h
 lib/
   wikipedia.ts                MediaWiki + Wikidata fetching, parsing, search
   deterministic.ts            zero-token coverage diff and section screening
+  sources.ts                  reference-list parsing and cross-language source matching
   compare.ts                  the model calls: heading alignment + claim diff
   db.ts                       cache layer (Neon/Postgres)
   auth.ts, credits.ts, coupons.ts, pricing.ts   accounts, balance, coupons, cost calculation
@@ -64,7 +69,7 @@ See `.env.example` for the full list of environment variables.
 ## Testing
 
 ```bash
-npm run check              # input + parser + deterministic, no model, no database
+npm run check              # input + parser + sources + deterministic, no model, no database
 npm run check:ui           # rendering, needs `npm run dev` in another shell
 npm run fixtures:save "Article title"   # record a new fixture
 ```

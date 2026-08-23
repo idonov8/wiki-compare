@@ -1,6 +1,13 @@
-import { LANGS, type ArticleSnapshot, type Lang } from "./types";
-import { PARSER_VERSION, currentRevid, fetchArticle, resolveSitelinks } from "./wikipedia";
-import { getArticle, putArticle } from "./db";
+import { LANGS, type ArticleSnapshot, type Lang, type Source } from "./types";
+import {
+  PARSER_VERSION,
+  currentRevid,
+  fetchArticle,
+  fetchRevisionHtml,
+  resolveSitelinks,
+} from "./wikipedia";
+import { SOURCES_VERSION, parseSources } from "./sources";
+import { getArticle, getSources, putArticle, putSources } from "./db";
 
 /**
  * Everything both the preview and the comparison need before any model runs:
@@ -55,4 +62,46 @@ export async function snapshotsFor(
       return fresh;
     }),
   );
+}
+
+/**
+ * A recorded fixture standing in for a revision, so the sources panel renders
+ * offline.
+ *
+ * Development only, and matched on revision id rather than on a `demo:` prefix:
+ * the client asks for sources by the revids it has on screen and knows nothing
+ * about where they came from, so the fixture has to answer to the same question
+ * a real article does. Dead code in production, where the import never runs.
+ */
+async function fixtureHtml(lang: Lang, revid: number): Promise<string | null> {
+  if (process.env.NODE_ENV === "production") return null;
+  try {
+    const { listFixtures, loadFixture } = await import("../fixtures/loader");
+    for (const slug of listFixtures()) {
+      const page = loadFixture(slug).pages[lang];
+      if (page?.revid === revid) return page.text;
+    }
+  } catch {
+    // No fixtures on disk is not a failure; the revision is fetched instead.
+  }
+  return null;
+}
+
+/**
+ * The footnotes of one revision, parsed once and then cached forever.
+ *
+ * Sources are read on demand rather than folded into `snapshotsFor`, because
+ * they are keyed on nothing the comparison is keyed on: a comparison cached
+ * before this existed still describes its revisions exactly, and re-reading
+ * hundreds of stored articles to attach a reference list to them would have
+ * meant paying the model again for every one of them. So the list is fetched
+ * beside the comparison, for whatever revisions the columns ended up showing.
+ */
+export async function sourcesFor(lang: Lang, revid: number): Promise<Source[]> {
+  const hit = await cached(() => getSources(lang, revid, SOURCES_VERSION));
+  if (hit) return hit;
+  const html = (await fixtureHtml(lang, revid)) ?? (await fetchRevisionHtml(lang, revid));
+  const sources = parseSources(html);
+  await cached(() => putSources(lang, revid, SOURCES_VERSION, sources));
+  return sources;
 }

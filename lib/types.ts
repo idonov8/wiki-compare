@@ -87,6 +87,55 @@ export interface ArticleSnapshot {
   linkQids: string[];
 }
 
+/**
+ * One footnote of one article, reduced to what it can be recognised by.
+ *
+ * Sources are read from the reference list the article parser strips, and are
+ * never shown to a model: `keys` is the whole of the matching, and every one of
+ * them is a string that reads the same in Hebrew, Arabic and English — a URL, a
+ * DOI, an ISBN, or a title long enough not to be a coincidence.
+ */
+export interface Source {
+  /** The citation as one line, as the article prints it. */
+  text: string;
+  /** The title the citation states, where it states one as a field rather than
+   *  as prose. */
+  title?: string;
+  /** What pressing the entry opens: the source itself, not an archive of it. */
+  url?: string;
+  /** Host without `www.`, which is the shorthand a list of sources is scanned
+   *  by — "haaretz.co.il" says more at a glance than the headline does. */
+  domain?: string;
+  /** Identity keys. Two footnotes are the same source when they share one. */
+  keys: string[];
+}
+
+/**
+ * A source as one language's list shows it.
+ *
+ * Which sources are shared is the whole point of the list, so it travels on
+ * every entry rather than being re-derived by whoever renders it. The keys are
+ * dropped on the way out: they are how the matching was done, not something a
+ * reader or the renderer has any use for, and a long article carries a couple
+ * of hundred entries' worth of them.
+ */
+export interface SourceCitation extends Omit<Source, "keys"> {
+  /** The matched set this belongs to, shared by its twins in other languages —
+   *  what a blindspot is counted by, so a source two editions cite and a third
+   *  does not is one blindspot rather than two. */
+  group: string;
+  /** Every language whose article cites this source, this one included. */
+  citedIn: Lang[];
+}
+
+export interface SourcesPayload {
+  /** The languages the lists were matched across. A badge saying "cited in
+   *  English" means nothing without it — the reader has to know which editions
+   *  were looked at for a source to be *missing* from one. */
+  langs: Lang[];
+  sources: Partial<Record<Lang, SourceCitation[]>>;
+}
+
 export interface CoverageGap {
   qid: string;
   label: string;

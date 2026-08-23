@@ -21,6 +21,7 @@ import PreviewCta from "./compare/PreviewCta";
 import PreviewFlag from "./compare/PreviewFlag";
 import RunSummary from "./compare/RunSummary";
 import SearchResults from "./compare/SearchResults";
+import Sources from "./Sources";
 import ThankYou from "./ThankYou";
 import { useClaimCard } from "./compare/useClaimCard";
 import { useCompareSession } from "./compare/useCompareSession";
@@ -214,6 +215,12 @@ export default function Compare() {
           }
         />
       )}
+
+      {/* Under the article rather than beside it: what each version cites is an
+          appendix, and it is the one part of this page that owes nothing to a
+          model — so it stands whether the comparison above it was paid for, is
+          still arriving, or stopped at the preview's fourth section. */}
+      {onArticle && hasColumns && <Sources articles={articles} />}
 
       {/* The second or so before the stream answers, when the page would
           otherwise be a masthead over nothing. All three editions are drawn
