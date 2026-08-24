@@ -254,6 +254,8 @@ export default function Compare() {
           // renders new marks, and the rail plots marks it has measured.
           signature={`${data?.qid ?? target?.title ?? ""}:${visible.join("")}:${claims.length}`}
           busy={comparing || funding}
+          hint={onboarding.step === "sources"}
+          onHintDone={onboarding.done}
         />
       )}
 

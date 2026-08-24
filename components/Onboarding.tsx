@@ -4,18 +4,20 @@ import { useCallback, useEffect, useState } from "react";
 import type { MeResponse } from "@/lib/types";
 
 /**
- * The two features that need explaining, in the order one pulsing dot visits
- * them: the length chart, then the marks key. Dismissing the note a feature
- * opens moves the dot on, and only one dot exists at a time. The credit system
- * is no longer a stop on this tour — it gets a modal of its own over the first
- * article a new account opens (components/CreditsModal.tsx).
+ * The three features that need explaining, in the order one pulsing dot
+ * visits them: the length chart, then the marks key, then the sources
+ * shortcut. Dismissing the note a feature opens — or, for the shortcut,
+ * pressing it — moves the dot on, and only one dot exists at a time. The
+ * credit system is no longer a stop on this tour — it gets a modal of its own
+ * over the first article a new account opens (components/CreditsModal.tsx).
  */
-export type OnboardingStep = "bars" | "marks";
+export type OnboardingStep = "bars" | "marks" | "sources";
 
 /** `null` is the end of the tour. */
 const NEXT: Record<OnboardingStep, OnboardingStep | null> = {
   bars: "marks",
-  marks: null,
+  marks: "sources",
+  sources: null,
 };
 
 /** Where the tour got to on this device. One cursor rather than a flag per
