@@ -236,7 +236,12 @@ export default function DiffNav({
       <div className="diffnav-shortcuts pointer-events-none fixed right-[34px] bottom-[22px] z-[41] flex items-center gap-[8px] max-cols:right-[14px] max-cols:bottom-[76px]">
         <button
           type="button"
-          className="jump-to-sources pointer-events-auto relative flex h-[34px] items-center gap-[6px] rounded-[3px] border border-ink bg-paper-raised px-[10px] font-mono text-[12px] text-ink shadow-offset hover:bg-ink-wash-strong"
+          // A solid invert on hover rather than the wash the stepper's own
+          // buttons use: that wash is a translucent layer meant to sit over an
+          // already-opaque parent, and this pill has no such parent — laid
+          // straight over the article, it read as a hole showing the busy text
+          // through it.
+          className="jump-to-sources pointer-events-auto relative flex h-[34px] items-center gap-[6px] rounded-[3px] border border-ink bg-paper-raised px-[10px] font-mono text-[12px] text-ink shadow-offset transition-[background-color,color] duration-[120ms] ease-[ease] hover:bg-ink hover:text-paper-raised"
           onClick={jumpToSources}
         >
           Jump to sources
