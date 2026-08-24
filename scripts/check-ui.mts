@@ -1163,6 +1163,7 @@ check(!(await page.$(".card")), "Escape dismisses the card");
         badge: el.querySelector(".source-badge")?.textContent ?? null,
         note: el.getAttribute("title"),
         struck: getComputedStyle(el.querySelector(".source-title")!).textDecorationLine,
+        weight: Number(getComputedStyle(el.querySelector(".source-title")!).fontWeight),
         faded: Number(getComputedStyle(el).opacity),
       })),
     );
@@ -1182,6 +1183,13 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     en.every((e) => e.faded === 1 && !e.struck.includes("line-through")),
     "and nothing else about a shared entry is set differently",
     JSON.stringify(en),
+  );
+  // Except weight, the other way round: the badgeless entries are what a reader
+  // is scanning this list for, so they are the ones set a shade heavier.
+  check(
+    en[0].weight > en[1].weight && en[1].weight === en[2].weight,
+    "a source only one version cites is set a shade bolder than the shared ones",
+    en.map((e) => e.weight).join(", "),
   );
 
   // The Hebrew and Arabic lists are the same three states read the other way
@@ -1230,6 +1238,30 @@ check(!(await page.$(".card")), "Escape dismisses the card");
   await page.click('[data-sources="en"] .blindspot-toggle');
   await page.waitForTimeout(300);
   check((await marked()).length === 0, "and clearing it puts the lists back");
+
+  // The count is an English sentence opening with a numeral, and it sits inside
+  // a column that reads right-to-left. Left to inherit that direction, the
+  // numeral was reordered to the far end of the line and the full stop landed
+  // on the wrong side of it. It reads left-to-right and aligns to the column.
+  await page.click('[data-sources="he"] .blindspot-toggle');
+  await page.waitForTimeout(300);
+  const hebrewNote = await page.$eval('[data-sources="he"] [role="status"]', (el) => ({
+    text: el.textContent ?? "",
+    direction: getComputedStyle(el).direction,
+    align: getComputedStyle(el).textAlign,
+  }));
+  check(
+    /^\d+ sources? the other versions cite/.test(hebrewNote.text.trim()),
+    "the blindspot count reads as a sentence in a right-to-left column",
+    hebrewNote.text.trim(),
+  );
+  check(
+    hebrewNote.direction === "ltr" && hebrewNote.align === "right",
+    "set left-to-right, aligned where that column's own list begins",
+    JSON.stringify(hebrewNote),
+  );
+  await page.click('[data-sources="he"] .blindspot-toggle');
+  await page.waitForTimeout(300);
 
   await page.unroute("**/api/sources**");
 }

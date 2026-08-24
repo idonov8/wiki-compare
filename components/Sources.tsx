@@ -55,6 +55,10 @@ function Entry({
   blindspot: Lang | null;
 }) {
   const others = source.citedIn.filter((l) => l !== lang);
+  // No badge means nobody else read it, which is the one thing in this list a
+  // reader is scanning for. A shade of weight is enough to make it findable
+  // without turning the shared entries into an afterthought.
+  const only = others.length === 0;
   const missing = !!blindspot && lang !== blindspot && !source.citedIn.includes(blindspot);
   const dimmed = !!blindspot && !missing;
 
@@ -75,12 +79,12 @@ function Entry({
             href={source.url}
             target="_blank"
             rel="noreferrer"
-            className="source-title min-w-0 text-[12px] leading-[1.45] text-wiki-link no-underline hover:underline"
+            className={`source-title min-w-0 text-[12px] leading-[1.45] text-wiki-link no-underline hover:underline ${only ? "font-semibold" : ""}`}
           >
             {source.title || source.text}
           </a>
         ) : (
-          <span className="source-title min-w-0 text-[12px] leading-[1.45]">
+          <span className={`source-title min-w-0 text-[12px] leading-[1.45] ${only ? "font-semibold" : ""}`}>
             {source.title || source.text}
           </span>
         )}
@@ -126,6 +130,14 @@ function Column({
   const unique = list.filter((s) => s.citedIn.length === 1).length;
   const blind = blindspotsOf(payload, lang).size;
   const active = blindspot === lang;
+  // The notes below are the interface talking, in English, inside a column that
+  // may read right-to-left — where a sentence opening with a numeral had the
+  // numeral reordered to the far end and the full stop shunted to the wrong
+  // side. So they are set left-to-right and only *aligned* to the column's own
+  // start edge, which is where the list under them begins.
+  const note = `font-mono text-[10px] leading-[1.6] tracking-[0.04em] ${
+    meta.dir === "rtl" ? "text-right" : "text-left"
+  }`;
 
   return (
     // Physical borders and padding, not logical: the columns sit en|he|ar
@@ -169,12 +181,10 @@ function Column({
       </div>
 
       {active && (
-        <p
-          role="status"
-          className="m-0 mb-[8px] font-mono text-[10px] leading-[1.6] tracking-[0.04em] text-ink"
-        >
+        <p dir="ltr" role="status" className={`m-0 mb-[8px] text-ink ${note}`}>
           {blind} {blind === 1 ? "source" : "sources"} the other versions cite and this one does
-          not, {alone ? "marked in their lists — switch language to see them." : "marked in their lists."}
+          not,{" "}
+          {alone ? "marked in their lists — switch language to see them." : "marked in their lists."}
         </p>
       )}
 
@@ -185,7 +195,7 @@ function Column({
           ))}
         </ol>
       ) : (
-        <p className="m-0 font-mono text-[10px] leading-[1.6] tracking-[0.04em] text-ink-soft">
+        <p dir="ltr" className={`m-0 text-ink-soft ${note}`}>
           Nothing in this version's footnotes can be pinned to a link, a DOI, an ISBN or a stated
           title, so there is nothing here to match against.
         </p>
