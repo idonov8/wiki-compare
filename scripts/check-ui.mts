@@ -11,7 +11,7 @@
  * is whether two rects on the same line fail to touch, which is what a reader
  * would see as a gap in the underline.
  */
-import { chromium } from "playwright";
+import { chromium, type Route } from "playwright";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 const FIXTURE = process.argv[2] ?? "palestinian-legislative-council";
@@ -112,58 +112,59 @@ const USAGE: Record<Stored, Record<string, number>> = {
   legacy: { inputTokens: 14203, outputTokens: 5110, cachedInputTokens: 0 },
   silent: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
 };
-await page.route(
-  (url) =>
-    url.pathname === "/api/compare" &&
-    (url.searchParams.get("title") ?? "").startsWith("demo:"),
-  async (route) => {
-    const response = await route.fetch();
-    const body = await response.text();
-    const usage = USAGE[stored];
-    const cache = {
-      computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
-      edited: ["he", "ar"],
-    };
-    // A preview stops part-way through every edition, so each one carries a cut.
-    const previewScope = (articles: Record<string, unknown>) => ({
-      kind: "preview",
-      processedThrough: Object.fromEntries(
-        Object.keys(articles ?? {}).map((lang) => [lang, { section: 1, chars: 400 }]),
-      ),
-    });
+/** The interception, kept addressable: the phone contexts further down mount it
+ *  too, since the strip they check is the one a cached answer draws. */
+const isFixtureCompare = (url: URL) =>
+  url.pathname === "/api/compare" && (url.searchParams.get("title") ?? "").startsWith("demo:");
 
-    // The client asks for a stream, so the fixture answers as one: a `done`
-    // line carrying the result. Re-wrapped rather than passed through, because
-    // what this interception exists to do is substitute the usage figures.
-    const streamed = new URL(route.request().url()).searchParams.get("stream") === "1";
-    if (streamed) {
-      const done = body
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => JSON.parse(line))
-        .find((event) => event.event === "done");
-      const scope = asPreview ? previewScope(done.result.articles) : done.result.scope;
-      route.fulfill({
-        contentType: "application/x-ndjson",
-        body:
-          JSON.stringify({
-            event: "done",
-            result: { ...done.result, usage, scope },
-            fromCache: true,
-            cache,
-          }) + "\n",
-      });
-      return;
-    }
+const serveCached = async (route: Route) => {
+  const response = await route.fetch();
+  const body = await response.text();
+  const usage = USAGE[stored];
+  const cache = {
+    computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
+    edited: ["he", "ar"],
+  };
+  // A preview stops part-way through every edition, so each one carries a cut.
+  const previewScope = (articles: Record<string, unknown>) => ({
+    kind: "preview",
+    processedThrough: Object.fromEntries(
+      Object.keys(articles ?? {}).map((lang) => [lang, { section: 1, chars: 400 }]),
+    ),
+  });
 
-    const json = JSON.parse(body);
-    const scope = asPreview ? previewScope(json.articles) : json.scope;
+  // The client asks for a stream, so the fixture answers as one: a `done`
+  // line carrying the result. Re-wrapped rather than passed through, because
+  // what this interception exists to do is substitute the usage figures.
+  const streamed = new URL(route.request().url()).searchParams.get("stream") === "1";
+  if (streamed) {
+    const done = body
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .find((event) => event.event === "done");
+    const scope = asPreview ? previewScope(done.result.articles) : done.result.scope;
     route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({ ...json, usage, scope, fromCache: true, cache }),
+      contentType: "application/x-ndjson",
+      body:
+        JSON.stringify({
+          event: "done",
+          result: { ...done.result, usage, scope },
+          fromCache: true,
+          cache,
+        }) + "\n",
     });
-  },
-);
+    return;
+  }
+
+  const json = JSON.parse(body);
+  const scope = asPreview ? previewScope(json.articles) : json.scope;
+  route.fulfill({
+    contentType: "application/json",
+    body: JSON.stringify({ ...json, usage, scope, fromCache: true, cache }),
+  });
+};
+await page.route(isFixtureCompare, serveCached);
 
 console.log(`\n${FIXTURE}`);
 
@@ -299,18 +300,18 @@ const reopen = async (as: Stored) => {
     "the processing cost carries no title attribute",
   );
   check(
-    (await page.$$eval(".meta [title]", (els) =>
+    (await page.$$eval(".controls [title]", (els) =>
       els.some((el) => /tokens/i.test(el.getAttribute("title") ?? "")),
     )) === false,
     "the strip carries no token breakdown title",
   );
   check(
     /contradiction/i.test(
-      (await page.$eval(".meta .recent-ratio", (el) => el.getAttribute("title") ?? "")),
+      (await page.$eval(".controls .recent-ratio", (el) => el.getAttribute("title") ?? "")),
     ),
     "the ratio title reports the claim counts",
   );
-  const processedRatio = await page.$eval(".meta .recent-ratio", (el) =>
+  const processedRatio = await page.$eval(".controls .recent-ratio", (el) =>
     [...el.children].map((child) => [...child.classList].find((name) => name.startsWith("bg-")) ?? ""),
   );
   check(
@@ -321,9 +322,9 @@ const reopen = async (as: Stored) => {
     processedRatio.join(", "),
   );
   check(
-    !!(await page.$(".meta .recent-ratio")) && !/marked/i.test((await page.textContent(".meta")) ?? ""),
+    !!(await page.$(".controls .recent-ratio")) && !/marked/i.test((await page.textContent(".controls")) ?? ""),
     "the processed strip shows the ratio rather than a marked count",
-    (await page.textContent(".meta")) ?? "",
+    (await page.textContent(".controls")) ?? "",
   );
 }
 
@@ -352,9 +353,9 @@ const reopen = async (as: Stored) => {
 // same lie the word "free" was, and so would a figure derived from nothing.
 {
   await reopen("silent");
-  const meta = (await page.textContent(".meta")) ?? "";
+  const meta = (await page.textContent(".controls")) ?? "";
   check(
-    (await page.$(".meta-cost")) === null && !!(await page.$(".meta .recent-ratio")),
+    (await page.$(".meta-cost")) === null && !!(await page.$(".controls .recent-ratio")),
     "a comparison with no usable totals still draws its ratio without a cost line",
     meta,
   );
@@ -473,7 +474,7 @@ check(!!(await page.$(".cached-badge")), "a cached comparison served past an edi
     "the offer to update carries its control inside the panel",
   );
   check(
-    (await page.$$(".meta > .cached-update")).length === 0,
+    (await page.$$(".controls > .cached-update")).length === 0,
     "and no longer beside the badge",
   );
   const vp = page.viewportSize()!;
@@ -858,7 +859,7 @@ check(!(await page.$(".card")), "Escape dismisses the card");
   });
 
   await openGate();
-  check(!!(await page.$(".meta .preview-flag")), "a preview strip carries its preview flag");
+  check(!!(await page.$(".controls .preview-flag")), "a preview strip carries its preview flag");
   check(
     (await page.textContent(".preview-cta")) === "Log in to process it",
     "signed out, the preview strip asks for a login",
@@ -920,7 +921,7 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     localStorage.removeItem("wiki-compare:credits-explained");
   });
   await openGate();
-  check(!!(await page.$(".meta .preview-flag")), "credit-backed preview still carries its preview flag");
+  check(!!(await page.$(".controls .preview-flag")), "credit-backed preview still carries its preview flag");
   check(
     (await page.textContent(".preview-cta")) === "Donate this article",
     "with credit, the preview strip asks for the donation",
@@ -1030,7 +1031,7 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     check(
       !!(await page.$(".meta-cost")),
       "the funded strip carries its processing cost",
-      (await page.textContent(".meta")) ?? "",
+      (await page.textContent(".controls")) ?? "",
     );
   }
   await page.unroute((url) => url.pathname === "/api/compare");
@@ -1046,7 +1047,7 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     onboardingDone: true,
   };
   await openGate();
-  check(!!(await page.$(".meta .preview-flag")), "an empty balance preview carries its preview flag");
+  check(!!(await page.$(".controls .preview-flag")), "an empty balance preview carries its preview flag");
   check(
     (await page.textContent(".preview-cta")) === "Top up to donate it",
     "with no credit, the preview strip asks for a top-up",
@@ -1436,6 +1437,141 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     (await sourced()).join(", "));
   check((await columns())[0] === "ar", "with the article still under the same language",
     (await columns()).join(", "));
+
+  await phone.close();
+}
+
+// ---- the strip on a phone, on an answer served past an edit ----------------
+
+// Three items that all want the same row and cannot have it: the length chart,
+// the key, and — on a stale answer — the badge. What the strip does about that
+// is the whole check here. The line of claim proportions drops to a row of its
+// own and runs the width of the page, because squeezed in beside the key it was
+// a forty-pixel stub nobody could read a proportion from. The badge does the
+// opposite and never takes a row: it ends whichever row it is on, which also
+// puts it against the margin the panel below it is measured back from — hung
+// off a badge stranded mid-row, that panel opens off the side of the screen.
+{
+  const phone = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  await phone.route(isFixtureCompare, serveCached);
+  const small = await phone.newPage();
+  small.on("pageerror", (e) => pageErrors.push(e.message));
+
+  // Every rect the strip's layout is read from, in one pass. Nothing in here is
+  // factored into a helper, for the `__name` reason the swipes above give.
+  const strip = () =>
+    small.evaluate(() => {
+      const out: Record<string, { top: number; right: number; bottom: number; width: number }> = {};
+      const wanted = [
+        ".controls",
+        ".legend-key",
+        ".controls .recent-ratio",
+        ".cached-badge",
+        ".meta-cost",
+        ".preview-flag",
+      ];
+      for (const selector of wanted) {
+        const el = document.querySelector(selector);
+        if (el) {
+          const box = el.getBoundingClientRect();
+          // Width off the layout box rather than the painted one: the claim
+          // line is drawn by a scaleX animation, and a rect measured mid-draw
+          // reports whatever fraction of itself it had reached.
+          out[selector] = {
+            top: box.top,
+            right: box.right,
+            bottom: box.bottom,
+            width: (el as HTMLElement).offsetWidth,
+          };
+        }
+      }
+      return out;
+    });
+
+  // The panel is opened by focus rather than hover, which is the phone's own
+  // way in and needs no pointer.
+  const panel = async () => {
+    await small.$eval(".cached-badge", (el) => (el as HTMLElement).focus());
+    await small.waitForTimeout(200);
+    const box = await small.$eval(".cached-tip", (el) => {
+      const rect = el.getBoundingClientRect();
+      return { x: rect.x, right: rect.right, visible: getComputedStyle(el).visibility === "visible" };
+    });
+    await small.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    return box;
+  };
+
+  await small.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
+  await small.waitForSelector(".cached-badge", { timeout: 30000 });
+  await small.waitForTimeout(700);
+  {
+    const box = await strip();
+    const line = box[".controls .recent-ratio"];
+    check(
+      !!line && line.top >= box[".legend-key"].bottom,
+      "the claim line takes a row under the key on a phone, not the gap beside it",
+      line ? `line top ${Math.round(line.top)} vs key bottom ${Math.round(box[".legend-key"].bottom)}` : "no line",
+    );
+    check(
+      !!line && line.width >= box[".controls"].width - 36 - 1,
+      "and runs the width of the page",
+      line ? `${Math.round(line.width)} of ${Math.round(box[".controls"].width)}` : "no line",
+    );
+    const badge = box[".cached-badge"];
+    const cost = box[".meta-cost"];
+    check(
+      badge.top < cost.bottom && cost.top < badge.bottom,
+      "the badge shares the cost line's row rather than wrapping under it",
+      `badge ${Math.round(badge.top)}-${Math.round(badge.bottom)} vs cost ${Math.round(cost.top)}-${Math.round(cost.bottom)}`,
+    );
+    check(
+      Math.abs(badge.right - (box[".controls"].right - 18)) <= 1,
+      "and ends that row against the page's margin",
+      `${Math.round(badge.right)} vs ${Math.round(box[".controls"].right - 18)}`,
+    );
+    const tip = await panel();
+    check(tip.visible, "tapping the badge on a phone opens its panel");
+    check(
+      tip.x >= 0 && tip.right <= 390,
+      "and the panel opens inside the screen",
+      `x=${Math.round(tip.x)} right=${Math.round(tip.right)}`,
+    );
+  }
+
+  // A part-read article puts a button, a note and the preview flag on that same
+  // row, which is where the badge used to give up and wrap. It is the note that
+  // gives instead.
+  asPreview = true;
+  await small.reload({ waitUntil: "domcontentloaded" });
+  await small.waitForSelector(".preview-flag", { timeout: 30000 });
+  await small.waitForSelector(".cached-badge", { timeout: 30000 });
+  await small.waitForTimeout(700);
+  {
+    const box = await strip();
+    const badge = box[".cached-badge"];
+    const flag = box[".preview-flag"];
+    check(
+      badge.top < flag.bottom && flag.top < badge.bottom,
+      "on a previewed article the badge rides the preview row instead of wrapping under it",
+      `badge ${Math.round(badge.top)}-${Math.round(badge.bottom)} vs flag ${Math.round(flag.top)}-${Math.round(flag.bottom)}`,
+    );
+    check(
+      Math.abs(badge.right - (box[".controls"].right - 18)) <= 1,
+      "and ends that row against the page's margin too",
+      `${Math.round(badge.right)} vs ${Math.round(box[".controls"].right - 18)}`,
+    );
+    const tip = await panel();
+    check(
+      tip.visible && tip.x >= 0 && tip.right <= 390,
+      "and its panel still opens inside the screen",
+      `x=${Math.round(tip.x)} right=${Math.round(tip.right)}`,
+    );
+  }
+  asPreview = false;
 
   await phone.close();
 }
