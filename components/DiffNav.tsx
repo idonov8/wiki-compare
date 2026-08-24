@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { OnboardingDot } from "./Onboarding";
+import { track as trackEvent } from "@/lib/analytics";
 
 interface Tick {
   type: string;
@@ -29,8 +31,26 @@ const SCROLL_OFFSET = 96;
  *  every revolution. It is the right thing to put a loader on because it is
  *  already reporting the work — the count climbs as differences are found, and
  *  the arrows step through the ones that have arrived while the rest are still
- *  being read. */
-export default function DiffNav({ signature, busy = false }: { signature: string; busy?: boolean }) {
+ *  being read.
+ *
+ *  Beside the stepper sits a second control that owes it nothing but the
+ *  corner: a shortcut straight to the sources panel at the foot of the page,
+ *  which is otherwise reachable only by scrolling past every column. */
+export default function DiffNav({
+  signature,
+  busy = false,
+  hint = false,
+  onHintDone,
+}: {
+  signature: string;
+  busy?: boolean;
+  /** Whether the onboarding dot is on the "Jump to sources" shortcut. */
+  hint?: boolean;
+  /** Fired once the shortcut has actually jumped, which moves the dot on. Not
+   *  fired by anything else — the sources panel is the destination the tour
+   *  is pointing at, not the button itself. */
+  onHintDone?: () => void;
+}) {
   const [ticks, setTicks] = useState<Tick[]>([]);
   const [view, setView] = useState({ top: 0, height: 100 });
   const [current, setCurrent] = useState(0);
@@ -158,6 +178,17 @@ export default function DiffNav({ signature, busy = false }: { signature: string
     window.scrollTo({ top: frac * docH - window.innerHeight / 2, behavior: "smooth" });
   };
 
+  const jumpToSources = () => {
+    const el = document.getElementById("sources");
+    if (!el) return;
+    void trackEvent("sources_shortcut_clicked");
+    const y = el.getBoundingClientRect().top + window.scrollY - SCROLL_OFFSET;
+    window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+    // Dismissing the dot is the jump landing, not the press — a shortcut that
+    // found no sources section hasn't taught anything yet.
+    if (hint) onHintDone?.();
+  };
+
   if (!ticks.length) return null;
 
   return (
@@ -194,40 +225,59 @@ export default function DiffNav({ signature, busy = false }: { signature: string
           ))}
         </div>
       </div>
-      <div
-        // Lifted clear of the floating language switch below `cols`, which owns
-        // the bottom of the viewport there.
-        // The sweeping ring positions against this box directly: `fixed` is
-        // already a positioned ancestor, and adding `relative` for it would not
-        // stack — Tailwind emits both as `position`, and whichever it happens to
-        // print last wins. `relative` won, and the pill stopped being fixed.
-        className="diffnav-controls pointer-events-auto fixed right-[34px] bottom-[22px] z-[41] flex items-center gap-0.5 rounded-[3px] border border-ink bg-paper-raised p-1 font-mono text-[12px] shadow-offset max-cols:right-[14px] max-cols:bottom-[76px]"
-        role="group"
-        data-busy={busy}
-        data-settled={settled}
-        aria-label={
-          busy ? "Jump between differences found so far; still reading" : "Jump between differences"
-        }
-      >
+      {/* Lifted clear of the floating language switch below `cols`, which owns
+          the bottom of the viewport there. `fixed` now lives on this row so the
+          stepper and the sources shortcut share one corner and move as a pair;
+          each child underneath is `relative` instead, which is still a
+          positioned ancestor for the sweeping ring's own absolutely positioned
+          pseudo-elements — `fixed` and `relative` just aren't a pair Tailwind
+          can put on the same element, since both print as CSS `position` and
+          only the one that prints last survives. */}
+      <div className="diffnav-shortcuts pointer-events-none fixed right-[34px] bottom-[22px] z-[41] flex items-center gap-[8px] max-cols:right-[14px] max-cols:bottom-[76px]">
         <button
-          className="h-[26px] w-[26px] border-0 bg-transparent text-[15px] leading-none text-ink hover:bg-ink-wash-strong"
-          onClick={() => step(-1)}
-          aria-label="Previous difference"
-          title="Previous difference"
+          type="button"
+          // A solid invert on hover rather than the wash the stepper's own
+          // buttons use: that wash is a translucent layer meant to sit over an
+          // already-opaque parent, and this pill has no such parent — laid
+          // straight over the article, it read as a hole showing the busy text
+          // through it.
+          className="jump-to-sources pointer-events-auto relative flex h-[34px] items-center gap-[6px] rounded-[3px] border border-ink bg-paper-raised px-[10px] font-mono text-[12px] text-ink shadow-offset transition-[background-color,color] duration-[120ms] ease-[ease] hover:bg-ink hover:text-paper-raised"
+          onClick={jumpToSources}
         >
-          ↑
+          Jump to sources
+          {hint && <OnboardingDot />}
         </button>
-        <span className="diffnav-count px-2 whitespace-nowrap text-ink-soft tabular-nums">
-          <b className="font-semibold text-ink">{Math.min(current + 1, ticks.length)}</b> / {ticks.length}
-        </span>
-        <button
-          className="h-[26px] w-[26px] border-0 bg-transparent text-[15px] leading-none text-ink hover:bg-ink-wash-strong"
-          onClick={() => step(1)}
-          aria-label="Next difference"
-          title="Next difference"
+
+        <div
+          className="diffnav-controls pointer-events-auto relative flex items-center gap-0.5 rounded-[3px] border border-ink bg-paper-raised p-1 font-mono text-[12px] shadow-offset"
+          role="group"
+          data-busy={busy}
+          data-settled={settled}
+          aria-label={
+            busy ? "Jump between differences found so far; still reading" : "Jump between differences"
+          }
         >
-          ↓
-        </button>
+          <button
+            className="h-[26px] w-[26px] border-0 bg-transparent text-[15px] leading-none text-ink hover:bg-ink-wash-strong"
+            onClick={() => step(-1)}
+            aria-label="Previous difference"
+            title="Previous difference"
+          >
+            ↑
+          </button>
+          <span className="diffnav-count px-2 whitespace-nowrap text-ink-soft tabular-nums">
+            <b className="font-semibold text-ink">{Math.min(current + 1, ticks.length)}</b> /{" "}
+            {ticks.length}
+          </span>
+          <button
+            className="h-[26px] w-[26px] border-0 bg-transparent text-[15px] leading-none text-ink hover:bg-ink-wash-strong"
+            onClick={() => step(1)}
+            aria-label="Next difference"
+            title="Next difference"
+          >
+            ↓
+          </button>
+        </div>
       </div>
     </>
   );

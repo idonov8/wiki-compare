@@ -8,6 +8,13 @@ When working in a cloud enviornment, open a PR when you finish working on a feat
 
 No explanatory comments for self-evident code. Avoid over-commenting — only comment where the code's intent isn't clear from reading it.
 
+## Analytics
+
+Every new feature ships with its own PostHog events. Add them to the `EVENTS`
+list in `lib/analytics.ts` — the const is what makes a mistyped name a compile
+error — and fire them with `track` from the browser or `capture` from a route.
+A feature nobody can tell is being used cannot be argued for or removed.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

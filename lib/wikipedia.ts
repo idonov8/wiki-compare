@@ -690,6 +690,24 @@ export async function fetchParsedPage(lang: Lang, title: string): Promise<Parsed
 }
 
 /**
+ * The rendered HTML of one exact revision.
+ *
+ * By `oldid` rather than by title, because the sources list has to describe the
+ * revision the columns are showing — a cached comparison keeps serving after
+ * Wikipedia has moved on, and a footnote list fetched from the live page would
+ * be citations for an article nobody on this page is reading.
+ */
+export async function fetchRevisionHtml(lang: Lang, revid: number): Promise<string> {
+  const parsed = await api<{ parse?: { text: string } }>(wiki(lang), {
+    action: "parse",
+    oldid: String(revid),
+    prop: "text",
+  });
+  if (!parsed.parse) throw new Error(`Could not parse ${lang} revision ${revid}.`);
+  return parsed.parse.text;
+}
+
+/**
  * Article-namespace links, in the order they appear in the article.
  *
  * Read off the cleaned tree rather than from `action=parse&prop=links`. The

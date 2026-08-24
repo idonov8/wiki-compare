@@ -21,6 +21,7 @@ import PreviewCta from "./compare/PreviewCta";
 import PreviewFlag from "./compare/PreviewFlag";
 import RunSummary from "./compare/RunSummary";
 import SearchResults from "./compare/SearchResults";
+import Sources from "./Sources";
 import ThankYou from "./ThankYou";
 import { useClaimCard } from "./compare/useClaimCard";
 import { useCompareSession } from "./compare/useCompareSession";
@@ -103,6 +104,8 @@ export default function Compare() {
   /** Whether the floating language switch is over the bottom of the page, which
    *  the footer has to keep its last line clear of. */
   const langSwitch = narrow && !!solo && hasColumns && onArticle && available.length > 1;
+  /** The one-column state, shared by the article and the sources under it. */
+  const slide = { narrow, solo, enterFrom, swipe };
   /** Built here rather than inline in the strip, because both shapes the strip
    *  takes — previewed and processed — end their last row with it. */
   const badge = stale && data?.cache && (
@@ -194,10 +197,7 @@ export default function Compare() {
 
       {onArticle && hasColumns && (
         <ArticleView
-          narrow={narrow}
-          solo={solo}
-          enterFrom={enterFrom}
-          swipe={swipe}
+          slide={slide}
           articles={articles}
           visible={visible}
           claims={claims}
@@ -219,6 +219,14 @@ export default function Compare() {
             />
           }
         />
+      )}
+
+      {/* Under the article rather than beside it: what each version cites is an
+          appendix, and it is the one part of this page that owes nothing to a
+          model — so it stands whether the comparison above it was paid for, is
+          still arriving, or stopped at the preview's fourth section. */}
+      {onArticle && hasColumns && (
+        <Sources articles={articles} visible={visible} slide={slide} qid={data?.qid} />
       )}
 
       {/* The second or so before the stream answers, when the page would
@@ -246,6 +254,8 @@ export default function Compare() {
           // renders new marks, and the rail plots marks it has measured.
           signature={`${data?.qid ?? target?.title ?? ""}:${visible.join("")}:${claims.length}`}
           busy={comparing || funding}
+          hint={onboarding.step === "sources"}
+          onHintDone={onboarding.done}
         />
       )}
 
