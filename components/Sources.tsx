@@ -79,12 +79,12 @@ function Entry({
             href={source.url}
             target="_blank"
             rel="noreferrer"
-            className={`source-title min-w-0 text-[12px] leading-[1.45] text-wiki-link no-underline hover:underline ${only ? "font-semibold" : ""}`}
+            className={`source-title min-w-0 break-words text-[12px] leading-[1.45] text-wiki-link no-underline hover:underline ${only ? "font-semibold" : ""}`}
           >
             {source.title || source.text}
           </a>
         ) : (
-          <span className={`source-title min-w-0 text-[12px] leading-[1.45] ${only ? "font-semibold" : ""}`}>
+          <span className={`source-title min-w-0 break-words text-[12px] leading-[1.45] ${only ? "font-semibold" : ""}`}>
             {source.title || source.text}
           </span>
         )}
