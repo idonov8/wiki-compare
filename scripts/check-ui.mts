@@ -1242,8 +1242,9 @@ check(!(await page.$(".card")), "Escape dismisses the card");
 
   // The count is an English sentence opening with a numeral, and it sits inside
   // a column that reads right-to-left. Left to inherit that direction, the
-  // numeral was reordered to the far end of the line and the full stop landed
-  // on the wrong side of it. It reads left-to-right and aligns to the column.
+  // numeral was reordered to the far end of the line, the full stop landed on
+  // the wrong side of it, and the sentence was set flush right. It is English:
+  // it reads and is set left-to-right, whichever column it is printed in.
   await page.click('[data-sources="he"] .blindspot-toggle');
   await page.waitForTimeout(300);
   const hebrewNote = await page.$eval('[data-sources="he"] [role="status"]', (el) => ({
@@ -1257,8 +1258,8 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     hebrewNote.text.trim(),
   );
   check(
-    hebrewNote.direction === "ltr" && hebrewNote.align === "right",
-    "set left-to-right, aligned where that column's own list begins",
+    hebrewNote.direction === "ltr" && hebrewNote.align === "left",
+    "set left-to-right and ragged right, like every other English line here",
     JSON.stringify(hebrewNote),
   );
   await page.click('[data-sources="he"] .blindspot-toggle');
