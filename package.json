@@ -14,10 +14,11 @@
     "fixtures:refresh": "tsx --env-file-if-exists=.env.local scripts/save-fixture.mts",
     "check:parser": "tsx scripts/check-parser.mts",
     "check:deterministic": "tsx scripts/check-deterministic.mts",
+    "check:sources": "tsx scripts/check-sources.mts",
     "check:input": "tsx scripts/check-input.mts",
     "check:stream": "tsx scripts/check-stream.mts",
     "check:live": "tsx scripts/check-live.mts",
-    "check": "npm run check:input && npm run check:parser && npm run check:deterministic && npm run check:stream && npm run check:live",
+    "check": "npm run check:input && npm run check:parser && npm run check:sources && npm run check:deterministic && npm run check:stream && npm run check:live",
     "check:ui": "tsx scripts/check-ui.mts"
   },
   "keywords": [],
