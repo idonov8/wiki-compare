@@ -131,13 +131,12 @@ function Column({
   const blind = blindspotsOf(payload, lang).size;
   const active = blindspot === lang;
   // The notes below are the interface talking, in English, inside a column that
-  // may read right-to-left — where a sentence opening with a numeral had the
-  // numeral reordered to the far end and the full stop shunted to the wrong
-  // side. So they are set left-to-right and only *aligned* to the column's own
-  // start edge, which is where the list under them begins.
-  const note = `font-mono text-[10px] leading-[1.6] tracking-[0.04em] ${
-    meta.dir === "rtl" ? "text-right" : "text-left"
-  }`;
+  // may read right-to-left. They are set left-to-right and ragged right like
+  // any other English paragraph on the page: inheriting the column's direction
+  // reordered the numeral a sentence opens with to the far end of the line,
+  // shunted the full stop to the wrong side of it, and set the whole thing
+  // flush right, which is not how the language is read.
+  const note = "font-mono text-[10px] leading-[1.6] tracking-[0.04em] text-left";
 
   return (
     // Physical borders and padding, not logical: the columns sit en|he|ar
