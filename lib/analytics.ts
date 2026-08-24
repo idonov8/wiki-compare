@@ -67,6 +67,8 @@ export const EVENTS = [
   /** One version's blindspots were highlighted in the others' lists — the
    *  question the panel is really for, and the only one it has to be asked. */
   "sources_blindspots_highlighted",
+  /** The "Jump to sources" shortcut beside the diff stepper was pressed. */
+  "sources_shortcut_clicked",
 ] as const;
 
 export type AnalyticsEvent = (typeof EVENTS)[number];
