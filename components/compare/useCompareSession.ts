@@ -36,13 +36,12 @@ const asLang = (value: string | null): Lang =>
  * would otherwise drop it; `?engine=claude` switches back.
  */
 function engineParam(): string {
+  let engine = new URLSearchParams(window.location.search).get("engine");
   try {
-    const asked = new URLSearchParams(window.location.search).get("engine");
-    if (asked) window.sessionStorage.setItem("engine", asked);
-    return window.sessionStorage.getItem("engine") === "jev" ? "&engine=jev" : "";
-  } catch {
-    return new URLSearchParams(window.location.search).get("engine") === "jev" ? "&engine=jev" : "";
-  }
+    if (engine) window.sessionStorage.setItem("engine", engine);
+    engine = window.sessionStorage.getItem("engine");
+  } catch {}
+  return engine === "jev" ? "&engine=jev" : "";
 }
 
 export function useCompareSession({
