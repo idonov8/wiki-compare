@@ -41,6 +41,17 @@ export function comparePath(title: string, lang: string): string {
 
 const GHOST_TYPES: Claim["type"][] = ["contradiction", "unique", "framing"];
 
+/** A mark's band at the strength the engine was sure of it, for the engines
+ *  that say. Never fainter than a quarter, so an unsure mark is still a mark;
+ *  the active mark keeps its full colour from the stylesheet. */
+function confidenceStyle(claim: Claim, active: boolean): React.CSSProperties | undefined {
+  if (claim.confidence === undefined || active) return undefined;
+  const strength = Math.round(25 + 75 * Math.min(1, Math.max(0, claim.confidence)));
+  return {
+    backgroundColor: `color-mix(in srgb, var(--color-mark-${claim.type}) ${strength}%, transparent)`,
+  };
+}
+
 export default function Highlighted({
   text,
   lang,
@@ -125,6 +136,7 @@ export default function Highlighted({
           aria-label={`${found.type}: ${found.summary}`}
           data-type={found.type}
           data-active={activeId === found.id}
+          style={confidenceStyle(found, activeId === found.id)}
           onMouseEnter={(e) => onEnter?.(found, e)}
           onFocus={(e) => onEnter?.(found, e)}
           onMouseLeave={onLeave}

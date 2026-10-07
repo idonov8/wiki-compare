@@ -34,6 +34,7 @@ export default function ClaimCard({ card }: { card: CardState }) {
         {Object.keys(card.claim.spans)
           .map((l) => l.toUpperCase())
           .join(", ")}
+        {card.claim.confidence !== undefined && ` · ${Math.round(card.claim.confidence * 100)}% confidence`}
       </div>
     </div>
   );

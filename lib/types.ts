@@ -23,6 +23,8 @@ export interface Claim {
   summary: string;
   explanation: string;
   spans: Partial<Record<Lang, string>>;
+  /** How sure the engine was, 0 to 1. Only the Jev engine reports one. */
+  confidence?: number;
 }
 
 /** A Wikipedia-internal link, as a character range into a section's `text`.

@@ -29,6 +29,22 @@ const asLang = (value: string | null): Lang =>
  * all three editions and both ran the link-to-Wikidata resolution, doubling the
  * work and the rate-limit exposure to save nothing.
  */
+
+/**
+ * `?engine=jev` opens comparisons on the Jev proof of concept. Remembered for
+ * the tab, because following a link inside an article builds a fresh URL that
+ * would otherwise drop it; `?engine=claude` switches back.
+ */
+function engineParam(): string {
+  try {
+    const asked = new URLSearchParams(window.location.search).get("engine");
+    if (asked) window.sessionStorage.setItem("engine", asked);
+    return window.sessionStorage.getItem("engine") === "jev" ? "&engine=jev" : "";
+  } catch {
+    return new URLSearchParams(window.location.search).get("engine") === "jev" ? "&engine=jev" : "";
+  }
+}
+
 export function useCompareSession({
   refreshMe,
   /** Run whenever a new read or search clears the page — the claim tooltip
@@ -94,7 +110,7 @@ export function useCompareSession({
 
       try {
         const res = await fetch(
-          `/api/compare?title=${encodeURIComponent(hit.title)}&lang=${encodeURIComponent(hit.lang)}&stream=1`,
+          `/api/compare?title=${encodeURIComponent(hit.title)}&lang=${encodeURIComponent(hit.lang)}&stream=1${engineParam()}`,
         );
         const final = await streamComparison(res, {
           accept: current,

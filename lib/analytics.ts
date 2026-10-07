@@ -69,6 +69,9 @@ export const EVENTS = [
   "sources_blindspots_highlighted",
   /** The "Jump to sources" shortcut beside the diff stepper was pressed. */
   "sources_shortcut_clicked",
+  /** A comparison was run on the Jev engine, with what it found and cost. The
+   *  numbers that decide whether the engine replaces the Claude one. */
+  "jev_comparison_run",
 ] as const;
 
 export type AnalyticsEvent = (typeof EVENTS)[number];
