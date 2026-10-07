@@ -232,6 +232,10 @@ export interface JevRun {
   scope: ComparisonScope;
   trace: DirectionTrace[];
   requests: number;
+  /** What the planner estimated the same requests at, against `usage.inputTokens`. */
+  estimatedTokens: number;
+  /** Requests Jev refused as too large and that were split and resent. */
+  splits: number;
 }
 
 /**
@@ -287,7 +291,7 @@ export async function runJevComparison(
   const counts = claims.reduce<Record<string, number>>((acc, c) => ({ ...acc, [c.type]: (acc[c.type] ?? 0) + 1 }), {});
   console.log(
     `[jev] ${a.title} / ${b.title}: paragraphs=${sa.paragraphs.length}/${sb.paragraphs.length} ` +
-      `claims=${claims.length} ${JSON.stringify(counts)} requests=${jev.usage.requests} ` +
+      `claims=${claims.length} ${JSON.stringify(counts)} requests=${jev.usage.requests} splits=${jev.usage.splits} ` +
       `tokens=${usage.inputTokens}in/${usage.outputTokens}out cost=$${usage.costUsd.toFixed(4)}`,
   );
 
@@ -298,5 +302,7 @@ export async function runJevComparison(
     scope: { kind: "full" },
     trace: results.map((r) => r.trace),
     requests: jev.usage.requests,
+    estimatedTokens: jev.usage.estimatedTokens,
+    splits: jev.usage.splits,
   };
 }

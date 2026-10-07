@@ -28,7 +28,7 @@ const jsonPath = join(OUT, `${slug}.json`);
 
 let run: JevRun & { ms: number };
 if (fromJson) {
-  run = JSON.parse(readFileSync(jsonPath, "utf8"));
+  run = { estimatedTokens: 0, splits: 0, ...JSON.parse(readFileSync(jsonPath, "utf8")) };
 } else {
   if (!process.env.TYPESAFE_API_KEY) {
     console.error("Set TYPESAFE_API_KEY, or pass --from-json to re-render the last run.");
@@ -88,6 +88,10 @@ console.log(
 );
 console.log(
   `  option-order agreement: paragraphs ${matchAgree}/${matchTotal}, sentences ${typeAgree}/${verdicts.length}`,
+);
+console.log(
+  `  token estimate: ${run.estimatedTokens} estimated vs ${run.usage.inputTokens} actual ` +
+    `(${run.estimatedTokens ? (run.usage.inputTokens / run.estimatedTokens).toFixed(2) : "?"}x), ${run.splits} request(s) split as too large`,
 );
 if (gold.length) {
   console.log(`\n  gold: ${gold.filter((g) => g.ok).length}/${gold.length}`);
@@ -167,7 +171,7 @@ mark.framing{background:rgba(var(--framing),calc(.12 + .45*var(--c)));box-shadow
 </style></head><body>
 <header><h1>Jev run: ${esc(slug)}</h1>
 <p>${run.claims.length} claims ${esc(JSON.stringify(counts))} · ${run.requests} requests · ${run.usage.inputTokens} input tokens · $${(run.usage.costUsd ?? 0).toFixed(4)} · ${(run.ms / 1000).toFixed(1)}s</p>
-<p>option-order agreement: paragraphs ${matchAgree}/${matchTotal}, sentences ${typeAgree}/${verdicts.length} · opacity = confidence · hover a mark for details</p>
+<p>option-order agreement: paragraphs ${matchAgree}/${matchTotal}, sentences ${typeAgree}/${verdicts.length} · tokens ${run.usage.inputTokens} actual vs ${run.estimatedTokens} estimated · ${run.splits} split · opacity = confidence · hover a mark for details</p>
 ${goldHtml}</header>
 <main>${segmented.map(column).join("")}</main></body></html>`;
 

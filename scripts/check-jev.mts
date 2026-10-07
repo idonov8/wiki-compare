@@ -9,7 +9,7 @@
  */
 import { TypeSafeClient } from "@typesafe-ai/sdk";
 import { fixtureSnapshots, listFixtures, loadFixture } from "../fixtures/loader";
-import { Jev, estimateTokens } from "../lib/jev/client";
+import { Jev } from "../lib/jev/client";
 import { matchUnits } from "../lib/jev/match";
 import { JEV_LANGS, runJevComparison } from "../lib/jev/pipeline";
 import { segment } from "../lib/jev/segment";
@@ -60,22 +60,41 @@ function stubAnswers(body: Body) {
   return answers;
 }
 
+/** A harsher tokenizer than the planner's estimate: three Latin characters a
+ *  token and one and a half tokens a Hebrew character. The stub enforces the
+ *  real limits with it and refuses the way the API does, so the pipeline has to
+ *  recover from being wrong about sizes rather than merely be right. */
+function strictTokens(value: unknown): number {
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  let ascii = 0;
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) < 128) ascii++;
+  return Math.ceil(ascii / 3 + (text.length - ascii) * 1.5);
+}
+
 const problems: string[] = [];
 let requests = 0;
+let refusals = 0;
+const limits = { request: 64_000, question: 32_000 };
 const stub = new TypeSafeClient({
   apiKey: "stub",
   retry: { maxRetries: 0 },
   fetch: async (_url, init) => {
     requests++;
     const body = JSON.parse(String(init?.body)) as Body;
-    const total = estimateTokens(body);
-    if (total > 60_000) problems.push(`request of ~${total} tokens`);
-    const state = estimateTokens(body.state);
+    const total = strictTokens(body);
+    const state = strictTokens(body.state);
+    const longest = Math.max(...Object.values(body.questions).map((q) => strictTokens(q)));
     for (const [name, q] of Object.entries(body.questions)) {
       const labels = Object.keys(q.criteria);
       if (q.type !== "choice") problems.push(`${name}: type ${q.type}`);
       if (labels.length < 2 || labels.length > 255) problems.push(`${name}: ${labels.length} options`);
-      if (state + estimateTokens(q) > 32_000) problems.push(`${name}: state + question ~${state + estimateTokens(q)} tokens`);
+    }
+    if (total > limits.request || state + longest > limits.question) {
+      refusals++;
+      return new Response(JSON.stringify({ detail: { error_type: "max_tokens_exceeded" } }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      });
     }
     return new Response(
       JSON.stringify({ model: "jev-stub", answers: stubAnswers(body), usage: { input_tokens: total, output_tokens: 0 } }),
@@ -90,12 +109,13 @@ for (const slug of listFixtures()) {
   console.log(`\n${slug}`);
   problems.length = 0;
   requests = 0;
+  refusals = 0;
 
   const streamed: string[] = [];
   const run = await runJevComparison(articles, (c) => streamed.push(c.id), new Jev(stub));
 
-  check(!problems.length, "every request fits the API's limits", problems.slice(0, 3).join("; "));
-  check(run.claims.length > 0, "the stub run produces claims", `${requests} requests`);
+  check(!problems.length, "every question is well formed", problems.slice(0, 3).join("; "));
+  check(run.claims.length > 0, "the stub run completes with claims", `${requests} requests, ${refusals} refused as too large`);
   check(streamed.length === run.claims.length, "every claim is streamed once");
 
   const unplaceable = run.claims.filter((c) =>
@@ -109,6 +129,7 @@ for (const slug of listFixtures()) {
     "every claim carries a confidence in (0, 1]",
   );
   check(new Set(run.claims.map((c) => c.id)).size === run.claims.length, "claim ids are unique");
+  console.log(`          ${requests} requests, ${refusals} refused and split, estimate ${run.estimatedTokens} vs strict ${run.usage.inputTokens}`);
   check(run.usage.byModel?.["jev-stub"]?.inputTokens === run.usage.inputTokens, "usage is filed under the model");
   check(
     run.trace.some((t) => t.verdicts.some((v) => v.rechecked)) || !run.claims.some((c) => c.type === "unique"),
@@ -120,6 +141,7 @@ console.log("\ntournament: a pool past the 255-option limit");
 {
   problems.length = 0;
   requests = 0;
+  refusals = 0;
   const [en, he] = JEV_LANGS.map((l) => segment(fixtureSnapshots(loadFixture("coffee")).find((a) => a.lang === l)!));
   const big = [0, 1, 2].flatMap((k) =>
     en.paragraphs.filter((p) => p.kind === "body").map((p) => ({ ...p, id: `${p.id}x${k}` })),
@@ -127,12 +149,31 @@ console.log("\ntournament: a pool past the 255-option limit");
   const units = he.paragraphs.filter((p) => p.kind === "body").slice(0, 5);
   const matches = await matchUnits(new Jev(stub), he, { ...en, paragraphs: big }, units, big);
   check(big.length > 255, `the pool has ${big.length} paragraphs`);
-  check(!problems.length, "every request fits the API's limits", problems.slice(0, 3).join("; "));
+  check(!problems.length, "every question is well formed", problems.slice(0, 3).join("; "));
   check(matches.size === units.length, "every unit gets an answer", `${matches.size}/${units.length}`);
   check(
     [...matches.values()].every((m) => m.candidates.length > 0 && m.candidates.every((c) => big.includes(c.paragraph))),
     "candidates come from the pool",
   );
+}
+
+console.log("\nrecovery: a model with an eighth of the limits");
+{
+  limits.request = 5_000;
+  limits.question = 4_000;
+  problems.length = 0;
+  requests = 0;
+  refusals = 0;
+  const articles = fixtureSnapshots(loadFixture("palestinian-legislative-council")).filter((a) => JEV_LANGS.includes(a.lang));
+  let error = "";
+  const run = await runJevComparison(articles, undefined, new Jev(stub)).catch((e) => {
+    error = e instanceof Error ? e.message : String(e);
+    return null;
+  });
+  check(!!run, "the run completes although requests are refused", error);
+  check(refusals > 0 && (run?.splits ?? 0) > 0, "refused requests are split and resent", `${refusals} refused`);
+  limits.request = 64_000;
+  limits.question = 32_000;
 }
 
 console.log(failures ? `\n${failures} check(s) failed\n` : "\nall checks passed\n");

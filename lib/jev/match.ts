@@ -1,5 +1,5 @@
 import { LANG_META } from "../types";
-import { QUESTION_BUDGET, estimateTokens, type Answer, type Ask, type Jev } from "./client";
+import { QUESTION_BUDGET, isTooLarge, type Answer, type Ask, type Jev } from "./client";
 import type { Paragraph, Segmented, Unit } from "./segment";
 
 export interface Candidate {
@@ -18,9 +18,12 @@ export interface Match {
 /** A pool bigger than this, or with more paragraphs than a Choice takes, is
  *  split into chunks for a tournament. */
 const CHUNK_BUDGET = 14_000;
+const MIN_CHUNK_BUDGET = 1_000;
 const MAX_OPTIONS = 250;
-/** How many paragraphs each chunk sends on to the final round. */
+/** How many paragraphs each chunk nominates, and how many of the nominees a
+ *  unit's final round considers. */
 const FINALISTS_PER_CHUNK = 2;
+const MAX_FINALISTS = 8;
 const CANDIDATE_FLOOR = 0.15;
 const MAX_CANDIDATES = 3;
 
@@ -38,22 +41,16 @@ interface Context {
  * One Choice per unit over `pool` plus "none", with the probabilities keyed by
  * index into `pool`.
  *
- * In the usual layout the paragraphs are an ID-tagged document in the state and
- * the options are bare IDs, which is how TypeSafe's own search cookbook lays it
- * out: the text is sent once per request rather than once per question. The
- * final round of a tournament has a different shortlist per unit, so there the
- * options carry their text instead.
+ * The paragraphs are an ID-tagged document in the state and the options are
+ * bare IDs, which is how TypeSafe's own search cookbook lays it out: the text is
+ * sent once per request rather than once per question.
  */
 async function round(
   ctx: Context,
   units: (Unit & { id: string })[],
-  poolFor: (unit: Unit & { id: string }) => Paragraph[],
-  layout: "ids" | "inline",
+  pool: Paragraph[],
 ): Promise<Map<string, { none: number; ranked: Candidate[]; answer: Answer }>> {
-  const state = {
-    task: ctx.task,
-    ...(layout === "ids" ? { [`${ctx.toName.toLowerCase()}_article`]: tagged(poolFor(units[0])) } : {}),
-  };
+  const state = { task: ctx.task, [`${ctx.toName.toLowerCase()}_article`]: tagged(pool) };
   const asks: Ask[] = units.map((unit) => ({
     id: unit.id,
     instructions:
@@ -61,7 +58,7 @@ async function round(
       `Passage: ${labelled(unit)}`,
     options: [
       ["none", `No paragraph of the ${ctx.toName} article covers this information`],
-      ...poolFor(unit).map((p, i): [string, string | null] => [`b${i}`, layout === "ids" ? null : labelled(p)]),
+      ...pool.map((_, i): [string, null] => [`b${i}`, null]),
     ],
   }));
 
@@ -70,7 +67,7 @@ async function round(
   for (const unit of units) {
     const answer = answers.get(unit.id);
     if (!answer) continue;
-    const ranked = poolFor(unit)
+    const ranked = pool
       .map((paragraph, i) => ({ paragraph, p: answer.probabilities[`b${i}`] ?? 0 }))
       .sort((a, b) => b.p - a.p);
     out.set(unit.id, { none: answer.probabilities.none ?? 0, ranked, answer });
@@ -78,13 +75,13 @@ async function round(
   return out;
 }
 
-function chunks(pool: Paragraph[]): Paragraph[][] {
+function chunks(jev: Jev, pool: Paragraph[], budget: number): Paragraph[][] {
   const out: Paragraph[][] = [];
   let current: Paragraph[] = [];
   let tokens = 0;
   for (const p of pool) {
-    const cost = estimateTokens(labelled(p));
-    if (current.length && (tokens + cost > CHUNK_BUDGET || current.length >= MAX_OPTIONS)) {
+    const cost = jev.estimate(labelled(p));
+    if (current.length && (tokens + cost > budget || current.length >= MAX_OPTIONS)) {
       out.push(current);
       current = [];
       tokens = 0;
@@ -125,23 +122,43 @@ export async function matchUnits(
     task: `Find where a passage of the ${LANG_META[from.lang].label} Wikipedia article "${from.title}" is covered in the ${LANG_META[to.lang].label} Wikipedia article "${to.title}" on the same subject.`,
   };
 
-  const longestUnit = Math.max(...units.map((u) => estimateTokens(labelled(u))));
+  const longestUnit = Math.max(...units.map((u) => jev.estimate(labelled(u))));
   const fits =
-    pool.length <= MAX_OPTIONS && estimateTokens(tagged(pool)) + longestUnit + pool.length * 4 < QUESTION_BUDGET - 1_000;
+    pool.length <= MAX_OPTIONS && jev.estimate(tagged(pool)) + longestUnit + pool.length * 4 < QUESTION_BUDGET - 1_000;
 
-  let final: Awaited<ReturnType<typeof round>>;
-  if (fits) {
-    final = await round(ctx, units, () => pool, "ids");
-  } else {
-    const heats = await Promise.all(chunks(pool).map((chunk) => round(ctx, units, () => chunk, "ids")));
-    const finalists = new Map(
-      units.map((u) => [
-        u.id,
-        heats.flatMap((heat) => heat.get(u.id)?.ranked.slice(0, FINALISTS_PER_CHUNK).map((c) => c.paragraph) ?? []),
-      ]),
+  // Each chunk nominates its likeliest paragraphs; every unit then gets a final
+  // round of its own over its best nominees, so the final round stays small
+  // however many chunks there were.
+  const tournament = async (budget: number) => {
+    const heats = await Promise.all(chunks(jev, pool, budget).map((chunk) => round(ctx, units, chunk)));
+    const finals = await Promise.all(
+      units.map((u) => {
+        const nominees = heats
+          .flatMap((heat) => heat.get(u.id)?.ranked.slice(0, FINALISTS_PER_CHUNK) ?? [])
+          .sort((a, b) => b.p - a.p)
+          .slice(0, MAX_FINALISTS)
+          .map((c) => c.paragraph);
+        return round(ctx, [u], nominees);
+      }),
     );
-    final = await round(ctx, units, (u) => finalists.get(u.id) ?? [], "inline");
+    return new Map(finals.flatMap((f) => [...f]));
+  };
+
+  // The estimate is not Jev's tokenizer, so a pool it thought would fit can
+  // still be refused. The tournament is the fallback, with the chunks halved
+  // each time one is refused, down to a paragraph or two per chunk.
+  const attempts: (() => ReturnType<typeof round>)[] = fits ? [() => round(ctx, units, pool)] : [];
+  for (let budget = CHUNK_BUDGET; budget >= MIN_CHUNK_BUDGET; budget /= 2) attempts.push(() => tournament(budget));
+  let final: Awaited<ReturnType<typeof round>> | undefined;
+  for (const [i, attempt] of attempts.entries()) {
+    try {
+      final = await attempt();
+      break;
+    } catch (error) {
+      if (!isTooLarge(error) || i === attempts.length - 1) throw error;
+    }
   }
+  if (!final) return out;
 
   for (const unit of units) {
     const result = final.get(unit.id);
