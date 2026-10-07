@@ -52,6 +52,15 @@ options are `b0..bN` with no description. The first version put the text in the
 options, which repeats it in every question; on Coffee that was about 2.3M
 estimated input tokens against about 0.95M now.
 
+**Request sizes are planned, then corrected by Jev.** TypeSafe does not publish
+its tokenizer, and the first real run was refused with
+`400 max_tokens_exceeded` when Hebrew was estimated at two characters a token.
+The planner now assumes one Hebrew character a token, keeps batches to 32
+questions and 40k estimated tokens, and corrects its estimate from each
+response's actual `input_tokens`. A request Jev still refuses is split in half
+and resent, down to one question; a matching question that is too large on its
+own falls back to the tournament, with smaller chunks each time.
+
 **Every Choice is asked in both option orders and the two are averaged.**
 jev-1.13 leans toward the first option. Averaging cancels the lean, and whether
 the two orders agreed is reported per answer, a free signal of how settled it is.
@@ -63,8 +72,9 @@ splits over two, and the lead restates the body.
 **Big pools run as a tournament.** A Choice takes at most 255 options and a
 request at most 32k tokens for the state plus the longest question. A pool past
 either is split into chunks; each chunk nominates its two likeliest paragraphs,
-and a final round chooses among the nominees. "none" is decided in the final
-round only.
+and each unit gets a final round of its own over its best eight nominees, so
+the final round stays small however many chunks there were. "none" is decided
+in the final round only.
 
 **Figures are checked in code.** TypeSafe documents that Jev reads numbers and
 dates as text. So Jev decides which sentences correspond, and `extractNumbers`
@@ -82,8 +92,10 @@ template difference, not a finding.
 ## Trying it
 
 - `npm run check:segment`: segmentation over every fixture, no network.
-- `npm run check:jev`: the whole pipeline against a stub of the API, checking
-  that every request fits the API's limits and every claim can be highlighted.
+- `npm run check:jev`: the whole pipeline against a stub of the API that
+  counts tokens more harshly than the planner and refuses oversized requests the
+  way Jev does, including a run at an eighth of the real limits. Checks that
+  every run completes and every claim can be highlighted.
 - `npm run jev:run -- <fixture>`: a real run (needs `TYPESAFE_API_KEY`). Prints
   claims, cost, option-order agreement and, for
   `palestinian-legislative-council`, a score against eleven hand-verified
@@ -119,14 +131,15 @@ same article.
 
 | Fixture | Requests | Est. input tokens | Est. cost |
 |---|---|---|---|
-| Coffee (en 103 / he 78 paragraphs) | ~205 | ~0.95M | ~4¢ |
-| PLC | ~65 | ~0.18M | ~0.8¢ |
-| Hadag Nahash | ~54 | ~0.17M | ~0.7¢ |
+| Coffee (en 103 / he 78 paragraphs) | ~510 | ~2.1M | ~9¢ |
+| PLC | ~78 | ~0.24M | ~1¢ |
+| Hadag Nahash | ~68 | ~0.25M | ~1¢ |
 
-The estimate deliberately overcounts (3.5 characters a token for Latin text, 2 for
-Hebrew), and assumes the whole request body is billed. A real run reports actual
-usage. For comparison, a Claude full run averages 10.3¢ for 8 sections, and a
-preview 3.9¢.
+These follow the cautious estimate (one token a Hebrew character), which makes
+batches small and repeats the state across more requests. The real figures come
+from the first runs: `jev:run` prints actual tokens against the estimate, and
+the planner adjusts to the real ratio as it goes. For comparison, a Claude full
+run averages 10.3¢ for 8 sections, and a preview 3.9¢.
 
 ## Open questions
 
