@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   type CacheInfo,
+  type Claim,
   type CompareEvent,
   type ComparisonResult,
   type Lang,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/db";
 import { coverageGaps, previewOf } from "@/lib/deterministic";
 import { PROMPT_VERSION, runComparison } from "@/lib/compare";
+import { JEV_LANGS, JEV_VERSION, runJevComparison } from "@/lib/jev/pipeline";
 import { getSessionUser } from "@/lib/auth";
 import { debit, grant, recordSpend } from "@/lib/credits";
 import { PRICE_PER_ARTICLE_CENTS } from "@/lib/pricing";
@@ -52,6 +54,31 @@ interface Target {
   langs: Lang[];
 }
 
+/**
+ * Which model reads the article. "jev" is the TypeSafe proof of concept: English
+ * against Hebrew, paragraph matching and sentence classification instead of one
+ * generated diff. It is reached only through `?engine=jev` on GET, stored under
+ * its own version so neither engine ever serves the other's rows, and always
+ * reads the whole article, since a full Jev run costs less than a Claude preview.
+ */
+type Engine = "claude" | "jev";
+
+const versionOf = (engine: Engine) => (engine === "jev" ? JEV_VERSION : PROMPT_VERSION);
+
+/** Development always; a deployment only when it opts in. */
+const jevEnabled = () => process.env.NODE_ENV !== "production" || process.env.JEV_ENABLED === "1";
+
+/** The pair the Jev engine compares, or an error naming the missing one. */
+function jevTarget(target: Target): Target {
+  const missing = JEV_LANGS.filter((l) => !target.langs.includes(l));
+  if (missing.length) {
+    throw new Error(`The Jev engine compares English with Hebrew, and this subject has no ${missing.join(" or ")} article.`);
+  }
+  const keep = <T,>(record: Partial<Record<string, T>>) =>
+    Object.fromEntries(Object.entries(record).filter(([l]) => JEV_LANGS.includes(l as Lang))) as Record<string, T>;
+  return { ...target, langs: [...JEV_LANGS], titles: keep(target.titles), revids: keep(target.revids) };
+}
+
 /** Read the article, price it, store it. Shared by both verbs. */
 async function computeAndStore(
   target: Target,
@@ -59,10 +86,12 @@ async function computeAndStore(
   {
     overwrite = false,
     fundedBy = null,
+    engine = "claude",
     emit = () => {},
   }: {
     overwrite?: boolean;
     fundedBy?: string | null;
+    engine?: Engine;
     /** Called as each stage becomes available, for the streaming path. The
      *  articles land in about a second and the coverage diff costs no tokens, so
      *  both are worth sending long before the model has finished. */
@@ -70,7 +99,8 @@ async function computeAndStore(
   } = {},
 ): Promise<{ result: ComparisonResult; cacheKey: string }> {
   const { qid, titles, revids, langs } = target;
-  const cacheKey = comparisonKey(qid, revids, PROMPT_VERSION, PARSER_VERSION, scope);
+  const version = versionOf(engine);
+  const cacheKey = comparisonKey(qid, revids, version, PARSER_VERSION, scope);
 
   // Registered before any work starts, so a tab reopened mid-run joins this one
   // rather than starting a second read of the same article.
@@ -112,14 +142,30 @@ async function computeAndStore(
     const coverage = coverageGaps(articles, known);
     send({ event: "coverage", coverage });
 
-    const run = await runComparison(articles, scope, (claim) => send({ event: "claim", claim }));
+    const started = Date.now();
+    const onClaim = (claim: Claim) => send({ event: "claim", claim });
+    const run =
+      engine === "jev" ? await runJevComparison(articles, onClaim) : await runComparison(articles, scope, onClaim);
+    if ("requests" in run) {
+      void capture("jev_comparison_run", {
+        qid,
+        claims: run.claims.length,
+        contradiction: run.claims.filter((c) => c.type === "contradiction").length,
+        unique: run.claims.filter((c) => c.type === "unique").length,
+        framing: run.claims.filter((c) => c.type === "framing").length,
+        requests: run.requests,
+        inputTokens: run.usage.inputTokens,
+        costUsd: run.usage.costUsd ?? 0,
+        ms: Date.now() - started,
+      });
+    }
 
     const result: ComparisonResult = {
       qid,
       articles: Object.fromEntries(articles.map((a) => [a.lang, a])),
       claims: run.claims,
       coverage,
-      promptVersion: PROMPT_VERSION,
+      promptVersion: version,
       parserVersion: PARSER_VERSION,
       computedAt: new Date().toISOString(),
       usage: run.usage,
@@ -213,6 +259,12 @@ export async function GET(request: Request) {
 
   const streaming = params.get("stream") === "1";
 
+  const engine: Engine = params.get("engine") === "jev" ? "jev" : "claude";
+  if (engine === "jev" && !jevEnabled()) {
+    return NextResponse.json({ error: "The Jev engine is not enabled on this deployment." }, { status: 404 });
+  }
+  const version = versionOf(engine);
+
   // Render a recorded fixture instead of calling anything. Development only —
   // it exists so the rendering layer can be worked on without a database, an
   // API key, or spending tokens, and it is dead code in production.
@@ -251,14 +303,15 @@ export async function GET(request: Request) {
    * precisely the sequence it ran before.
    */
   const serve = async (emit: (event: CompareEvent) => void) => {
-    const target = await resolveTarget(title, sourceLang);
+    const resolved = await resolveTarget(title, sourceLang);
+    const target = engine === "jev" ? jevTarget(resolved) : resolved;
     const { qid, revids } = target;
-    const fullKey = comparisonKey(qid, revids, PROMPT_VERSION, PARSER_VERSION, "full");
-    const previewKey = comparisonKey(qid, revids, PROMPT_VERSION, PARSER_VERSION, "preview");
+    const fullKey = comparisonKey(qid, revids, version, PARSER_VERSION, "full");
+    const previewKey = comparisonKey(qid, revids, version, PARSER_VERSION, "preview");
 
     const cached = bypassCache
       ? null
-      : await getCachedComparison(qid, fullKey, previewKey, PROMPT_VERSION, PARSER_VERSION);
+      : await getCachedComparison(qid, fullKey, previewKey, version, PARSER_VERSION);
 
     // Somebody is already reading this article — a reload of this same tab, most
     // likely. Join that run: its progress replays at once and the rest arrives
@@ -291,8 +344,9 @@ export async function GET(request: Request) {
 
     // Nothing stored: read the top of the article and stop. The columns fade out
     // below what this covered, and funding it through POST reads the rest.
-    const { result } = await computeAndStore(target, bypassCache ? "full" : "preview", {
+    const { result } = await computeAndStore(target, bypassCache || engine === "jev" ? "full" : "preview", {
       overwrite: bypassCache,
+      engine,
       emit,
     });
     void capture("comparison_served", {

@@ -18,7 +18,10 @@
     "check:input": "tsx scripts/check-input.mts",
     "check:stream": "tsx scripts/check-stream.mts",
     "check:live": "tsx scripts/check-live.mts",
-    "check": "npm run check:input && npm run check:parser && npm run check:sources && npm run check:deterministic && npm run check:stream && npm run check:live",
+    "check:segment": "tsx scripts/check-segment.mts",
+    "check:jev": "tsx scripts/check-jev.mts",
+    "check": "npm run check:input && npm run check:parser && npm run check:sources && npm run check:deterministic && npm run check:stream && npm run check:live && npm run check:segment && npm run check:jev",
+    "jev:run": "tsx --env-file-if-exists=.env.local scripts/jev-run.mts",
     "check:ui": "tsx scripts/check-ui.mts"
   },
   "keywords": [],
@@ -27,6 +30,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
     "@neondatabase/serverless": "^1.1.0",
+    "@typesafe-ai/sdk": "^0.6.0",
     "@vercel/analytics": "^2.0.1",
     "better-auth": "^1.6.26",
     "next": "^16.3.0",
