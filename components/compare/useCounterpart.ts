@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NARROW } from "../useNarrow";
+import type { Selected } from "./useSelection";
 import type { AlignedSentence, Claim, Lang } from "@/lib/types";
 
 /** Long enough that sweeping the pointer across a paragraph doesn't flicker the
@@ -42,6 +43,9 @@ export interface CounterpartState {
   key: string;
   lang: Lang;
   row: AlignedSentence;
+  /** Every sentence the reader has selected text in, when that is what opened
+   *  the passages rather than a pointer. */
+  selection?: AlignedSentence[];
   claim?: Claim;
   /** Opened by a click or a tap: stays until closed, and can be scrolled. */
   pinned: boolean;
@@ -137,60 +141,78 @@ export function useCounterpart(
 ) {
   const [state, setState] = useState<CounterpartState | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const pinned = useRef(false);
+  /** What holds the passages open past the pointer leaving. */
+  const held = useRef<"tap" | "selection" | null>(null);
 
   const close = useCallback(() => {
     clearTimeout(timer.current);
-    pinned.current = false;
+    held.current = null;
     setState(null);
   }, []);
 
   const show = useCallback(
     (key: string, element: HTMLElement, how: "hover" | "tap") => {
       const found = rows.get(key);
-      if (!found) return;
-      if (how === "hover" && pinned.current) return;
-      // A reader selecting text is reading the other columns' own highlights,
-      // which the passages would cover; and the click that ends a drag is not
-      // a tap.
-      if (!window.getSelection()?.isCollapsed) {
-        if (!pinned.current) close();
-        return;
-      }
+      // Pointing opens only a marked difference; any other text shows its
+      // counterparts when selected.
+      if (!found || !claimAt(key)) return;
+      if (how === "hover" && held.current) return;
+      // While text is selected the passages show the selection, and the click
+      // that ends a drag is not a tap.
+      if (!window.getSelection()?.isCollapsed) return;
       clearTimeout(timer.current);
       const open = () => {
         const { lang, row } = found;
         const claim = claimAt(key);
         const paragraph = paragraphs.get(sentenceKey(lang, row.section, row.paragraph.start)) ?? [key];
         const placement = place(element, paragraph, Object.keys(row.to) as Lang[]);
-        // A narrow screen shows only the explanation, so a sentence without a
-        // difference has nothing to open.
-        if (placement.mode === "sheet" && !claim) {
-          pinned.current = false;
-          setState(null);
-          return;
-        }
-        pinned.current = how === "tap";
+        held.current = how === "tap" ? "tap" : null;
         setState({ key, lang, row, claim, pinned: how === "tap", place: placement });
       };
       if (how === "tap") open();
       else timer.current = setTimeout(open, SHOW_DELAY);
     },
-    [rows, paragraphs, claimAt, close],
+    [rows, paragraphs, claimAt],
+  );
+
+  /** Passages for a selection: level with its first line, each other language's
+   *  matches picked out. Not on a narrow screen, which has no room beside it. */
+  const select = useCallback(
+    (selected: Selected | null) => {
+      if (!selected) {
+        if (held.current === "selection") close();
+        return;
+      }
+      const selection = selected.keys.map((key) => rows.get(key)!.row);
+      const others = [...new Set(selection.flatMap((row) => Object.keys(row.to) as Lang[]))];
+      const placement = place(selected.element, selected.keys, others);
+      if (placement.mode === "sheet") return;
+      clearTimeout(timer.current);
+      held.current = "selection";
+      setState({
+        key: `selection:${selected.keys.join(",")}`,
+        lang: selected.lang,
+        row: selection[0],
+        selection,
+        pinned: false,
+        place: placement,
+      });
+    },
+    [rows, close],
   );
 
   const leave = useCallback(() => {
-    if (pinned.current) return;
+    if (held.current) return;
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setState(null), HIDE_DELAY);
   }, []);
 
   // A hover follows the pointer, not the page: scrolling moves the text out
-  // from under it, so it goes. A pinned one scrolls with the text it sits by.
-  // A resize moves the columns out from under both.
+  // from under it, so it goes. A pinned one or a selection's scrolls with the
+  // text it sits by. A resize moves the columns out from under all of them.
   useEffect(() => {
     if (!state) return;
-    const onScroll = () => !state.pinned && close();
+    const onScroll = () => !held.current && close();
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", close);
     return () => {
@@ -210,5 +232,5 @@ export function useCounterpart(
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  return { counterpart: state, show, leave, close };
+  return { counterpart: state, show, select, leave, close };
 }

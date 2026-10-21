@@ -227,7 +227,6 @@ export default function Columns({
   activeId = null,
   alignment,
   activeSentence = null,
-  echo,
   onEnter,
   onLeave,
   onLink,
@@ -241,7 +240,6 @@ export default function Columns({
   activeId?: string | null;
   alignment?: Alignment;
   activeSentence?: string | null;
-  echo?: Set<string>;
   onEnter?: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
   onLeave?: () => void;
   onLink?: (title: string, lang: Lang) => void;
@@ -390,7 +388,6 @@ export default function Columns({
                     section={section}
                     sentences={section === undefined ? undefined : targets.get(`${lang}:${section}`)}
                     activeSentence={activeSentence}
-                    echo={echo}
                     onEnter={onEnter}
                     onLeave={onLeave}
                     onLink={onLink}

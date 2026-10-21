@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import type { Box, CounterpartState } from "./useCounterpart";
 import { useExplanation } from "./useExplanation";
 import { track } from "@/lib/analytics";
-import { LANG_META, type ArticleSnapshot, type Claim, type Counterpart, type Lang } from "@/lib/types";
+import { LANG_META, type ArticleSnapshot, type Claim, type Lang, type TextRef } from "@/lib/types";
 
 const KIND_LABEL: Record<Claim["type"], string> = {
   contradiction: "Contradiction",
@@ -21,45 +21,63 @@ const WINDOW = 700;
 /** Long enough on one sentence to count as having read it. */
 const READ_DWELL = 1500;
 const MARGIN = 10;
+/** A selection running over many paragraphs shows the first few matches. */
+const MAX_PARAGRAPHS = 4;
 
-function Passage({
-  lang,
-  article,
-  counterpart,
-  missing = false,
-}: {
-  lang: Lang;
-  article: ArticleSnapshot;
-  counterpart: Counterpart;
-  /** The passage is only the nearest one: what was hovered is not in it. */
-  missing?: boolean;
-}) {
-  const text = article.sections[counterpart.paragraph.section]?.text ?? "";
-  let { start, end } = counterpart.paragraph;
-  const s = missing ? undefined : counterpart.sentence;
-  if (end - start > WINDOW) {
-    const middle = s ? (s.start + s.end) / 2 : start + WINDOW / 2;
-    start = Math.max(start, Math.round(middle - WINDOW / 2));
-    end = Math.min(end, start + WINDOW);
+/** Paragraphs of one language to show, each with the sentences to pick out. */
+interface Item {
+  paragraph: TextRef;
+  marks: TextRef[];
+}
+
+/** Where a long paragraph is cut so that what is picked out in it shows. */
+function windowOf(paragraph: TextRef, marks: TextRef[]): { start: number; end: number } {
+  const { start, end } = paragraph;
+  if (end - start <= WINDOW) return { start, end };
+  if (!marks.length) return { start, end: start + WINDOW };
+  const lo = Math.min(...marks.map((m) => m.start));
+  const hi = Math.max(...marks.map((m) => m.end));
+  if (hi - lo > WINDOW) return { start: Math.max(start, lo - 80), end: Math.min(end, hi + 80) };
+  const from = Math.max(start, Math.round((lo + hi) / 2 - WINDOW / 2));
+  return { start: from, end: Math.min(end, from + WINDOW) };
+}
+
+/** `underline` picks out where the sentence under the pointer sits; `selection`
+ *  picks out what corresponds to the reader's selection. */
+type Tone = "underline" | "selection";
+
+const MARK: Record<Tone, string> = {
+  underline: "bg-wiki-page",
+  selection: "bg-echo",
+};
+
+function Passage({ lang, article, item, tone }: { lang: Lang; article: ArticleSnapshot; item: Item; tone: Tone }) {
+  const text = article.sections[item.paragraph.section]?.text ?? "";
+  const { start, end } = windowOf(item.paragraph, item.marks);
+  const marks = item.marks
+    .filter((m) => m.start >= start && m.end <= end)
+    .sort((a, b) => a.start - b.start);
+  const pieces: React.ReactNode[] = [];
+  let at = start;
+  for (const m of marks) {
+    if (m.start < at) continue;
+    pieces.push(text.slice(at, m.start));
+    pieces.push(
+      <mark
+        key={m.start}
+        className={`${MARK[tone]} text-inherit rounded-[2px] box-decoration-clone shadow-[inset_0_-2px_0_var(--color-ink)]`}
+      >
+        {text.slice(m.start, m.end)}
+      </mark>,
+    );
+    at = m.end;
   }
-  const lead = start > counterpart.paragraph.start ? "…" : "";
-  const tail = end < counterpart.paragraph.end ? "…" : "";
-  const inside = s && s.start >= start && s.end <= end;
+  pieces.push(text.slice(at, end));
   return (
     <p className="m-0 font-wiki text-[14.5px] leading-[1.62] text-wiki-text whitespace-pre-wrap" dir={LANG_META[lang].dir} lang={lang}>
-      {lead}
-      {inside ? (
-        <>
-          {text.slice(start, s.start)}
-          <mark className="bg-echo text-inherit rounded-[2px] box-decoration-clone shadow-[inset_0_-2px_0_var(--color-ink)]">
-            {text.slice(s.start, s.end)}
-          </mark>
-          {text.slice(s.end, end)}
-        </>
-      ) : (
-        text.slice(start, end)
-      )}
-      {tail}
+      {start > item.paragraph.start ? "…" : ""}
+      {pieces}
+      {end < item.paragraph.end ? "…" : ""}
     </p>
   );
 }
@@ -82,7 +100,9 @@ function Overlay({
   lang,
   box,
   article,
-  counterpart,
+  items,
+  tone,
+  note,
   missing,
   pinned,
   onClose,
@@ -90,7 +110,10 @@ function Overlay({
   lang: Lang;
   box: Box;
   article: ArticleSnapshot;
-  counterpart: Counterpart | null | undefined;
+  items: Item[];
+  tone: Tone;
+  /** What the passage is, after the language's name. */
+  note: string;
   /** The hovered sentence is a gap in this language. */
   missing: boolean;
   pinned: boolean;
@@ -126,20 +149,14 @@ function Overlay({
         ) : (
           <span>{meta.label}</span>
         )}
-        <span>
-          {missing
-            ? counterpart
-              ? "nearest passage"
-              : ""
-            : counterpart
-              ? `${Math.round(counterpart.p * 100)}% match${counterpart.sentence ? "" : ", no single sentence"}`
-              : "no matching passage"}
-        </span>
+        <span>{note}</span>
         {pinned && <Close onClose={onClose} />}
       </div>
-      {counterpart ? (
-        <div className={missing ? "opacity-60" : undefined}>
-          <Passage lang={lang} article={article} counterpart={counterpart} missing={missing} />
+      {items.length ? (
+        <div className={`flex flex-col gap-[8px] ${missing ? "opacity-60" : ""}`}>
+          {items.map((item) => (
+            <Passage key={`${item.paragraph.section}:${item.paragraph.start}`} lang={lang} article={article} item={item} tone={tone} />
+          ))}
         </div>
       ) : (
         <p className="m-0 text-[13.5px] text-ink-soft" dir="ltr">
@@ -193,9 +210,49 @@ export default function CounterpartPanel({
   cacheKey?: string;
   onClose: () => void;
 }) {
-  const { lang, row, claim, pinned, place } = state;
-  const others = (Object.keys(row.to) as Lang[]).filter((l) => articles[l]);
+  const { lang, row, selection, claim, pinned, place } = state;
+  const others = [...new Set((selection ?? [row]).flatMap((r) => Object.keys(r.to) as Lang[]))].filter(
+    (l) => articles[l],
+  );
   const elsewhere = place.mode === "inline" ? others.filter((l) => !place.overlays[l]) : [];
+  const missing = (other: Lang) => claim?.type === "unique" && !!claim.missingFrom?.includes(other);
+
+  /** The paragraphs to show in one language and what to pick out in them: for a
+   *  selection, every paragraph its sentences were matched to, in reading order. */
+  const itemsFor = (other: Lang): Item[] => {
+    if (!selection) {
+      const counterpart = row.to[other];
+      if (!counterpart) return [];
+      const marks = !missing(other) && counterpart.sentence ? [counterpart.sentence] : [];
+      return [{ paragraph: counterpart.paragraph, marks }];
+    }
+    const byParagraph = new Map<string, Item>();
+    for (const r of selection) {
+      const counterpart = r.to[other];
+      if (!counterpart) continue;
+      const id = `${counterpart.paragraph.section}:${counterpart.paragraph.start}`;
+      const item = byParagraph.get(id) ?? { paragraph: counterpart.paragraph, marks: [] };
+      if (counterpart.sentence && !item.marks.some((m) => m.start === counterpart.sentence!.start)) {
+        item.marks.push(counterpart.sentence);
+      }
+      byParagraph.set(id, item);
+    }
+    return [...byParagraph.values()]
+      .sort((a, b) => a.paragraph.section - b.paragraph.section || a.paragraph.start - b.paragraph.start)
+      .slice(0, MAX_PARAGRAPHS);
+  };
+
+  const noteFor = (other: Lang, items: Item[]): string => {
+    if (missing(other)) return items.length ? "nearest passage" : "";
+    if (!items.length) return "no matching passage";
+    if (selection) {
+      const sentences = items.reduce((n, item) => n + item.marks.length, 0);
+      return sentences ? `${sentences} matching sentence${sentences === 1 ? "" : "s"}` : "matching passage";
+    }
+    const counterpart = row.to[other]!;
+    return `${Math.round(counterpart.p * 100)}% match${counterpart.sentence ? "" : ", no single sentence"}`;
+  };
+  const tone: Tone = selection ? "selection" : "underline";
 
   useEffect(() => {
     const timer = setTimeout(
@@ -216,8 +273,10 @@ export default function CounterpartPanel({
               lang={other}
               box={place.overlays[other]}
               article={articles[other]}
-              counterpart={row.to[other]}
-              missing={claim?.type === "unique" && !!claim.missingFrom?.includes(other)}
+              items={itemsFor(other)}
+              tone={tone}
+              note={noteFor(other, itemsFor(other))}
+              missing={missing(other)}
               pinned={pinned}
               onClose={onClose}
             />
@@ -257,22 +316,32 @@ export default function CounterpartPanel({
           )}
           {claim && <Explanation claim={claim} cacheKey={cacheKey} />}
           {elsewhere.map((other) => {
-            const counterpart = row.to[other];
+            const items = itemsFor(other);
             const meta = LANG_META[other];
             return (
               <div key={other} className="px-[15px] py-[10px] border-t border-rule first:border-t-0">
                 <div className="mb-[5px] font-mono text-[10.5px] text-ink-soft">
-                  {meta.label} · {counterpart ? `${Math.round(counterpart.p * 100)}% match` : "no matching passage"}
+                  {meta.label} · {noteFor(other, items)}
                 </div>
-                {counterpart ? (
-                  <Passage lang={other} article={articles[other]} counterpart={counterpart} />
+                {items.length ? (
+                  <div className="flex flex-col gap-[8px]">
+                    {items.map((item) => (
+                      <Passage
+                        key={`${item.paragraph.section}:${item.paragraph.start}`}
+                        lang={other}
+                        article={articles[other]}
+                        item={item}
+                        tone={tone}
+                      />
+                    ))}
+                  </div>
                 ) : (
                   <p className="m-0 text-[13px] text-ink-soft">Nothing in the {meta.label} article covers this.</p>
                 )}
               </div>
             );
           })}
-          {!pinned && (
+          {!pinned && !selection && (
             <div className="px-[15px] py-[6px] font-mono text-[10px] text-ink-soft border-t border-rule">
               click the sentence to keep this open
             </div>

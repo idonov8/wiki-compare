@@ -1231,12 +1231,18 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     console.log("  skip  no sentence alignment (start the dev server with TYPESAFE_API_KEY to check the panel)");
   } else {
     await jev.waitForTimeout(500);
-    const sentence = jev.locator('[data-edition="en"] span.sentence').nth(3);
+    const plain = jev.locator('[data-edition="en"] span.sentence:not(:has(mark.claim))').nth(3);
+    await plain.scrollIntoViewIfNeeded();
+    await plain.hover();
+    await jev.waitForTimeout(500);
+    check(!(await jev.locator(".counterpart").count()), "hovering unmarked text opens nothing");
+
+    const sentence = jev.locator('[data-edition="en"] span.sentence:has(mark.claim)').first();
     await sentence.scrollIntoViewIfNeeded();
     await sentence.hover();
     await jev.waitForTimeout(500);
     const passages = jev.locator(".counterpart-passage");
-    check((await passages.count()) === 2, "hovering a sentence lays a passage over each other column", `${await passages.count()}`);
+    check((await passages.count()) === 2, "hovering a marked sentence lays a passage over each other column", `${await passages.count()}`);
     const he = await jev.locator('.counterpart-passage[data-lang="he"]').boundingBox();
     const heColumn = await jev.locator('[data-edition="he"]').first().boundingBox();
     check(
@@ -1249,6 +1255,14 @@ check(!(await page.$(".card")), "Escape dismisses the card");
       return row?.getBoundingClientRect().top ?? 0;
     }, await sentence.getAttribute("data-sentence"));
     check(!!he && he.y <= Math.max(top, 10) + 1, "level with the hovered paragraph, not below it", `passage ${Math.round(he?.y ?? 0)}, sentence ${Math.round(top)}`);
+    const note = jev.locator(".counterpart-note");
+    check(await note.isVisible(), "with a card explaining the difference");
+    const noteBox = await note.boundingBox();
+    const enColumn = await jev.locator('[data-edition="en"]').first().boundingBox();
+    check(
+      !!noteBox && !!enColumn && noteBox.x >= enColumn.x - 1 && noteBox.x + noteBox.width <= enColumn.x + enColumn.width + 1,
+      "in the hovered column",
+    );
     await jev.mouse.move(2, 2);
     await jev.waitForTimeout(500);
     check(!(await passages.count()), "leaving the sentence closes them");
@@ -1261,21 +1275,6 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     await jev.keyboard.press("Escape");
     await jev.waitForTimeout(200);
     check(!(await passages.count()), "and Escape closes them");
-
-    const marked = jev.locator('[data-edition="en"] span.sentence:has(mark.claim)').first();
-    await marked.scrollIntoViewIfNeeded();
-    await marked.hover();
-    await jev.waitForTimeout(500);
-    const note = jev.locator(".counterpart-note");
-    check(await note.isVisible(), "a marked sentence also gets a card explaining the difference");
-    const noteBox = await note.boundingBox();
-    const enColumn = await jev.locator('[data-edition="en"]').first().boundingBox();
-    check(
-      !!noteBox && !!enColumn && noteBox.x >= enColumn.x - 1 && noteBox.x + noteBox.width <= enColumn.x + enColumn.width + 1,
-      "in the hovered column",
-    );
-    await jev.mouse.move(2, 2);
-    await jev.waitForTimeout(500);
 
     const gap = jev.locator('[data-edition="en"] span.sentence:has(mark.claim[data-type="unique"])').first();
     await gap.scrollIntoViewIfNeeded();
@@ -1306,7 +1305,7 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     await jev.mouse.move(2, 2);
     await jev.waitForTimeout(500);
 
-    // Selecting text picks out the matching sentences in the other columns.
+    // Selecting any text shows where it is in the other languages.
     const lead = jev.locator('[data-edition="en"] [data-block]:nth-of-type(3) span.body-text').first();
     await lead.scrollIntoViewIfNeeded();
     const leadBox = (await lead.boundingBox())!;
@@ -1315,12 +1314,12 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     await jev.mouse.move(leadBox.x + 300, leadBox.y + 60, { steps: 10 });
     await jev.mouse.up();
     await jev.waitForTimeout(500);
-    const echoed = await jev.locator('[data-edition="he"] [data-echo="true"], [data-edition="ar"] [data-echo="true"]').count();
-    check(echoed > 0, "selecting text highlights the matching sentences in the other languages", `${echoed}`);
-    check(!(await jev.locator(".counterpart").count()), "with no passages laid over them");
+    check((await passages.count()) > 0, "selecting text lays the other languages' passages beside it");
+    const matched = await jev.locator(".counterpart-passage mark").count();
+    check(matched > 0, "with the matching sentences highlighted in them", `${matched}`);
     await jev.evaluate(() => window.getSelection()?.removeAllRanges());
-    await jev.waitForTimeout(300);
-    check(!(await jev.locator('[data-echo="true"]').count()), "and clearing the selection clears them");
+    await jev.waitForTimeout(400);
+    check(!(await passages.count()), "and clearing the selection closes them");
 
     const toggle = jev.locator("button.show-all");
     if (await toggle.count()) {
