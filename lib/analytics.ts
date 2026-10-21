@@ -72,6 +72,8 @@ export const EVENTS = [
   /** A comparison was run on the Jev engine, with what it found and cost. The
    *  numbers that decide whether the engine replaces the Claude one. */
   "jev_comparison_run",
+  /** A claim's generated explanation was served, freshly written or stored. */
+  "explanation_served",
 ] as const;
 
 export type AnalyticsEvent = (typeof EVENTS)[number];
