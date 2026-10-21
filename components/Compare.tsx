@@ -8,7 +8,6 @@ import ClaimCard from "./compare/ClaimCard";
 import CounterpartPanel from "./compare/CounterpartPanel";
 import ControlStrip from "./compare/ControlStrip";
 import DiffNav from "./DiffNav";
-import EchoPointers from "./compare/EchoPointers";
 import ErrorState from "./compare/ErrorState";
 import FeedbackModal from "./FeedbackModal";
 import Footer from "./Footer";
@@ -25,7 +24,7 @@ import { sentenceKey, useCounterpart } from "./compare/useCounterpart";
 import { useCompareSession } from "./compare/useCompareSession";
 import { useEditions } from "./compare/useEditions";
 import { useRecent } from "./compare/useRecent";
-import { useSelectionEcho } from "./compare/useSelectionEcho";
+import { useSelection } from "./compare/useSelection";
 import { initAnalytics, track } from "@/lib/analytics";
 import { relative } from "@/lib/relative";
 import { salientClaims } from "@/lib/salience";
@@ -113,16 +112,15 @@ export default function Compare() {
     return out;
   }, [shown]);
   const claimAt = useCallback((key: string) => claimBySentence.get(key), [claimBySentence]);
-  const { counterpart, show: showCounterpart, leave: leaveCounterpart, close: closeCounterpart } = useCounterpart(
-    rows,
-    paragraphs,
-    claimAt,
-  );
-  const echo = useSelectionEcho(rows, paragraphs);
-  const pinnedCounterpart = !!counterpart?.pinned;
-  useEffect(() => {
-    if (echo.size && !pinnedCounterpart) closeCounterpart();
-  }, [echo, pinnedCounterpart, closeCounterpart]);
+  const {
+    counterpart,
+    show: showCounterpart,
+    select: selectCounterpart,
+    leave: leaveCounterpart,
+    close: closeCounterpart,
+  } = useCounterpart(rows, paragraphs, claimAt);
+  const selected = useSelection(rows);
+  useEffect(() => selectCounterpart(selected), [selected, selectCounterpart]);
 
   useEffect(() => closeCounterpart(), [data?.qid, target?.title, closeCounterpart]);
 
@@ -218,7 +216,6 @@ export default function Compare() {
           activeId={card?.claim.id ?? counterpart?.claim?.id ?? null}
           alignment={alignment}
           activeSentence={counterpart?.key ?? null}
-          echo={echo}
           // With an alignment the panel shows a mark's difference along with the
           // passage it sits in, so the separate card would only cover it.
           onEnter={alignment ? undefined : showCard}
@@ -275,8 +272,6 @@ export default function Compare() {
       {feedbackOpen && <FeedbackModal onDismiss={() => setFeedbackOpen(false)} />}
 
       {card && <ClaimCard card={card} />}
-
-      <EchoPointers echo={echo} />
 
       {counterpart && (
         <CounterpartPanel state={counterpart} articles={articles} cacheKey={data?.cacheKey} onClose={closeCounterpart} />
