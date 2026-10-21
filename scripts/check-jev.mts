@@ -13,7 +13,8 @@ import { Jev } from "../lib/jev/client";
 import { matchUnits } from "../lib/jev/match";
 import { JEV_LANGS, runJevComparison } from "../lib/jev/pipeline";
 import { segment } from "../lib/jev/segment";
-import type { Lang } from "../lib/types";
+import { salientClaims } from "../lib/salience";
+import type { AlignedSentence, Lang, TextRef } from "../lib/types";
 
 let failures = 0;
 
@@ -28,7 +29,7 @@ function check(ok: boolean, label: string, detail = ""): void {
 
 interface Body {
   state: unknown;
-  questions: Record<string, { type: string; instructions: string; criteria: Record<string, unknown> }>;
+  questions: Record<string, { type: string; instructions: string; criteria: Record<string, unknown> | unknown[] }>;
 }
 
 /** Answers like a model that has read nothing: probability mass on the option
@@ -42,10 +43,18 @@ function stubAnswers(body: Body) {
   }
   const answers: Record<string, unknown> = {};
   for (const [name, q] of Object.entries(body.questions)) {
-    const labels = Object.keys(q.criteria);
+    if (q.type === "score") {
+      const levels = (q.criteria as unknown[]).length;
+      const level = String(q.instructions).length % levels;
+      const probabilities = Object.fromEntries([...Array(levels).keys()].map((i) => [i, i === level ? 0.7 : 0.3 / (levels - 1)]));
+      answers[name] = { type: "score", score: level, confidence: 0.7, probabilities, legend: {} };
+      continue;
+    }
+    const criteria = q.criteria as Record<string, unknown>;
+    const labels = Object.keys(criteria);
     const digits = new Set(String(q.instructions).match(/\d+/g) ?? []);
     const scored = labels.map((l, i) => {
-      const text = q.criteria[l] === null ? (tagged.get(l) ?? "") : JSON.stringify(q.criteria[l]);
+      const text = criteria[l] === null ? (tagged.get(l) ?? "") : JSON.stringify(criteria[l]);
       const shared = (text.match(/\d+/g) ?? []).filter((d) => digits.has(d)).length;
       // Some sentences come back as gaps, so the re-check path is exercised too.
       const gap = l === "gap" && String(q.instructions).length % 3 === 0 ? 2 : 0;
@@ -86,7 +95,7 @@ const stub = new TypeSafeClient({
     const longest = Math.max(...Object.values(body.questions).map((q) => strictTokens(q)));
     for (const [name, q] of Object.entries(body.questions)) {
       const labels = Object.keys(q.criteria);
-      if (q.type !== "choice") problems.push(`${name}: type ${q.type}`);
+      if (q.type !== "choice" && q.type !== "score") problems.push(`${name}: type ${q.type}`);
       if (labels.length < 2 || labels.length > 255) problems.push(`${name}: ${labels.length} options`);
     }
     if (total > limits.request || state + longest > limits.question) {
@@ -135,6 +144,42 @@ for (const slug of listFixtures()) {
     run.trace.some((t) => t.verdicts.some((v) => v.rechecked)) || !run.claims.some((c) => c.type === "unique"),
     "gaps go through the re-check",
   );
+
+  const textAt = (lang: Lang, r: TextRef) =>
+    articles.find((a) => a.lang === lang)?.sections[r.section]?.text.slice(r.start, r.end);
+  const misreferenced = run.claims.filter((c) =>
+    (Object.entries(c.refs ?? {}) as [Lang, TextRef][]).some(([lang, r]) => textAt(lang, r) !== c.spans[lang]),
+  );
+  check(!misreferenced.length && run.claims.every((c) => c.refs), "every claim's refs point at its spans", misreferenced[0]?.summary);
+  check(
+    run.claims.every((c) => typeof c.importance === "number" && c.importance >= 0 && c.importance <= 3),
+    "every claim carries an importance in [0, 3]",
+  );
+  const groups = new Map<string, number[]>();
+  for (const c of run.claims) if (c.group) groups.set(c.group, [...(groups.get(c.group) ?? []), c.importance!]);
+  check([...groups.values()].every((v) => new Set(v).size === 1), "a missing paragraph is scored once, as a whole");
+  check(
+    run.claims.filter((c) => c.type === "unique").every((c) => c.missingFrom?.length && !c.missingFrom.some((l) => c.spans[l])),
+    "every gap names the languages it is missing from, and none it is in",
+  );
+
+  const sentences = articles.reduce((n, a) => n + segment(a).paragraphs.reduce((m, p) => m + p.sentences.length, 0), 0);
+  const rows = Object.values(run.alignment).flat();
+  check(rows.length === sentences, "the alignment has a row for every sentence", `${rows.length}/${sentences}`);
+  const others = (lang: Lang) => articles.map((a) => a.lang).filter((l) => l !== lang);
+  const badRows = (Object.entries(run.alignment) as [Lang, AlignedSentence[]][]).flatMap(([lang, list]) =>
+    list.filter(
+      (row) =>
+        !textAt(lang, row) ||
+        !others(lang).every((o) => o in row.to) ||
+        Object.entries(row.to).some(
+          ([o, c]) => c && (!textAt(o as Lang, c.paragraph) || (c.sentence && !textAt(o as Lang, c.sentence))),
+        ),
+    ),
+  );
+  check(!badRows.length, "every alignment row points at real text in every other language", JSON.stringify(badRows[0])?.slice(0, 120));
+  const shown = salientClaims(run.claims, Object.fromEntries(articles.map((a) => [a.lang, a])));
+  check([...shown].every((id) => run.claims.some((c) => c.id === id)), "the threshold selects among the claims");
 }
 
 console.log("\ntournament: a pool past the 255-option limit");

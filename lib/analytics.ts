@@ -45,6 +45,8 @@ export const EVENTS = [
   "sources_shortcut_clicked",
   /** A comparison was run on the Jev engine, with what it found and cost. */
   "jev_comparison_run",
+  /** A claim's generated explanation was served, freshly written or stored. */
+  "explanation_served",
 ] as const;
 
 export type AnalyticsEvent = (typeof EVENTS)[number];

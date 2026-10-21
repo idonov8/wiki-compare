@@ -19,6 +19,7 @@ import {
 } from "@/lib/db";
 import { coverageGaps } from "@/lib/deterministic";
 import { JEV_VERSION, runJevComparison } from "@/lib/jev/pipeline";
+import { salientClaims } from "@/lib/salience";
 import { allow, visitorKey } from "@/lib/rate-limit";
 import { capture } from "@/lib/analytics";
 
@@ -82,7 +83,9 @@ async function computeAndStore(
     const run = await runJevComparison(articles, onClaim);
     void capture("jev_comparison_run", {
       qid,
+      langs: langs.join(","),
       claims: run.claims.length,
+      salient: salientClaims(run.claims, Object.fromEntries(articles.map((a) => [a.lang, a]))).size,
       contradiction: run.claims.filter((c) => c.type === "contradiction").length,
       unique: run.claims.filter((c) => c.type === "unique").length,
       framing: run.claims.filter((c) => c.type === "framing").length,
@@ -107,6 +110,8 @@ async function computeAndStore(
         matched: run.spans.matched,
         droppedClaims: run.spans.droppedClaims,
       },
+      alignment: run.alignment,
+      cacheKey,
     };
     // Stored while the run is still joinable, so the moment it stops being one
     // there is a cached row to serve instead.
