@@ -25,7 +25,43 @@ export interface Claim {
   spans: Partial<Record<Lang, string>>;
   /** How sure the engine was, 0 to 1. Only the Jev engine reports one. */
   confidence?: number;
+  /** How much the difference matters to a reader, 0 (minor detail) to 3
+   *  (central or contested). Jev's expected score; see `isSalient`. */
+  importance?: number;
+  /** For a gap: the languages whose articles lack it. */
+  missingFrom?: Lang[];
+  /** Exactly where each span sits, where `spans` can only be searched for. */
+  refs?: Partial<Record<Lang, TextRef>>;
+  /** Gaps of one paragraph missing as a whole share this, and are shown or
+   *  hidden together. */
+  group?: string;
 }
+
+/** A run of one section's text, as character offsets into `Section.text`. */
+export interface TextRef {
+  section: number;
+  start: number;
+  end: number;
+}
+
+/** Where a sentence's content sits in another language's article: the paragraph
+ *  it was matched to and, when Jev could point at one, the sentence. */
+export interface Counterpart {
+  paragraph: TextRef;
+  sentence?: TextRef;
+  /** How sure the match was, 0 to 1. */
+  p: number;
+}
+
+/** One sentence of one article and its counterpart in each other language;
+ *  `null` where no paragraph of that language covers it. */
+export interface AlignedSentence extends TextRef {
+  /** The paragraph the sentence belongs to, for placing the hover panel. */
+  paragraph: TextRef;
+  to: Partial<Record<Lang, Counterpart | null>>;
+}
+
+export type Alignment = Partial<Record<Lang, AlignedSentence[]>>;
 
 /** A Wikipedia-internal link, as a character range into a section's `text`.
  *  `title` is the linked article's title in that section's own language.
@@ -206,6 +242,10 @@ export interface ComparisonResult {
   /** How many verbatim spans the model offered and how many were located. A low
    *  match rate means the prompt needs tightening, not the matcher loosening. */
   spans?: { offered: number; matched: number; droppedClaims: number };
+  /** Sentence-by-sentence correspondence across the languages. Jev runs only. */
+  alignment?: Alignment;
+  /** The stored row's key, which is how a claim's explanation is asked for. */
+  cacheKey?: string;
 }
 
 /** Provenance of a comparison that came out of the cache. Present only then. */

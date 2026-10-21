@@ -21,6 +21,7 @@ import {
 import { coverageGaps, previewOf } from "@/lib/deterministic";
 import { PROMPT_VERSION, runComparison } from "@/lib/compare";
 import { JEV_LANGS, JEV_VERSION, runJevComparison } from "@/lib/jev/pipeline";
+import { salientClaims } from "@/lib/salience";
 import { getSessionUser } from "@/lib/auth";
 import { debit, grant, recordSpend } from "@/lib/credits";
 import { PRICE_PER_ARTICLE_CENTS } from "@/lib/pricing";
@@ -68,15 +69,15 @@ const versionOf = (engine: Engine) => (engine === "jev" ? JEV_VERSION : PROMPT_V
 /** Development always; a deployment only when it opts in. */
 const jevEnabled = () => process.env.NODE_ENV !== "production" || process.env.JEV_ENABLED === "1";
 
-/** The pair the Jev engine compares, or an error naming the missing one. */
+/** The languages the Jev engine compares, or an error when fewer than two. */
 function jevTarget(target: Target): Target {
-  const missing = JEV_LANGS.filter((l) => !target.langs.includes(l));
-  if (missing.length) {
-    throw new Error(`The Jev engine compares English with Hebrew, and this subject has no ${missing.join(" or ")} article.`);
+  const langs = JEV_LANGS.filter((l) => target.langs.includes(l));
+  if (langs.length < 2) {
+    throw new Error("A comparison needs at least two of the English, Hebrew and Arabic articles.");
   }
   const keep = <T,>(record: Partial<Record<string, T>>) =>
-    Object.fromEntries(Object.entries(record).filter(([l]) => JEV_LANGS.includes(l as Lang))) as Record<string, T>;
-  return { ...target, langs: [...JEV_LANGS], titles: keep(target.titles), revids: keep(target.revids) };
+    Object.fromEntries(Object.entries(record).filter(([l]) => langs.includes(l as Lang))) as Record<string, T>;
+  return { ...target, langs, titles: keep(target.titles), revids: keep(target.revids) };
 }
 
 /** Read the article, price it, store it. Shared by both verbs. */
@@ -144,18 +145,20 @@ async function computeAndStore(
 
     const started = Date.now();
     const onClaim = (claim: Claim) => send({ event: "claim", claim });
-    const run =
-      engine === "jev" ? await runJevComparison(articles, onClaim) : await runComparison(articles, scope, onClaim);
-    if ("requests" in run) {
+    const jevRun = engine === "jev" ? await runJevComparison(articles, onClaim) : null;
+    const run = jevRun ?? (await runComparison(articles, scope, onClaim));
+    if (jevRun) {
       void capture("jev_comparison_run", {
         qid,
-        claims: run.claims.length,
-        contradiction: run.claims.filter((c) => c.type === "contradiction").length,
-        unique: run.claims.filter((c) => c.type === "unique").length,
-        framing: run.claims.filter((c) => c.type === "framing").length,
-        requests: run.requests,
-        inputTokens: run.usage.inputTokens,
-        costUsd: run.usage.costUsd ?? 0,
+        langs: langs.join(","),
+        claims: jevRun.claims.length,
+        salient: salientClaims(jevRun.claims, Object.fromEntries(articles.map((a) => [a.lang, a]))).size,
+        contradiction: jevRun.claims.filter((c) => c.type === "contradiction").length,
+        unique: jevRun.claims.filter((c) => c.type === "unique").length,
+        framing: jevRun.claims.filter((c) => c.type === "framing").length,
+        requests: jevRun.requests,
+        inputTokens: jevRun.usage.inputTokens,
+        costUsd: jevRun.usage.costUsd ?? 0,
         ms: Date.now() - started,
       });
     }
@@ -175,6 +178,8 @@ async function computeAndStore(
         matched: run.spans.matched,
         droppedClaims: run.spans.droppedClaims,
       },
+      alignment: jevRun?.alignment,
+      cacheKey,
     };
     // Stored while the run is still joinable, so the moment it stops being one
     // there is a cached row to serve instead.
