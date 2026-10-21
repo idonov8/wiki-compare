@@ -13,3 +13,6 @@ AGENTS.md
 
 # Output of `npm run jev:run`
 reports/
+
+# Subagent worktrees
+.claude/worktrees/

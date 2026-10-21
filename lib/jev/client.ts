@@ -1,8 +1,16 @@
-import { TypeSafeClient, choice, type Description, type EntryType, type Questions } from "@typesafe-ai/sdk";
+import {
+  TypeSafeClient,
+  choice,
+  score,
+  type Description,
+  type EntryType,
+  type Questions,
+  type SystemOneResult,
+} from "@typesafe-ai/sdk";
 
 export const JEV_MODEL = process.env.JEV_MODEL || "jev-latest";
 
-const CONCURRENCY = Number(process.env.JEV_CONCURRENCY) || 12;
+const CONCURRENCY = Number(process.env.JEV_CONCURRENCY) || 24;
 /** The model takes 64k tokens per request, and 32k for the state plus the
  *  longest question. The budgets leave room because the estimate is a character
  *  ratio, not Jev's tokenizer; a request that is too big anyway is split. */
@@ -43,6 +51,19 @@ export interface Ask {
   id: string;
   instructions: string;
   options: [label: string, description: Description][];
+}
+
+/** A Score question: an ordered rubric, lowest first. */
+export interface Rate {
+  id: string;
+  instructions: string;
+  rubric: [string, string, ...string[]];
+}
+
+export interface Rating {
+  /** The expected level, so it can fall between two rubric levels. */
+  score: number;
+  confidence: number;
 }
 
 export interface Answer {
@@ -102,39 +123,87 @@ export class Jev {
   }
 
   async choices(state: EntryType, asks: Ask[]): Promise<Map<string, Answer>> {
-    const stateTokens = this.estimate(state);
-    const batches: Ask[][] = [];
-    let batch: Ask[] = [];
-    let tokens = stateTokens;
-    for (const ask of asks) {
-      const cost = this.estimate(ask.instructions) + this.estimate(ask.options);
-      if (stateTokens + cost > QUESTION_BUDGET) {
-        throw new JevTooLarge(`Jev question ${ask.id} is too large (~${stateTokens + cost} tokens with its state).`);
-      }
-      if (batch.length && (tokens + 2 * cost > REQUEST_BUDGET || 2 * (batch.length + 1) > MAX_QUESTIONS)) {
-        batches.push(batch);
-        batch = [];
-        tokens = stateTokens;
-      }
-      batch.push(ask);
-      tokens += 2 * cost;
-    }
-    if (batch.length) batches.push(batch);
-
     const answers = new Map<string, Answer>();
-    await Promise.all(batches.map((group) => this.limit(() => this.ask(state, group, answers))));
+    await this.send(
+      state,
+      asks.map((ask) => ({
+        id: ask.id,
+        questions: {
+          [`${ask.id}.f`]: choice(ask.instructions, criteria(ask.options)),
+          [`${ask.id}.r`]: choice(ask.instructions, criteria([...ask.options].reverse())),
+        },
+      })),
+      (id, result) => {
+        const ask = asks.find((a) => a.id === id)!;
+        const f = result.answers[`${id}.f`];
+        const r = result.answers[`${id}.r`];
+        if (f?.type !== "choice" || r?.type !== "choice") return;
+        const probabilities: Record<string, number> = {};
+        for (const [label] of ask.options) {
+          probabilities[label] = ((f.probabilities[label] ?? 0) + (r.probabilities[label] ?? 0)) / 2;
+        }
+        const [best, p] = Object.entries(probabilities).reduce((a, b) => (b[1] > a[1] ? b : a));
+        answers.set(id, { choice: best, confidence: p, probabilities, orderAgreed: f.choice === r.choice });
+      },
+    );
     return answers;
   }
 
-  /** One request, halved and retried when Jev says it is over its limit. */
-  private async ask(state: EntryType, group: Ask[], answers: Map<string, Answer>): Promise<void> {
-    const questions: Questions = {};
-    for (const ask of group) {
-      questions[`${ask.id}.f`] = choice(ask.instructions, criteria(ask.options));
-      questions[`${ask.id}.r`] = choice(ask.instructions, criteria([...ask.options].reverse()));
-    }
+  /** Score questions, asked once: a rubric is an order, and reversing it would
+   *  be a different question rather than the same one shuffled. */
+  async scores(state: EntryType, rates: Rate[]): Promise<Map<string, Rating>> {
+    const ratings = new Map<string, Rating>();
+    await this.send(
+      state,
+      rates.map((rate) => ({ id: rate.id, questions: { [rate.id]: score(rate.instructions, rate.rubric) } })),
+      (id, result) => {
+        const answer = result.answers[id];
+        if (answer?.type === "score") ratings.set(id, { score: answer.score, confidence: answer.confidence });
+      },
+    );
+    return ratings;
+  }
 
-    let result;
+  private async send(
+    state: EntryType,
+    items: { id: string; questions: Questions }[],
+    read: (id: string, result: SystemOneResult<Questions>) => void,
+  ): Promise<void> {
+    const stateTokens = this.estimate(state);
+    const batches: (typeof items)[] = [];
+    let batch: typeof items = [];
+    let tokens = stateTokens;
+    let count = 0;
+    for (const item of items) {
+      const questions = Object.values(item.questions);
+      const longest = Math.max(...questions.map((q) => this.estimate(q)));
+      const cost = questions.reduce((n, q) => n + this.estimate(q), 0);
+      if (stateTokens + longest > QUESTION_BUDGET) {
+        throw new JevTooLarge(`Jev question ${item.id} is too large (~${stateTokens + longest} tokens with its state).`);
+      }
+      if (batch.length && (tokens + cost > REQUEST_BUDGET || count + questions.length > MAX_QUESTIONS)) {
+        batches.push(batch);
+        batch = [];
+        tokens = stateTokens;
+        count = 0;
+      }
+      batch.push(item);
+      tokens += cost;
+      count += questions.length;
+    }
+    if (batch.length) batches.push(batch);
+    await Promise.all(batches.map((group) => this.limit(() => this.ask(state, group, read))));
+  }
+
+  /** One request, halved and retried when Jev says it is over its limit. */
+  private async ask(
+    state: EntryType,
+    group: { id: string; questions: Questions }[],
+    read: (id: string, result: SystemOneResult<Questions>) => void,
+  ): Promise<void> {
+    const questions: Questions = Object.assign({}, ...group.map((item) => item.questions));
+
+    let result: SystemOneResult<Questions>;
     try {
       result = await this.client.systemOne({ state, questions });
     } catch (error) {
@@ -142,8 +211,8 @@ export class Jev {
       if (group.length === 1) throw new JevTooLarge(`Jev question ${group[0].id} is over the model's limit.`);
       this.usage.splits++;
       const half = Math.ceil(group.length / 2);
-      await this.ask(state, group.slice(0, half), answers);
-      await this.ask(state, group.slice(half), answers);
+      await this.ask(state, group.slice(0, half), read);
+      await this.ask(state, group.slice(half), read);
       return;
     }
 
@@ -157,17 +226,6 @@ export class Jev {
       this.observed = Math.max(this.observed, result.usage.input_tokens / estimated);
       this.scale = Math.min(3, Math.max(0.5, this.observed));
     }
-
-    for (const ask of group) {
-      const f = result.answers[`${ask.id}.f`];
-      const r = result.answers[`${ask.id}.r`];
-      if (f?.type !== "choice" || r?.type !== "choice") continue;
-      const probabilities: Record<string, number> = {};
-      for (const [label] of ask.options) {
-        probabilities[label] = ((f.probabilities[label] ?? 0) + (r.probabilities[label] ?? 0)) / 2;
-      }
-      const [best, p] = Object.entries(probabilities).reduce((a, b) => (b[1] > a[1] ? b : a));
-      answers.set(ask.id, { choice: best, confidence: p, probabilities, orderAgreed: f.choice === r.choice });
-    }
+    for (const item of group) read(item.id, result);
   }
 }
