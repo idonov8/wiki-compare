@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import ClaimRatio, { CLAIM_KINDS } from "@/components/ClaimRatio";
 import Section from "./Section";
-import { LANGS, LANG_META, type RecentArticle, type ScopeKind } from "@/lib/types";
+import { LANGS, LANG_META, type RecentArticle } from "@/lib/types";
 
 interface Props {
   recent: RecentArticle[];
@@ -33,12 +32,10 @@ const wordsSaid = (words: RecentArticle["words"]): string =>
     .map((lang) => `${LANG_META[lang].label} ${words[lang]!.toLocaleString()} words`)
     .join(", ");
 
-const claimsSaid = (claims: RecentArticle["claims"], scope: ScopeKind): string =>
-  scope === "preview"
-    ? "differences not counted — cached run read the free preview"
-    : CLAIM_KINDS.filter(({ kind }) => claims[kind])
-        .map(({ kind, noun }) => `${claims[kind]} ${noun}`)
-        .join(", ") || "no differences found";
+const claimsSaid = (claims: RecentArticle["claims"]): string =>
+  CLAIM_KINDS.filter(({ kind }) => claims[kind])
+    .map(({ kind, noun }) => `${claims[kind]} ${noun}`)
+    .join(", ") || "no differences found";
 
 /**
  * How much each edition has written, as three bars in a fixed en·he·ar order,
@@ -97,34 +94,8 @@ function WordBars({ words, delay }: { words: RecentArticle["words"]; delay: numb
  * framing, which is the character of a disagreement rather than its size. The
  * empty track stays visible when nothing was found, because a row that drew
  * nothing there would read as a row that was never read.
- *
- * A preview draws the word instead of a line. Its counts are whatever the
- * opening section happened to contain rather than what the article says, so a
- * proportion drawn from them would read as the shape of the whole disagreement;
- * saying so in the line's own place is both the honest reading and the only
- * thing the row still needs to say about how much was read.
  */
-function RatioLine({
-  claims,
-  scope,
-  delay,
-}: {
-  claims: RecentArticle["claims"];
-  scope: ScopeKind;
-  delay: number;
-}) {
-  if (scope === "preview") {
-    return (
-      <span className="mt-[5px] border-b border-rule pb-[3px]">
-        <span
-          className="recent-ratio block w-[84px] text-center font-mono text-[10px] leading-[10px] tracking-[0.09em] uppercase text-ink-soft max-tight:w-[54px]"
-          title="Cached run read the free preview — differences not counted"
-        >
-          Preview
-        </span>
-      </span>
-    );
-  }
+function RatioLine({ claims, delay }: { claims: RecentArticle["claims"]; delay: number }) {
   return (
     // Padded down to the height of the bar zone beside it so the two rules meet
     // into one axis across the mark, the same way the masthead's baselines run
@@ -134,14 +105,14 @@ function RatioLine({
         counts={claims}
         className="h-[6px] w-[84px] max-tight:w-[54px]"
         delay={delay + 140}
-        title={claimsSaid(claims, scope)}
+        title={claimsSaid(claims)}
       />
     </span>
   );
 }
 
 /**
- * Articles somebody has already paid to have read.
+ * Articles the site has already read.
  *
  * Every cached subject is here, not a recent handful: this is the record of
  * what the site has read, and an article dropping off it because eleven newer
@@ -153,20 +124,7 @@ function RatioLine({
  * gallery.
  */
 export default function RecentList({ recent, onOpen, relative, loading }: Props) {
-  // A link into the ledger can ask for the full-only filter up front, e.g.
-  // `/?full=true#recently-compared` from the preview gate. `window` isn't
-  // there yet during server prerendering, so the initial state stays `false`
-  // and this only runs once the component is mounted in the browser.
-  const [fullOnly, setFullOnly] = useState(false);
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("full") === "true") {
-      setFullOnly(true);
-    }
-  }, []);
-
   if (!loading && !recent.length) return null;
-
-  const shown = fullOnly ? recent.filter((item) => item.scope === "full") : recent;
 
   return (
     <Section
@@ -178,18 +136,10 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
           <div className="flex shrink-0 items-baseline gap-[12px]">
             {/* The box only ever shows ten or so rows, and it can land on a row
                 boundary and read as the whole list. The count is what says
-                otherwise, and while the filter is on it says what was hidden. */}
+                otherwise. */}
             <span className="font-mono text-[11px] tracking-[0.04em] text-ink-soft" aria-live="polite">
-              {fullOnly ? `${shown.length} of ${recent.length}` : `${recent.length} articles`}
+              {recent.length} articles
             </span>
-            <button
-              type="button"
-              className="recent-filter border border-rule px-[10px] py-[5px] font-mono text-[11px] tracking-[0.09em] uppercase text-ink-soft hover:bg-paper-raised aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-paper-raised"
-              aria-pressed={fullOnly}
-              onClick={() => setFullOnly((on) => !on)}
-            >
-              Full only
-            </button>
           </div>
         )
       }
@@ -225,15 +175,15 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                   </div>
                 </li>
               ))
-            : shown.map((item, index) => (
+            : recent.map((item, index) => (
                 <li key={item.qid} className="border-b border-rule last:border-b-0">
                   <button
                     type="button"
                     className="group flex w-full items-baseline gap-[14px] border-0 bg-none px-[8px] py-[11px] text-start [font:inherit] text-wiki-link hover:bg-paper-raised"
                     onClick={() => onOpen(item.title, item.lang)}
-                    aria-label={`Compare ${item.title}, ${item.scope} cached ${relative(
+                    aria-label={`Compare ${item.title}, cached ${relative(
                       item.computedAt,
-                    )}, ${wordsSaid(item.words)}, ${claimsSaid(item.claims, item.scope)}`}
+                    )}, ${wordsSaid(item.words)}, ${claimsSaid(item.claims)}`}
                   >
                     <span
                       className="recent-title min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-left group-hover:underline"
@@ -253,22 +203,12 @@ export default function RecentList({ recent, onOpen, relative, loading }: Props)
                           a queue rather than a reading, and a row scrolled to
                           is better already drawn than drawing. */}
                       <WordBars words={item.words} delay={Math.min(index, 8) * 45} />
-                      <RatioLine
-                        claims={item.claims}
-                        scope={item.scope}
-                        delay={Math.min(index, 8) * 45}
-                      />
+                      <RatioLine claims={item.claims} delay={Math.min(index, 8) * 45} />
                     </span>
                   </button>
                 </li>
               ))}
         </ul>
-
-        {!loading && !shown.length && (
-          <p className="m-0 px-[8px] py-[16px] text-[14px] text-ink-soft">
-            Nothing has been read in full yet.
-          </p>
-        )}
       </div>
 
       {/* What the two marks on every row mean, said once under the ledger rather

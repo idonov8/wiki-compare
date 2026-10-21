@@ -14,11 +14,9 @@ import { CONTACT_EMAIL } from "@/lib/contact";
  * a complaint arrives — lives in /privacy instead, so this stays two lines.
  */
 export default function Footer({
-  onDonate,
   onFeedback,
   className = "",
 }: {
-  onDonate: () => void;
   onFeedback: () => void;
   className?: string;
 }) {
@@ -68,13 +66,6 @@ export default function Footer({
               Feedback
             </button>
           </span>
-          <button
-            type="button"
-            className="shrink-0 border border-rule px-[10px] py-[4px] font-mono text-[11px] tracking-[0.04em] text-ink-soft transition-colors duration-[120ms] hover:border-ink hover:text-ink"
-            onClick={onDonate}
-          >
-            Donate
-          </button>
         </div>
       </div>
     </footer>

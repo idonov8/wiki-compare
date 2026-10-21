@@ -213,8 +213,7 @@ function Column({
  *
  * None of it involves a model. Footnotes are matched on web address, DOI, ISBN
  * and title, all of which are the same string in Hebrew, Arabic and English, so
- * the panel costs nothing, needs no credit, and is shown on a preview — where
- * the marks above it stop a few sections in but the reference list does not.
+ * the panel costs nothing.
  */
 export default function Sources({
   articles,

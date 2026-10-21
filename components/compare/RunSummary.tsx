@@ -5,18 +5,15 @@ import { formatCost, storedCost } from "@/lib/pricing";
 import type { Claim, ComparePayload } from "@/lib/types";
 
 /**
- * What this comparison cost somebody.
+ * What this comparison cost to process.
  *
- * A cache hit is not free and must never say so. Somebody paid to have this
- * article read, and everyone arriving after them reads it for nothing — that
- * exchange is the whole argument this site makes for donating, and printing
- * "free" at the end of it threw the argument away.
+ * A cache hit is not free and must never say so: the run it serves cost real
+ * money once, and everyone arriving after it reads that run for nothing.
  *
- * Most stored comparisons predate costs being recorded, so most of the time the
- * figure is `storedCost`'s estimate from the token totals rather than the price
- * struck on the day. That is worth saying and worth marking: "about $0.18" reads
- * as an estimate on sight, without a legend. Only a run with no usable totals at
- * all says nothing — there, any number would be invented.
+ * A run with no recorded price is `storedCost`'s estimate from the token totals,
+ * and says so: "about $0.18" reads as an estimate on sight, without a legend.
+ * Only a run with no usable totals at all says nothing — there, any number would
+ * be invented.
  */
 function costNote(data: ComparePayload): string | null {
   const cost = storedCost(data.usage);
@@ -35,7 +32,7 @@ function costNote(data: ComparePayload): string | null {
 /**
  * A processed article: what the run found, in the proportions the ledger draws
  * it in — the same line a reader may have pressed to get here — and what
- * somebody paid for it. No count beside the line: the marks are on the page
+ * it cost. No count beside the line: the marks are on the page
  * under it, and the proportion is the reading the number was standing in for.
  */
 export default function RunSummary({

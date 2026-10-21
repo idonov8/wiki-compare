@@ -11,8 +11,6 @@
 import assert from "node:assert/strict";
 import { guessLang, parseWikipediaUrl } from "../lib/wikipedia.js";
 import { ghostRanges } from "../lib/ghost.js";
-import { isOutOfCredit } from "../lib/compare.js";
-import { couponEndLabel, couponExpired } from "../lib/coupons.js";
 import { validateFeedback } from "../lib/feedback.js";
 
 let failures = 0;
@@ -111,52 +109,6 @@ check("a long article section gets marks to animate", () => {
   const long = SAMPLES[0].repeat(6);
   assert.ok(ghostRanges(long).length >= 3);
 });
-
-console.log("\nThe site's own balance");
-
-check("Anthropic's empty-balance 400 is recognised", () =>
-  assert.equal(
-    isOutOfCredit(
-      new Error(
-        '400 {"type":"error","error":{"type":"invalid_request_error","message":"Your credit ' +
-          'balance is too low to access the Anthropic API. Please go to Plans & Billing to ' +
-          'upgrade or purchase credits."},"request_id":"req_1"}',
-      ),
-    ),
-    true,
-  ),
-);
-
-for (const other of [
-  '400 {"type":"error","error":{"type":"invalid_request_error","message":"max_tokens: must be greater than 0"}}',
-  "fetch failed",
-]) {
-  check(`an ordinary failure is not: ${other.slice(0, 32)}…`, () =>
-    assert.equal(isOutOfCredit(new Error(other)), false),
-  );
-}
-
-console.log("\nCoupon deadlines");
-
-check("a code works through the last minute of its final day", () =>
-  assert.equal(couponExpired("WELCOME3", new Date("2026-08-26T23:59:59Z")), false),
-);
-
-check("and not a minute past it", () =>
-  assert.equal(couponExpired("WELCOME3", new Date("2026-08-27T00:00:00Z")), true),
-);
-
-check("lower case reaches the same deadline", () =>
-  assert.equal(couponExpired(" welcome3 ", new Date("2026-08-27T00:00:00Z")), true),
-);
-
-check("a code with no deadline never runs out", () =>
-  assert.equal(couponExpired("NOSUCHCODE", new Date("2099-01-01T00:00:00Z")), false),
-);
-
-check("the banner prints the day the server refuses after", () =>
-  assert.equal(couponEndLabel("WELCOME3"), "26 August"),
-);
 
 console.log("\nFeedback");
 

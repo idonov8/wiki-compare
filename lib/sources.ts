@@ -301,9 +301,9 @@ class Groups {
  * Deliberately arithmetic rather than judgement. A model asked which citations
  * correspond would be better at the ragged cases — a book cited by two different
  * translations of its title — and would also cost a run's worth of tokens per
- * article and could not be shown on a preview. This costs nothing, runs on the
- * article the moment it is fetched, and is wrong in a way a reader can see: an
- * unmatched twin shows up as two unique sources rather than as a false claim.
+ * article. This costs nothing, runs on the article the moment it is fetched,
+ * and is wrong in a way a reader can see: an unmatched twin shows up as two
+ * unique sources rather than as a false claim.
  */
 export function matchSources(byLang: Partial<Record<Lang, Source[]>>): SourcesPayload {
   const langs = LANGS.filter((l) => byLang[l]);

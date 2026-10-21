@@ -1,15 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { MeResponse } from "@/lib/types";
 
 /**
  * The three features that need explaining, in the order one pulsing dot
  * visits them: the length chart, then the marks key, then the sources
  * shortcut. Dismissing the note a feature opens — or, for the shortcut,
- * pressing it — moves the dot on, and only one dot exists at a time. The
- * credit system is no longer a stop on this tour — it gets a modal of its own
- * over the first article a new account opens (components/CreditsModal.tsx).
+ * pressing it — moves the dot on, and only one dot exists at a time.
  */
 export type OnboardingStep = "bars" | "marks" | "sources";
 
@@ -35,8 +32,8 @@ const LEGACY = [
 function readCursor(): OnboardingStep | null {
   try {
     const at = localStorage.getItem(CURSOR);
-    // A cursor parked on the retired "credits" step has seen both remaining
-    // stops, so it falls through to `null` along with "done".
+    // A cursor parked on a retired step has seen the remaining stops, so it
+    // falls through to `null` along with "done".
     if (at) return at in NEXT ? (at as OnboardingStep) : null;
     return LEGACY.some((key) => localStorage.getItem(key) === "1") ? null : "bars";
   } catch {
@@ -51,11 +48,8 @@ function writeCursor(step: OnboardingStep | null): void {
   } catch {}
 }
 
-/**
- * Which feature the dot is on, and how to move it along. Finishing POSTs the
- * flag, and the next device gets no dots.
- */
-export function useOnboarding(me: MeResponse | null): {
+/** Which feature the dot is on, and how to move it along. */
+export function useOnboarding(): {
   step: OnboardingStep | null;
   done: () => void;
 } {
@@ -69,19 +63,7 @@ export function useOnboarding(me: MeResponse | null): {
   const settle = useCallback((next: OnboardingStep | null) => {
     setStep(next);
     writeCursor(next);
-    // Fire-and-forget: this device goes by the cursor above, and a 401 for an
-    // unauthenticated caller changes nothing.
-    if (!next) fetch("/api/onboarding", { method: "POST" }).catch(() => {});
   }, []);
-
-  useEffect(() => {
-    if (!me) return;
-    if (me.onboardingDone) {
-      // Taught on another device. Not `settle`, which would POST the flag back.
-      setStep(null);
-      writeCursor(null);
-    }
-  }, [me]);
 
   return {
     step,
