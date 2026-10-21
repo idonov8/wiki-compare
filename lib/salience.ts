@@ -16,8 +16,9 @@ import { KEY_FACTS_HEADING } from "./types";
  * Contradictions and framing are rare and are the point of the site; they show
  * unless Jev was unsure or rated them trivial, and do not count against the
  * budget. A contradiction Jev is certain of shows even when trivial: two versions
- * giving a band member different years is still one of them being wrong. Claims without the two numbers come from the Claude engine, which chose
- * its own claims, and always show.
+ * giving a band member different years is still one of them being wrong.
+ * Claims without the two numbers come from the Claude engine, which chose its
+ * own claims, and always show.
  */
 export const SALIENCE = {
   gap: { confidence: 0.6, importance: 1, share: 0.25 },

@@ -14,6 +14,7 @@ export const PRICE_PER_MTOK: Record<string, { input: number; output: number; cac
   "claude-haiku-4-5": { input: 1, output: 5, cached: 0.1 },
   "claude-sonnet-4-6": { input: 3, output: 15, cached: 0.3 },
   "claude-sonnet-5": { input: 3, output: 15, cached: 0.3 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cached: 0.2 },
   "claude-opus-4-8": { input: 5, output: 25, cached: 0.5 },
   "claude-opus-5": { input: 5, output: 25, cached: 0.5 },
   // TypeSafe bills input only; output is free.
