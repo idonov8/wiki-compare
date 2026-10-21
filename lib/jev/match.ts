@@ -114,6 +114,11 @@ export async function matchUnits(
 ): Promise<Map<string, Match>> {
   const out = new Map<string, Match>();
   if (!units.length) return out;
+  if (!pool.length) {
+    const answer: Answer = { choice: "none", confidence: 1, probabilities: { none: 1 }, orderAgreed: true };
+    for (const unit of units) out.set(unit.id, { none: 1, candidates: [], answer });
+    return out;
+  }
 
   const ctx: Context = {
     jev,

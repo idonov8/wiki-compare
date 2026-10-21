@@ -303,3 +303,36 @@ export async function putLabels(entries: Map<string, string>): Promise<void> {
     ON CONFLICT (qid) DO NOTHING
   `;
 }
+
+/** A stored comparison by its key, for the paths that start from one: an
+ *  explanation is asked for by the comparison it explains. */
+export async function getComparisonByKey(cacheKey: string): Promise<ComparisonResult | null> {
+  const rows = await sql()`SELECT result FROM comparisons WHERE cache_key = ${cacheKey}`;
+  return rows.length ? (rows[0].result as ComparisonResult) : null;
+}
+
+/**
+ * A claim's generated explanation, written once and served to every later
+ * reader, so a claim costs one model call however many people hover it. Keyed by
+ * the comparison as well as the claim, since claim ids repeat across comparisons.
+ */
+export async function getExplanation(cacheKey: string, claimId: string): Promise<string | null> {
+  const rows = await sql()`
+    SELECT text FROM explanations WHERE cache_key = ${cacheKey} AND claim_id = ${claimId}
+  `;
+  return rows.length ? (rows[0].text as string) : null;
+}
+
+export async function putExplanation(
+  cacheKey: string,
+  claimId: string,
+  text: string,
+  model: string,
+  usage: unknown,
+): Promise<void> {
+  await sql()`
+    INSERT INTO explanations (cache_key, claim_id, text, model, usage)
+    VALUES (${cacheKey}, ${claimId}, ${text}, ${model}, ${JSON.stringify(usage)})
+    ON CONFLICT (cache_key, claim_id) DO NOTHING
+  `;
+}

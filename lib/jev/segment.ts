@@ -136,3 +136,8 @@ export function segment(article: ArticleSnapshot): Segmented {
 
   return { lang: article.lang, title: article.title, paragraphs };
 }
+
+/** The paragraph a sentence (or any slice) of `s` falls in. */
+export function paragraphOf(s: Segmented, u: { section: number; start: number; end: number }): Paragraph | undefined {
+  return s.paragraphs.find((p) => p.section === u.section && p.start <= u.start && p.end >= u.end);
+}

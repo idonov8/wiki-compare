@@ -61,6 +61,18 @@ CREATE INDEX IF NOT EXISTS comparisons_qid_idx ON comparisons (qid);
 -- force a re-read.
 CREATE INDEX IF NOT EXISTS comparisons_computed_at_idx ON comparisons (computed_at DESC);
 
+-- A claim's generated explanation, written the first time anyone hovers it and
+-- served to everyone after. `usage` is the model's token usage for that one call.
+CREATE TABLE IF NOT EXISTS explanations (
+  cache_key  TEXT        NOT NULL,
+  claim_id   TEXT        NOT NULL,
+  text       TEXT        NOT NULL,
+  model      TEXT        NOT NULL,
+  usage      JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (cache_key, claim_id)
+);
+
 -- Wikidata labels for the coverage diff. Cheap to refill, safe to truncate.
 CREATE TABLE IF NOT EXISTS labels (
   qid   TEXT PRIMARY KEY,
