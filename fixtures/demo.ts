@@ -1,5 +1,6 @@
 import type { ArticleSnapshot, Claim, ComparisonResult, Lang } from "../lib/types";
 import { coverageGaps } from "../lib/deterministic";
+import { JEV_VERSION, runJevComparison } from "../lib/jev/pipeline";
 import { fixtureLabels, fixtureSnapshots, loadFixture } from "./loader";
 
 /**
@@ -119,5 +120,25 @@ export function demoComparison(slug: string): ComparisonResult {
     computedAt: fixture.capturedAt,
     usage: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
     spans: { offered: 0, matched: 0, droppedClaims: 0 },
+  };
+}
+
+/**
+ * The same fixture read by the real Jev engine, when a TypeSafe key is set: the
+ * claims, importance and sentence alignment the hover panel needs, on text that
+ * needs no network beyond Jev itself. Keyed `demo:<slug>` so a development
+ * database can store it and the explain route can find it.
+ */
+export async function demoJevComparison(slug: string): Promise<ComparisonResult> {
+  const base = demoComparison(slug);
+  const run = await runJevComparison(Object.values(base.articles));
+  return {
+    ...base,
+    claims: run.claims,
+    alignment: run.alignment,
+    usage: run.usage,
+    scope: run.scope,
+    promptVersion: JEV_VERSION,
+    cacheKey: `demo:${slug}`,
   };
 }

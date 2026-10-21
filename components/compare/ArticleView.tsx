@@ -2,7 +2,7 @@
 
 import Columns from "../Columns";
 import LangSlide, { type LangSlideState } from "./LangSlide";
-import type { Claim, Lang, ArticleSnapshot } from "@/lib/types";
+import type { Alignment, Claim, Lang, ArticleSnapshot } from "@/lib/types";
 
 /**
  * The article itself, held in `LangSlide`, which is the surface a swipe is made
@@ -15,9 +15,13 @@ export default function ArticleView({
   claims,
   ghost,
   activeId,
+  alignment,
+  activeSentence,
   onEnter,
   onLeave,
   onLink,
+  onSentence,
+  onSentenceLeave,
 }: {
   slide: LangSlideState;
   articles: Record<string, ArticleSnapshot>;
@@ -25,9 +29,14 @@ export default function ArticleView({
   claims: Claim[];
   ghost: boolean;
   activeId: string | null;
-  onEnter: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
+  alignment?: Alignment;
+  activeSentence: string | null;
+  /** Absent when the panel below takes over a mark's hover. */
+  onEnter?: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
   onLeave: () => void;
   onLink: (title: string, lang: string) => void;
+  onSentence: (key: string, element: HTMLElement, how: "hover" | "tap") => void;
+  onSentenceLeave: () => void;
 }) {
   return (
     <LangSlide {...slide}>
@@ -41,8 +50,12 @@ export default function ArticleView({
         // though the located ones were still moving.
         ghost={ghost}
         activeId={activeId}
+        alignment={alignment}
+        activeSentence={activeSentence}
         onEnter={onEnter}
         onLeave={onLeave}
+        onSentence={onSentence}
+        onSentenceLeave={onSentenceLeave}
       />
     </LangSlide>
   );

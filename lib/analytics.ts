@@ -47,6 +47,11 @@ export const EVENTS = [
   "jev_comparison_run",
   /** A claim's generated explanation was served, freshly written or stored. */
   "explanation_served",
+  /** The panel showing a sentence's counterparts stayed open long enough to be
+   *  read, on hover or pinned by a click. */
+  "counterpart_viewed",
+  /** The reader switched between the differences that matter and all of them. */
+  "show_all_toggled",
 ] as const;
 
 export type AnalyticsEvent = (typeof EVENTS)[number];

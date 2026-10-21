@@ -1,11 +1,13 @@
 "use client";
 
-import { Fragment, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
-import Highlighted from "./Highlighted";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import Highlighted, { type SentenceTarget } from "./Highlighted";
+import { sentenceKey } from "./compare/useCounterpart";
 import {
   KEY_FACTS_HEADING,
   LANG_META,
   LEAD_HEADING,
+  type Alignment,
   type ArticleSnapshot,
   type Claim,
   type Lang,
@@ -223,19 +225,39 @@ export default function Columns({
   claims,
   ghost = false,
   activeId = null,
+  alignment,
+  activeSentence = null,
   onEnter,
   onLeave,
   onLink,
+  onSentence,
+  onSentenceLeave,
 }: {
   articles: Record<string, ArticleSnapshot>;
   visible: Lang[];
   claims: Claim[];
   ghost?: boolean;
   activeId?: string | null;
+  alignment?: Alignment;
+  activeSentence?: string | null;
   onEnter?: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
   onLeave?: () => void;
   onLink?: (title: string, lang: Lang) => void;
+  onSentence?: (key: string, element: HTMLElement, how: "hover" | "tap") => void;
+  onSentenceLeave?: () => void;
 }) {
+  /** Each section's sentences as hover targets, by language and section index. */
+  const targets = useMemo(() => {
+    const out = new Map<string, SentenceTarget[]>();
+    for (const [lang, rows] of Object.entries(alignment ?? {}) as [Lang, NonNullable<Alignment[Lang]>][]) {
+      for (const row of rows) {
+        const id = `${lang}:${row.section}`;
+        out.set(id, [...(out.get(id) ?? []), { start: row.start, end: row.end, key: sentenceKey(lang, row.section, row.start) }]);
+      }
+    }
+    return out;
+  }, [alignment]);
+
   // One state for every column's "Key facts" accordion, so opening it in any
   // language opens it in all of them — they're the same disclosure, just
   // shown three times.
@@ -355,7 +377,7 @@ export default function Columns({
                 // out loud, because a column that simply stopped next to one that
                 // did not would read as text we had dropped.
                 const closes = !closing && !following?.langs.includes(lang);
-                const highlight = (text: string, links?: LinkSpan[]) => (
+                const highlight = (text: string, links?: LinkSpan[], section?: number) => (
                   <Highlighted
                     text={text}
                     lang={lang}
@@ -363,9 +385,14 @@ export default function Columns({
                     links={links}
                     ghost={ghost}
                     activeId={activeId}
+                    section={section}
+                    sentences={section === undefined ? undefined : targets.get(`${lang}:${section}`)}
+                    activeSentence={activeSentence}
                     onEnter={onEnter}
                     onLeave={onLeave}
                     onLink={onLink}
+                    onSentence={onSentence}
+                    onSentenceLeave={onSentenceLeave}
                   />
                 );
                 // `data-block` is what the banding measures against: one rect per
@@ -377,7 +404,7 @@ export default function Columns({
                         {section.heading}
                       </h3>
                     )}
-                    {highlight(section.text, section.links)}
+                    {highlight(section.text, section.links, article.sections.indexOf(section))}
                   </div>
                 );
                 return (
