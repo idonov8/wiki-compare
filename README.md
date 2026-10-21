@@ -10,21 +10,20 @@ Live at [wikicompare.app](https://wikicompare.app).
 
 1. A subject is picked from search results (`/api/search`), resolved to a Wikidata QID so
    "Coffee" the drink, the film and the town don't get confused.
-2. The three articles are fetched and parsed (`lib/wikipedia.ts`), and a deterministic pass
-   (`lib/deterministic.ts`) computes zero-token signals — linked-concept coverage, numeric
-   divergence — to decide which sections are worth sending to a model.
-3. A language model aligns headings across languages and diffs the claims within matched
-   sections (`lib/compare.ts`), returning verbatim spans that are located in the article text
-   rather than trusted as offsets.
+2. The articles are fetched and parsed (`lib/wikipedia.ts`), and a deterministic pass
+   (`lib/deterministic.ts`) computes the zero-token linked-concept coverage diff.
+3. TypeSafe's Jev matches every paragraph to the other article and classifies every sentence of
+   a matched pair as consistent, contradiction, framing or gap (`lib/jev/`), reading the whole
+   article. Design and gold set: [docs/jev-poc-design.md](docs/jev-poc-design.md).
 4. Results are cached by article revision so a stable article costs tokens only once
    (`lib/db.ts`).
 5. Separately, and without a model, the reference lists are read and matched across the
    languages by URL, DOI, ISBN and title (`lib/sources.ts`), which is what the sources panel
    under the article draws its shared entries and blindspots from.
 
-Reading an already-compared article is always free. Running a new comparison costs a small
-amount of credit, funded either by a signup grant or a donation, so the run is paid for once and
-then free for everyone after.
+Reading an already-compared article is free, and so is running a new comparison: each run is
+paid for once and then served from the cache to everyone after. New comparisons are rate limited
+per visitor (`lib/rate-limit.ts`).
 
 ## Architecture
 
@@ -33,25 +32,25 @@ app/
   page.tsx, layout.tsx      landing page and shell
   api/search/                candidate articles for a query or pasted URL
   api/articles/               sitelinks + revisions, ahead of the comparison
-  api/compare/                the comparison itself (cache read, preview, or paid full run)
+  api/compare/                the comparison itself (cache read or a fresh Jev run)
   api/sources/                each version's footnotes, matched across languages
   api/recent/                 recently cached comparisons, for the landing page
-  api/auth/[...all]/          Better Auth: sign-in, callback, session
-  api/me/, api/donate/, api/coupon/   balance, mock payment, coupon redemption
-  donate/, login/, privacy/   supporting pages
+  api/feedback/               the feedback form, mailed to the site inbox
+  privacy/                    supporting page
 
 components/                  UI: search/compare flow, side-by-side columns and highlighting,
-                              language switch, donation and credit UI
+                              language switch
 
 lib/
   wikipedia.ts                MediaWiki + Wikidata fetching, parsing, search
-  deterministic.ts            zero-token coverage diff and section screening
+  deterministic.ts            zero-token coverage diff and figure extraction
   sources.ts                  reference-list parsing and cross-language source matching
-  compare.ts                  the model calls: heading alignment + claim diff
+  jev/                        the comparison engine: segmentation, matching, classification
   db.ts                       cache layer (Neon/Postgres)
-  auth.ts, credits.ts, coupons.ts, pricing.ts   accounts, balance, coupons, cost calculation
+  pricing.ts                  what a run cost
+  rate-limit.ts               per-visitor limit on new comparisons
 
-db/schema.sql                 database schema (app tables + Better Auth's)
+db/schema.sql                 database schema (app tables, plus retired account tables)
 fixtures/, scripts/           recorded API fixtures and check/test scripts
 ```
 
@@ -59,7 +58,7 @@ fixtures/, scripts/           recorded API fixtures and check/test scripts
 
 ```bash
 npm install
-cp .env.example .env.local     # fill in DATABASE_URL and ANTHROPIC_API_KEY
+cp .env.example .env.local     # fill in DATABASE_URL and TYPESAFE_API_KEY
 npm run db:init
 npm run dev
 ```
@@ -69,17 +68,11 @@ See `.env.example` for the full list of environment variables.
 ## Testing
 
 ```bash
-npm run check              # input + parser + sources + deterministic, no model, no database
+npm run check              # every offline check: no model, no database
 npm run check:ui           # rendering, needs `npm run dev` in another shell
 npm run fixtures:save "Article title"   # record a new fixture
+npm run jev:run -- <fixture>            # a real Jev run on a fixture, with an HTML review page
 ```
-
-### Jev engine (proof of concept)
-
-An English/Hebrew comparison that classifies paragraphs and sentences with
-TypeSafe's Jev instead of generating a diff. Open any subject with `&engine=jev`,
-or run `npm run jev:run -- <fixture>` for a review page. Design and gold set:
-[docs/jev-poc-design.md](docs/jev-poc-design.md).
 
 ## Caveats
 
