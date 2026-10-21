@@ -225,6 +225,9 @@ export interface ComparisonResult {
   alignment?: Alignment;
   /** The stored row's key, which is how a claim's explanation is asked for. */
   cacheKey?: string;
+  /** How many differences of each kind are drawn by default, for the ledger,
+   *  which cannot work out the threshold without the articles' text. */
+  tally?: Record<ClaimType, number>;
 }
 
 /** Provenance of a comparison that came out of the cache. Present only then. */
@@ -271,6 +274,6 @@ export interface RecentArticle {
   /** Words per edition, counted the way `articleWords` counts them. An edition
    *  the subject does not have is a missing key rather than a zero. */
   words: Partial<Record<Lang, number>>;
-  /** How many differences of each kind the cached run found. */
+  /** How many differences of each kind the cached run draws by default. */
   claims: Record<ClaimType, number>;
 }

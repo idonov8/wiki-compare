@@ -222,6 +222,7 @@ export default function Highlighted({
       <span
         key={`s${sentence.start}`}
         className="sentence rounded-[2px] box-decoration-clone transition-[background-color] duration-[120ms] data-[active=true]:bg-wiki-shade"
+        data-sentence={sentence.key}
         data-active={activeSentence === sentence.key}
         onMouseEnter={(e) => onSentence?.(sentence.key, e.currentTarget, "hover")}
         onMouseLeave={onSentenceLeave}

@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
  * above it the page is a comparison you read across, below it a comparison you
  * read one language at a time.
  */
-const NARROW = "(width < 861px)";
+export const NARROW = "(width < 861px)";
 
 export function useNarrow(): boolean {
   // False through the server render and the first client render, so hydration
