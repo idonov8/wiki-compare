@@ -10,10 +10,9 @@ export const maxDuration = 60;
  * What each version cites, and which of those citations the others share.
  *
  * Its own route rather than part of the comparison, because it is not part of
- * the comparison: nothing here goes near a model, so it costs no tokens and is
- * as available on a free preview as on a funded read. Asked for by revision id —
- * the ones the columns are actually showing, which on a cached comparison are
- * not necessarily the live ones.
+ * the comparison: nothing here goes near a model, so it costs no tokens. Asked
+ * for by revision id — the ones the columns are actually showing, which on a
+ * cached comparison are not necessarily the live ones.
  *
  * A language that cannot be read is left out rather than failing the request.
  * Two lists still say something true about each other; one missing list only

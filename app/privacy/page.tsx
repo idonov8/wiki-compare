@@ -15,16 +15,16 @@ export const metadata = {
  *
  * Every claim below is a claim about code, so it has to be re-read whenever the
  * code moves. The load-bearing ones: lib/analytics.ts must stay cookieless and
- * profileless, db/schema.sql's "session" table is what makes the IP and
- * user-agent line true, and the third-party list is the set of hosts a reader's
- * browser or our server actually talks to.
+ * profileless, app/api/feedback/route.ts must keep mailing feedback rather than
+ * storing it, and the third-party list is the set of hosts a reader's browser or
+ * our server actually talks to.
  *
  * See docs/compliance-audit-israel.md for what is still outstanding — a lawyer
  * has not read this, and the retention periods below are intentions rather than
  * anything the code currently enforces.
  */
 
-const UPDATED = "August 2026";
+const UPDATED = "October 2026";
 
 export default function Page() {
   return (
@@ -47,10 +47,10 @@ export default function Page() {
         <div className="mt-[36px] grid gap-[30px] text-[15px] leading-[1.7] text-ink">
           <Block heading="The short version">
             <p>
-              Reading this site anonymously leaves nothing on your device and creates no record of
-              you. There is no cookie banner because there are no cookies to ask about. If you sign
-              in, we hold your email address and what your account has done here, and you can have
-              all of it deleted by asking.
+              Reading this site leaves nothing on your device and creates no record of you. There is
+              no cookie banner because there are no cookies to ask about. If you send feedback, we
+              receive what you wrote and the email address you gave, and you can have it deleted by
+              asking.
             </p>
           </Block>
 
@@ -80,45 +80,30 @@ export default function Page() {
             </p>
           </Block>
 
-          <Block heading="If you sign in">
-            <p>We hold, for as long as the account exists:</p>
-            <ul className="m-0 grid list-disc gap-[6px] pl-[22px]">
-              <li>Your email address, and the name and profile picture if you used Google.</li>
-              <li>
-                Sign-in sessions, each recording the IP address and browser the session was opened
-                from. This is what lets you stay signed in and what would show a sign-in you did not
-                make.
-              </li>
-              <li>
-                Your credit balance, any attempt to donate and the amount typed, coupon codes
-                redeemed, and which article comparisons your credit has paid for.
-              </li>
-            </ul>
+          <Block heading="If you send feedback">
             <p>
-              Signing in is by emailed link or by Google, so there is no password here to lose. The
-              donation and coupon records outlive a closed account in anonymised form — the count of
-              people who tried to pay is the point of them — but the account they pointed at, and
-              everything that names you, is deleted with it.
+              The feedback form asks for your email address, your message and, if you like, your
+              name. They are emailed to our inbox and kept there, not in the site&apos;s database.
             </p>
           </Block>
 
           <Block heading="Why we hold it">
             <p>
-              To sign you in, to keep the credit ledger honest, and to know whether anybody is using
-              this. Nothing here is sold, rented, or used to advertise to you, and none of it is
-              used to build a profile of what you read.
+              To answer your feedback, and to know whether anybody is using this. Nothing here is
+              sold, rented, or used to advertise to you, and none of it is used to build a profile of
+              what you read.
             </p>
           </Block>
 
           <Block heading="Who processes it for us">
             <ul className="m-0 grid list-disc gap-[6px] pl-[22px]">
-              <li>Vercel — hosting.</li>
-              <li>Neon — the database.</li>
-              <li>PostHog — analytics, as described above.</li>
-              <li>Resend — delivering your sign-in link.</li>
-              <li>Google — sign-in, if you choose it, and the typefaces.</li>
+              <li>Vercel: hosting.</li>
+              <li>Neon: the database.</li>
+              <li>PostHog: analytics, as described above.</li>
+              <li>Resend: delivering feedback to our inbox.</li>
+              <li>Google: the typefaces.</li>
               <li>
-                Anthropic — reads the Wikipedia articles to produce the comparison. It is sent the
+                TypeSafe: reads the Wikipedia articles to produce the comparison. It is sent the
                 encyclopedia&apos;s text and nothing about you.
               </li>
             </ul>
@@ -130,9 +115,9 @@ export default function Page() {
 
           <Block heading="Email">
             <p>
-              The sign-in link is the only email sent automatically. We will not add you to a
-              mailing list, and if we ever want to write to you about anything else, we will ask
-              first and take no for an answer.
+              Nothing is emailed to you automatically. We write only to answer feedback you sent,
+              we will not add you to a mailing list, and if we ever want to write to you about
+              anything else, we will ask first and take no for an answer.
             </p>
           </Block>
 
@@ -144,7 +129,7 @@ export default function Page() {
                 {CONTACT_EMAIL}
               </a>{" "}
               and you will get an answer within 30 days. Providing any of this is voluntary — the
-              only consequence of withholding it is that you cannot have an account or credit.
+              only consequence of withholding an email address is that we cannot reply to you.
             </p>
           </Block>
 

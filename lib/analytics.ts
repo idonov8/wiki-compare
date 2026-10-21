@@ -9,16 +9,11 @@ import type { PostHog } from "posthog-js";
  * answers with an empty list rather than failing the caller, because a page that
  * breaks when the telemetry breaks is a page that has its priorities backwards.
  *
- * `donate_attempted` is the event this whole exercise exists to produce. It
- * counts the people who tried to give money to something that could not take it,
- * which is the only number that says whether any of this was worth building.
- *
  * The browser half runs cookieless and profileless on purpose, which is what
  * keeps a consent banner off the front of a reading site. The constraint that
  * falls out of it: everything here has to be answerable in aggregate, because
  * there is no per-reader record to go back to and no way to ask a follow-up
- * question of one visit. Anything that would need one belongs in the database
- * next to the account it concerns, not here.
+ * question of one visit.
  */
 
 const KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
@@ -29,30 +24,6 @@ const HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
 export const EVENTS = [
   /** A comparison was opened, from search, a link or the recent list. */
   "article_opened",
-  /** The reader reached the end of the funded preview and saw the gate. */
-  "preview_gate_shown",
-  "gate_cta_clicked",
-  /** The badge on a comparison older than Wikipedia's current text. */
-  "stale_update_clicked",
-  "login_requested",
-  "login_completed",
-  /** The reader signed out from the masthead. */
-  "logout_clicked",
-  "donate_page_viewed",
-  /** The one that matters: somebody tried to pay. */
-  "donate_attempted",
-  "mock_grant_issued",
-  /** The five articles a new account is created holding. */
-  "signup_grant_issued",
-  /** A code was submitted, and what came of it. Together they say whether a
-   *  code is reaching people or only collecting typos. */
-  "coupon_submitted",
-  "coupon_redeemed",
-  "coupon_rejected",
-  /** Somebody asked to be told when payments open. */
-  "email_consent_granted",
-  /** Credits deducted for a full read. */
-  "credits_spent",
   /** A comparison was served, cached or freshly run. */
   "comparison_served",
   /** The language stamp on the search field was opened. Until it can offer a
@@ -69,8 +40,7 @@ export const EVENTS = [
   "sources_blindspots_highlighted",
   /** The "Jump to sources" shortcut beside the diff stepper was pressed. */
   "sources_shortcut_clicked",
-  /** A comparison was run on the Jev engine, with what it found and cost. The
-   *  numbers that decide whether the engine replaces the Claude one. */
+  /** A comparison was run on the Jev engine, with what it found and cost. */
   "jev_comparison_run",
 ] as const;
 
@@ -99,11 +69,7 @@ export function analyticsEnabled(): boolean {
  * and abandoned, with every failure — network, DNS, a 500, an abort at the end
  * of the invocation — caught and dropped.
  */
-export function capture(
-  event: AnalyticsEvent,
-  properties: EventProperties = {},
-  distinctId?: string,
-): void {
+export function capture(event: AnalyticsEvent, properties: EventProperties = {}): void {
   if (!KEY) return;
   try {
     void fetch(`${HOST}/i/v0/e/`, {
@@ -112,18 +78,10 @@ export function capture(
       body: JSON.stringify({
         api_key: KEY,
         event,
-        // PostHog requires a distinct id. Events with no account behind them
-        // are attributed to the server itself rather than being dropped: the
-        // count is the point, and inventing a per-request id would inflate the
-        // user total with one "person" per anonymous comparison.
-        //
-        // The `distinctId` callers do pass is an account id, so these events are
-        // the one identified stream left. That is deliberate and needs no banner
-        // — nothing is stored on the device, and an account holder is told about
-        // it in the privacy notice — but it does mean a caller should pass one
-        // only where the account is the subject of the event. `credits_spent`
-        // qualifies; `comparison_served` does not, and does not.
-        distinct_id: distinctId ?? "server",
+        // PostHog requires a distinct id. Events are attributed to the server
+        // itself: the count is the point, and inventing a per-request id would
+        // inflate the user total with one "person" per anonymous comparison.
+        distinct_id: "server",
         properties: { ...properties, $lib: "wiki-compare-server" },
         timestamp: new Date().toISOString(),
       }),
@@ -190,7 +148,7 @@ export function initAnalytics(): void {
         /**
          * Autocapture is the sharpest edge here, because what it records is the
          * text of whatever was clicked, and on this site that text is Wikipedia
-         * prose about the conflict. Our fifteen named events say everything the
+         * prose about the conflict. Our own named events say everything the
          * funnels need without shipping the page's own words to a third party.
          */
         autocapture: false,

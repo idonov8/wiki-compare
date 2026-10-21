@@ -1,11 +1,5 @@
 import { readNdjson } from "./ndjson";
-import type {
-  ArticleSnapshot,
-  Claim,
-  CompareEvent,
-  ComparePayload,
-  ComparisonScope,
-} from "./types";
+import type { ArticleSnapshot, Claim, CompareEvent, ComparePayload } from "./types";
 
 export interface CompareSink {
   /** Called for every event before it is dispatched; `false` drops it. This is
@@ -13,7 +7,6 @@ export interface CompareSink {
    *  back — stops writing to a page that has moved on without it. */
   accept?: (event: CompareEvent) => boolean;
   articles: (articles: Record<string, ArticleSnapshot>) => void;
-  scope: (scope: ComparisonScope) => void;
   claim: (claim: Claim) => void;
 }
 
@@ -43,9 +36,6 @@ export async function streamComparison(
     switch (event.event) {
       case "articles":
         sink.articles(event.articles);
-        break;
-      case "scope":
-        sink.scope(event.scope);
         break;
       case "claim":
         sink.claim(event.claim);

@@ -53,7 +53,6 @@ await page.route("**/api/recent", (route) =>
           title: `demo:${FIXTURE}`,
           lang: "en",
           langs: ["en", "he", "ar"],
-          scope: "full",
           computedAt: new Date(Date.now() - 3600_000).toISOString(),
           words: { en: 8400, he: 4200, ar: 800 },
           claims: { contradiction: 4, unique: 3, framing: 2 },
@@ -63,11 +62,8 @@ await page.route("**/api/recent", (route) =>
           title: "הדג נחש",
           lang: "he",
           langs: ["he", "ar"],
-          scope: "preview",
           computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
           words: { he: 900, ar: 1500 },
-          // Counted, and still not drawn: a preview's tallies come from the
-          // opening section, so the row is what proves they stay off the line.
           claims: { contradiction: 2, unique: 1, framing: 0 },
         },
         {
@@ -75,7 +71,6 @@ await page.route("**/api/recent", (route) =>
           title: "Rothschild Boulevard",
           lang: "en",
           langs: ["en", "he"],
-          scope: "full",
           computedAt: new Date(Date.now() - 5 * 86400_000).toISOString(),
           words: { en: 2000, he: 3000 },
           claims: { contradiction: 0, unique: 0, framing: 0 },
@@ -92,8 +87,8 @@ await page.route("**/api/recent", (route) =>
 // still in flight when the browser closes.
 //
 // The usage is injected here because the fixture spends nothing, and what a
-// cached comparison cost somebody is now the thing the meta strip reports. The
-// three shapes are the three a stored row can actually have:
+// cached comparison cost is the thing the meta strip reports. The three shapes
+// are the three a stored row can actually have:
 //
 //   priced  — a run priced when it ran. Reported exactly.
 //   legacy  — token totals and no `costUsd`, which is 13 of the 14 rows in the
@@ -101,10 +96,6 @@ await page.route("**/api/recent", (route) =>
 //   silent  — nothing usable. Says nothing about cost at all.
 type Stored = "priced" | "legacy" | "silent";
 let stored: Stored = "priced";
-/** Whether the fixture is being re-served as a preview, which is the only way
- *  the gate at the foot of a part-read article renders. Switched on by the
- *  donation-flow section near the bottom of this file. */
-let asPreview = false;
 const USAGE: Record<Stored, Record<string, number>> = {
   // 14,203 in and 5,110 out at the diff model's $3/$15 per Mtok is $0.119259,
   // so `legacy` must land on "about $0.12" and never on the exact figure below.
@@ -125,13 +116,6 @@ const serveCached = async (route: Route) => {
     computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
     edited: ["he", "ar"],
   };
-  // A preview stops part-way through every edition, so each one carries a cut.
-  const previewScope = (articles: Record<string, unknown>) => ({
-    kind: "preview",
-    processedThrough: Object.fromEntries(
-      Object.keys(articles ?? {}).map((lang) => [lang, { section: 1, chars: 400 }]),
-    ),
-  });
 
   // The client asks for a stream, so the fixture answers as one: a `done`
   // line carrying the result. Re-wrapped rather than passed through, because
@@ -143,13 +127,12 @@ const serveCached = async (route: Route) => {
       .filter(Boolean)
       .map((line) => JSON.parse(line))
       .find((event) => event.event === "done");
-    const scope = asPreview ? previewScope(done.result.articles) : done.result.scope;
     route.fulfill({
       contentType: "application/x-ndjson",
       body:
         JSON.stringify({
           event: "done",
-          result: { ...done.result, usage, scope },
+          result: { ...done.result, usage },
           fromCache: true,
           cache,
         }) + "\n",
@@ -158,10 +141,9 @@ const serveCached = async (route: Route) => {
   }
 
   const json = JSON.parse(body);
-  const scope = asPreview ? previewScope(json.articles) : json.scope;
   route.fulfill({
     contentType: "application/json",
-    body: JSON.stringify({ ...json, usage, scope, fromCache: true, cache }),
+    body: JSON.stringify({ ...json, usage, fromCache: true, cache }),
   });
 };
 await page.route(isFixtureCompare, serveCached);
@@ -182,7 +164,6 @@ const recent = await page.$$eval(".recent li button", (els) =>
     return {
       title: title?.textContent ?? "",
       dir: title?.getAttribute("dir") ?? "",
-      badges: el.querySelectorAll(".recent-scope").length,
     };
   }),
 );
@@ -191,11 +172,6 @@ check(
   recent.some((r) => r.dir === "rtl") && recent.some((r) => r.dir === "ltr"),
   "each row carries its own direction",
   recent.map((r) => `${r.title}=${r.dir}`).join("; "),
-);
-check(
-  recent.every((r) => r.badges === 0),
-  "how much was read is the line's own business, not a badge beside it",
-  recent.map((r) => `${r.title}=${r.badges}`).join("; "),
 );
 check(
   (await page.$$(".recent h2, .recent h3")).length === 0,
@@ -216,7 +192,6 @@ const charts = await page.$$eval(".recent li button", (els) =>
     ),
     codes: (el.querySelector(".recent-words")?.textContent ?? "").trim(),
     segments: el.querySelectorAll(".recent-ratio > span").length,
-    line: (el.querySelector(".recent-ratio")?.textContent ?? "").trim(),
     words: el.querySelector(".recent-words")?.getAttribute("title") ?? "",
     ratio: el.querySelector(".recent-ratio")?.getAttribute("title") ?? "",
   })),
@@ -242,13 +217,6 @@ check(
   charts.map((c) => `${c.segments}`).join("; "),
 );
 check(
-  charts[1].segments === 0 &&
-    /^preview$/i.test(charts[1].line) &&
-    /free preview/.test(charts[1].ratio),
-  "a preview says so in the line's place, however many differences its opening section held",
-  `${charts[1].segments} segments, "${charts[1].line}", ${charts[1].ratio}`,
-);
-check(
   /English 8,400 words/.test(charts[0].words) && /4 contradictions/.test(charts[0].ratio),
   "both marks name their exact figures on hover",
   `${charts[0].words} | ${charts[0].ratio}`,
@@ -259,16 +227,6 @@ check(
   charts[2].ratio,
 );
 
-// The ledger holds every cached subject, so the toggle is how a reader gets to
-// the ones somebody paid to read in full. Pressed and released again, because a
-// filter that cannot be undone hides the rest of the history for good.
-const rowCount = () => page.$$eval(".recent li button", (els) => els.length);
-const toggle = await page.$(".recent-filter");
-await toggle?.click();
-check((await rowCount()) === 2, "the full-only toggle drops the preview rows", `${await rowCount()} rows`);
-await toggle?.click();
-check((await rowCount()) === 3, "releasing it brings them back", `${await rowCount()} rows`);
-
 // The list is a history, so a row has to actually open its comparison.
 await page.click(".recent li:first-child button");
 await page.waitForSelector("mark.claim", { timeout: 30000 });
@@ -276,9 +234,9 @@ check(/[?&]title=/.test(page.url()), "clicking a recent article opens it", page.
 
 // ---- meta strip -------------------------------------------------------------
 
-// A cache hit is not free and must never say so: somebody paid to process this
-// article and everyone since has read it for nothing, which is the argument the
-// whole site rests on. The figure is the one stored with the answer.
+// A cache hit is not free and must never say so: processing this article cost
+// real money once, and everyone since has read it for nothing. The figure is the
+// one stored with the answer.
 const metaSpan = () => page.$eval(".meta-cost", (el) => el.textContent ?? "");
 
 const reopen = async (as: Stored) => {
@@ -455,28 +413,12 @@ check(!!(await page.$(".cached-badge")), "a cached comparison served past an edi
     box: el.getBoundingClientRect().toJSON(),
   }));
   check(open.visible, "hovering the badge opens the panel");
-  // The copy used to state how long the answer keeps being served; it now
-  // offers to replace it instead, which is the more useful thing to say once
-  // there is a control that actually does it. Assert what it promises now, and
-  // that the promise is reachable — a panel offering an update with no working
-  // way to update is the failure worth catching here, which is what the click
-  // test further down is for.
   check(
-    /Hebrew and Arabic have been edited/.test(open.text) && /Donate to update/.test(open.text),
-    "the panel names what changed and offers to update it",
+    /Hebrew and Arabic have been edited/.test(open.text),
+    "the panel names what changed",
     open.text.slice(0, 120),
   );
-  // The control that keeps the promise now sits inside the panel, directly under
-  // the sentence that makes it — and nowhere else, which is the half of the move
-  // that a "does it exist" check on its own would miss.
-  check(
-    !!(await page.$('.cached-tip button:has-text("Update this article")')),
-    "the offer to update carries its control inside the panel",
-  );
-  check(
-    (await page.$$(".controls > .cached-update")).length === 0,
-    "and no longer beside the badge",
-  );
+  check(!(await page.$(".cached-tip button")), "and offers no control, since nothing can be re-read on request");
   const vp = page.viewportSize()!;
   check(
     open.box.x >= 0 && open.box.x + open.box.width <= vp.width,
@@ -485,8 +427,7 @@ check(!!(await page.$(".cached-badge")), "a cached comparison served past an edi
   );
   await page.mouse.move(0, 0);
 
-  // Reachable without a pointer: focusing the badge opens the panel, and the
-  // next Tab lands on the button inside it.
+  // Reachable without a pointer: focusing the badge opens the panel.
   const focused = await page.evaluate(() => {
     const badge = document.querySelector<HTMLElement>(".cached-badge");
     badge?.focus();
@@ -497,9 +438,6 @@ check(!!(await page.$(".cached-badge")), "a cached comparison served past an edi
     await page.$eval(".cached-tip", (el) => getComputedStyle(el).visibility === "visible"),
     "focusing the badge opens the panel",
   );
-  await page.keyboard.press("Tab");
-  const tabbed = await page.evaluate(() => document.activeElement?.className ?? "");
-  check(tabbed.includes("cached-update"), "Tab reaches the update button inside it", tabbed);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.waitForTimeout(200);
   check(
@@ -507,19 +445,13 @@ check(!!(await page.$(".cached-badge")), "a cached comparison served past an edi
     "the panel shuts again once focus leaves",
   );
 
-  // The trap this whole arrangement exists to avoid: a button inside a hover
-  // panel that the pointer can never reach, because the panel closes somewhere
-  // between the badge and the button. So travel the actual distance with the
-  // actual mouse and press the actual button. Signed out it goes to the donate
-  // page, which is stubbed here — the click registering is what is under test,
-  // not whatever that page renders.
-  await page.route("**/donate*", (route) =>
-    route.fulfill({ contentType: "text/html", body: "<html><body>donate</body></html>" }),
-  );
+  // A hover panel the pointer can never reach, because it closes somewhere
+  // between the badge and the panel, would be unreadable. So travel the actual
+  // distance with the actual mouse.
   {
     await (await page.$(".cached-badge"))!.hover();
     await page.waitForTimeout(150);
-    const box = (await (await page.$(".cached-tip button"))!.boundingBox())!;
+    const box = (await (await page.$("#cached-note"))!.boundingBox())!;
     // In steps, so the pointer crosses the gap between badge and panel rather
     // than teleporting over it.
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 12 });
@@ -527,20 +459,9 @@ check(!!(await page.$(".cached-badge")), "a cached comparison served past an edi
       const s = getComputedStyle(el);
       return { visible: s.visibility === "visible", clickable: s.pointerEvents !== "none" };
     });
-    check(live.visible, "the panel survives the trip from badge to button");
+    check(live.visible, "the panel survives the trip from badge to panel");
     check(live.clickable, "and takes pointer events while it is open");
-    await page.mouse.down();
-    await page.mouse.up();
-    await page
-      .waitForFunction(() => location.pathname === "/donate", null, { timeout: 5000 })
-      .catch(() => {});
-    check(
-      /\/donate\?from=stale-badge/.test(page.url()),
-      "clicking the button inside the panel registers",
-      page.url(),
-    );
   }
-  await page.unroute("**/donate*");
   await page.mouse.move(0, 0);
 }
 
@@ -834,255 +755,6 @@ check(!!(await page.$(".card")), "focusing a highlight opens the card");
 await page.keyboard.press("Escape");
 await page.waitForTimeout(150);
 check(!(await page.$(".card")), "Escape dismisses the card");
-
-// ---- the gate at the end of a preview ---------------------------------------
-
-// What the gate asks for depends entirely on who is reading, and the three
-// answers are three different asks: log in, spend the credit you already have,
-// or top up. Getting one of them wrong sends somebody to a payment page they did
-// not need, which is the failure this whole flow was rearranged to avoid — so
-// each state is opened here with `/api/me` stubbed to that reader.
-{
-  let me: unknown = null;
-  await page.route("**/api/me", (route) =>
-    route.fulfill({ contentType: "application/json", body: JSON.stringify(me) }),
-  );
-  asPreview = true;
-
-  const openGate = async () => {
-    await page.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector(".gate", { timeout: 30000 });
-  };
-  const gate = async () => ({
-    cta: (await page.textContent(".gate-cta")) ?? "",
-    note: (await page.textContent(".gate-note")) ?? "",
-  });
-
-  await openGate();
-  check(!!(await page.$(".controls .preview-flag")), "a preview strip carries its preview flag");
-  check(
-    (await page.textContent(".preview-cta")) === "Log in to process it",
-    "signed out, the preview strip asks for a login",
-    (await page.textContent(".preview-cta")) ?? "",
-  );
-  check(
-    (await page.textContent(".credit-cta")) === "Log in",
-    "signed out, the masthead asks for a login rather than a donation",
-    (await page.textContent(".credit-cta")) ?? "",
-  );
-  {
-    const { cta, note } = await gate();
-    check(/^Log in to process this article$/.test(cta), "and so does the gate", cta);
-    check(/\$1\.00 of credit/.test(note) && /5 articles/.test(note),
-      "which says what an account arrives with", note);
-  }
-  // The gate has to reach the login screen and come back to this article, or a
-  // reader loses the page they were on to sign in for it.
-  await page.route("**/login*", (route) =>
-    route.fulfill({ contentType: "text/html", body: "<html><body>login</body></html>" }),
-  );
-  await page.click(".preview-cta");
-  await page.waitForFunction(() => location.pathname === "/login", null, { timeout: 5000 })
-    .catch(() => {});
-  check(
-    /\/login\?next=%2F%3Ftitle%3Ddemo/.test(page.url()),
-    "clicking the signed-out preview CTA goes to login with a return path",
-    page.url(),
-  );
-  await page.unroute("**/login*");
-  await page.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
-  await page.waitForSelector(".gate", { timeout: 30000 });
-  await page.click(".gate-cta");
-  await page.waitForFunction(() => location.pathname === "/login", null, { timeout: 5000 })
-    .catch(() => {});
-  check(
-    /\/login\?next=%2F%3Ftitle%3Ddemo/.test(page.url()),
-    "pressing it goes to the login screen, carrying the way back",
-    page.url(),
-  );
-
-  // Signed in, with the sign-up credit untouched.
-  me = {
-    email: "reader@example.com",
-    creditCents: 100,
-    peakCreditCents: 100,
-    articlesProcessed: 0,
-    readsOfThoseArticles: 0,
-    newcomer: true,
-    onboardingDone: false,
-  };
-  // The dot tour no longer visits the meter, so keep its two remaining stops
-  // out of this block's way.
-  await page.route("**/api/onboarding", (route) =>
-    route.fulfill({ contentType: "application/json", body: '{"ok":true}' }),
-  );
-  await page.evaluate(() => {
-    localStorage.setItem("wiki-compare:onboarding", "done");
-    localStorage.removeItem("wiki-compare:credits-explained");
-  });
-  await openGate();
-  check(!!(await page.$(".controls .preview-flag")), "credit-backed preview still carries its preview flag");
-  check(
-    (await page.textContent(".preview-cta")) === "Donate this article",
-    "with credit, the preview strip asks for the donation",
-    (await page.textContent(".preview-cta")) ?? "",
-  );
-  // The credit system, explained over the first article a new account opens —
-  // a modal, not a note beside the meter, because the meter only explained it
-  // to readers who happened to hover a 3px bar.
-  await page.waitForSelector(".credits-modal", { timeout: 5000 }).catch(() => {});
-  check(!!(await page.$(".credits-modal")), "a new account's first article raises the credit explainer");
-  check(
-    /5 articles/.test((await page.textContent(".credits-modal h2")) ?? ""),
-    "which says how many articles the grant is",
-    (await page.textContent(".credits-modal h2")) ?? "",
-  );
-  check(
-    /^Process this article$/.test((await page.textContent(".credits-modal-cta")) ?? ""),
-    "and offers to process the article under it",
-    (await page.textContent(".credits-modal-cta")) ?? "",
-  );
-  check((await page.$(".credit .onboarding-dot")) === null, "the meter carries no dot any more");
-  // "Not now" is the quiet way past; the flag keeps it from coming back.
-  await page.click(".credits-modal-later");
-  await page.waitForTimeout(150);
-  check((await page.$(".credits-modal")) === null, "declining puts the modal away");
-  check(
-    (await page.evaluate(() => localStorage.getItem("wiki-compare:credits-explained"))) === "1",
-    "which is remembered",
-  );
-  {
-    const { cta, note } = await gate();
-    check(/^Donate this article$/.test(cta), "with credit, the gate asks for the donation", cta);
-    check(/\$0\.20 of your \$1\.00 credit/.test(note) && /everyone/.test(note),
-      "and says what it spends and who gets it", note);
-  }
-  // The hover panel no longer has a welcome note to stand aside for.
-  await page.hover(".credit");
-  await page.waitForTimeout(200);
-  check(
-    await page.$eval(".credit-detail", (el) => getComputedStyle(el).visibility === "visible"),
-    "hovering the meter opens the detail panel",
-  );
-  await page.mouse.move(0, 0);
-
-  // The donation itself, this time through the modal's own button: the fixture
-  // served back as a full read, so the gate is replaced by the rest of the
-  // article — and the thanks land on the press rather than on the reply, then
-  // leave on their own.
-  await page.route(
-    (url) => url.pathname === "/api/compare",
-    async (route) => {
-      if (route.request().method() !== "POST") return route.fallback();
-      // The fixture, fetched as the GET it is: a POST re-served without a
-      // querystring answers "add a ?title=", and a comparison-shaped hole is
-      // what the client would then try to render.
-      const json = await (
-        await route.fetch({
-          method: "GET",
-          url: `${BASE}/api/compare?title=${encodeURIComponent(`demo:${FIXTURE}`)}&lang=en`,
-          postData: undefined,
-        })
-      ).json();
-      // The funded run reports as it goes, exactly as the free one does, so the
-      // reply is NDJSON and not a single object: the articles, the scope that
-      // retires the gate, then the differences, then the result. `fulfill` can
-      // only hand over a whole body at once, so what this checks is that the
-      // client reads every one of those lines off a POST — the pacing itself is
-      // the same code `open` runs against the real stream above.
-      const result = { ...json, usage: USAGE[stored], scope: { kind: "full" } };
-      const lines = [
-        { event: "articles", qid: json.qid, articles: json.articles },
-        { event: "scope", scope: { kind: "full" } },
-        { event: "coverage", coverage: json.coverage ?? [] },
-        ...(json.claims ?? []).map((claim: unknown) => ({ event: "claim", claim })),
-        { event: "done", result, fromCache: false },
-      ];
-      route.fulfill({
-        contentType: "application/x-ndjson",
-        body: lines.map((line) => JSON.stringify(line)).join("\n") + "\n",
-      });
-    },
-  );
-  await page.evaluate(() => localStorage.removeItem("wiki-compare:credits-explained"));
-  await openGate();
-  await page.waitForSelector(".credits-modal", { timeout: 5000 }).catch(() => {});
-  check(!!(await page.$(".credits-modal")), "unexplained on this device, the modal returns");
-  await page.click(".credits-modal-cta");
-  await page.waitForTimeout(150);
-  check((await page.$(".credits-modal")) === null, "processing puts the modal away");
-  await page.waitForSelector(".thanks", { timeout: 5000 }).catch(() => {});
-  check(!!(await page.$(".thanks")), "donating raises a thank-you");
-  check(
-    /Thank you/.test((await page.textContent(".thanks")) ?? ""),
-    "which says so in as many words",
-    (await page.textContent(".thanks")) ?? "",
-  );
-  await page.waitForTimeout(5200);
-  check((await page.$(".thanks")) === null, "and takes itself away after five seconds");
-  check((await page.$(".gate")) === null, "the funded article no longer carries a gate");
-  check(
-    (await page.$$("mark.claim")).length > 0,
-    "and the differences the stream sent are marked in it",
-  );
-  {
-    check((await page.$(".preview-flag")) === null, "the funded strip drops its preview flag");
-    check((await page.$(".preview-cta")) === null, "the funded strip drops its preview CTA");
-    check(
-      !!(await page.$(".meta-cost")),
-      "the funded strip carries its processing cost",
-      (await page.textContent(".controls")) ?? "",
-    );
-  }
-  await page.unroute((url) => url.pathname === "/api/compare");
-
-  // Out of credit: the one state where the ask really is money.
-  me = {
-    email: "reader@example.com",
-    creditCents: 0,
-    peakCreditCents: 500,
-    articlesProcessed: 25,
-    readsOfThoseArticles: 90,
-    newcomer: false,
-    onboardingDone: true,
-  };
-  await openGate();
-  check(!!(await page.$(".controls .preview-flag")), "an empty balance preview carries its preview flag");
-  check(
-    (await page.textContent(".preview-cta")) === "Top up to donate it",
-    "with no credit, the preview strip asks for a top-up",
-    (await page.textContent(".preview-cta")) ?? "",
-  );
-  {
-    const { cta, note } = await gate();
-    check(/^Top up credit to donate this article$/.test(cta),
-      "an empty balance is asked to top up, not to log in", cta);
-    check(/\$0\.00 left/.test(note), "and is told what it has left", note);
-  }
-  check((await page.$(".credits-modal")) === null,
-    "and is not welcomed as a new account");
-
-  check((await page.$(".onboarding-dot")) === null,
-    "and an account already through the tour is not shown it again");
-
-  await page.route("**/donate*", (route) =>
-    route.fulfill({ contentType: "text/html", body: "<html><body>donate</body></html>" }),
-  );
-  await page.click(".preview-cta");
-  await page.waitForFunction(() => location.pathname === "/donate", null, { timeout: 5000 })
-    .catch(() => {});
-  check(
-    /\/donate\?from=preview-strip/.test(page.url()),
-    "clicking the zero-credit preview CTA goes to donate",
-    page.url(),
-  );
-  await page.unroute("**/donate*");
-
-  asPreview = false;
-  me = null;
-  await page.unroute("**/api/me");
-  await page.unroute("**/api/onboarding");
-}
 
 // ---- the sources, and the blindspots in them -------------------------------
 
@@ -1473,7 +1145,6 @@ check(!(await page.$(".card")), "Escape dismisses the card");
         ".controls .recent-ratio",
         ".cached-badge",
         ".meta-cost",
-        ".preview-flag",
       ];
       for (const selector of wanted) {
         const el = document.querySelector(selector);
@@ -1542,37 +1213,6 @@ check(!(await page.$(".card")), "Escape dismisses the card");
       `x=${Math.round(tip.x)} right=${Math.round(tip.right)}`,
     );
   }
-
-  // A part-read article puts a button, a note and the preview flag on that same
-  // row, which is where the badge used to give up and wrap. It is the note that
-  // gives instead.
-  asPreview = true;
-  await small.reload({ waitUntil: "domcontentloaded" });
-  await small.waitForSelector(".preview-flag", { timeout: 30000 });
-  await small.waitForSelector(".cached-badge", { timeout: 30000 });
-  await small.waitForTimeout(700);
-  {
-    const box = await strip();
-    const badge = box[".cached-badge"];
-    const flag = box[".preview-flag"];
-    check(
-      badge.top < flag.bottom && flag.top < badge.bottom,
-      "on a previewed article the badge rides the preview row instead of wrapping under it",
-      `badge ${Math.round(badge.top)}-${Math.round(badge.bottom)} vs flag ${Math.round(flag.top)}-${Math.round(flag.bottom)}`,
-    );
-    check(
-      Math.abs(badge.right - (box[".controls"].right - 18)) <= 1,
-      "and ends that row against the page's margin too",
-      `${Math.round(badge.right)} vs ${Math.round(box[".controls"].right - 18)}`,
-    );
-    const tip = await panel();
-    check(
-      tip.visible && tip.x >= 0 && tip.right <= 390,
-      "and its panel still opens inside the screen",
-      `x=${Math.round(tip.x)} right=${Math.round(tip.right)}`,
-    );
-  }
-  asPreview = false;
 
   await phone.close();
 }
