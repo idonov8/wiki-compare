@@ -67,7 +67,9 @@ export default function Page() {
 
           <Block heading="If you only read">
             <p>
-              No account, no cookie, nothing in local storage. Analytics runs in cookieless mode:
+              No account and no cookie. Your browser keeps two display settings in local storage (how
+              far through the introduction you are, and whether every difference is shown), and they
+              never leave it. Analytics runs in cookieless mode:
               PostHog counts visits using a hash it computes on its own servers from your IP address
               and browser, salted with a key that is thrown away daily, so the count cannot be
               turned back into a person or followed from one day to the next. We record which
@@ -105,6 +107,10 @@ export default function Page() {
               <li>
                 TypeSafe: reads the Wikipedia articles to produce the comparison. It is sent the
                 encyclopedia&apos;s text and nothing about you.
+              </li>
+              <li>
+                Anthropic: writes the explanation of a difference the first time anyone points at it.
+                It is sent the passages involved and nothing about you.
               </li>
             </ul>
             <p>
@@ -153,7 +159,7 @@ export default function Page() {
 
           <Block heading="If a comparison is wrong about you">
             <p>
-              Comparisons are written by a language model from the articles, so they can be wrong or
+              Comparisons and their explanations are produced by language models from the articles, so they can be wrong or
               incomplete, and a marked difference is a pointer to check the sources rather than a
               finding. If one says something false about you, write to{" "}
               <a href={`mailto:${CONTACT_EMAIL}`} className="text-ink underline">
