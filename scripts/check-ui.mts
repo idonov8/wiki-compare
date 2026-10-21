@@ -1277,6 +1277,51 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     await jev.mouse.move(2, 2);
     await jev.waitForTimeout(500);
 
+    const gap = jev.locator('[data-edition="en"] span.sentence:has(mark.claim[data-type="unique"])').first();
+    await gap.scrollIntoViewIfNeeded();
+    await gap.hover();
+    await jev.waitForTimeout(500);
+    check(
+      (await jev.locator('.counterpart-passage[data-missing="true"]').count()) > 0,
+      "a gap marks the passage of the version it is missing from",
+    );
+    await jev.mouse.move(2, 2);
+    await jev.waitForTimeout(500);
+
+    // Low on the screen, everything still has to fit on it.
+    const low = jev.locator('[data-edition="en"] span.sentence:has(mark.claim)').nth(4);
+    await low.scrollIntoViewIfNeeded();
+    const lowBox = (await low.boundingBox())!;
+    await jev.evaluate((y) => window.scrollBy(0, y - 800), lowBox.y);
+    await jev.waitForTimeout(300);
+    await low.hover();
+    await jev.waitForTimeout(600);
+    const inside = await jev.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>(".counterpart")].every((el) => {
+        const r = el.getBoundingClientRect();
+        return r.top >= 0 && r.bottom <= window.innerHeight + 1;
+      }),
+    );
+    check(inside, "near the foot of the screen the card and passages stay on it");
+    await jev.mouse.move(2, 2);
+    await jev.waitForTimeout(500);
+
+    // Selecting text picks out the matching sentences in the other columns.
+    const lead = jev.locator('[data-edition="en"] [data-block]:nth-of-type(3) span.body-text').first();
+    await lead.scrollIntoViewIfNeeded();
+    const leadBox = (await lead.boundingBox())!;
+    await jev.mouse.move(leadBox.x + 3, leadBox.y + 8);
+    await jev.mouse.down();
+    await jev.mouse.move(leadBox.x + 300, leadBox.y + 60, { steps: 10 });
+    await jev.mouse.up();
+    await jev.waitForTimeout(500);
+    const echoed = await jev.locator('[data-edition="he"] [data-echo="true"], [data-edition="ar"] [data-echo="true"]').count();
+    check(echoed > 0, "selecting text highlights the matching sentences in the other languages", `${echoed}`);
+    check(!(await jev.locator(".counterpart").count()), "with no passages laid over them");
+    await jev.evaluate(() => window.getSelection()?.removeAllRanges());
+    await jev.waitForTimeout(300);
+    check(!(await jev.locator('[data-echo="true"]').count()), "and clearing the selection clears them");
+
     const toggle = jev.locator("button.show-all");
     if (await toggle.count()) {
       const before = await jev.locator("mark.claim").count();

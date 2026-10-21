@@ -79,6 +79,7 @@ export default function Highlighted({
   section,
   sentences = [],
   activeSentence = null,
+  echo,
   onEnter,
   onLeave,
   onLink,
@@ -95,6 +96,8 @@ export default function Highlighted({
   section?: number;
   sentences?: SentenceTarget[];
   activeSentence?: string | null;
+  /** Sentences to pick out because the reader selected their counterpart. */
+  echo?: Set<string>;
   onEnter?: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
   onLeave?: () => void;
   onLink?: (title: string, lang: Lang) => void;
@@ -221,9 +224,10 @@ export default function Highlighted({
     grouped.push(
       <span
         key={`s${sentence.start}`}
-        className="sentence rounded-[2px] box-decoration-clone transition-[background-color] duration-[120ms] data-[active=true]:bg-wiki-shade"
+        className="sentence rounded-[2px] box-decoration-clone transition-[background-color,box-shadow] duration-[120ms] data-[active=true]:bg-wiki-shade data-[echo=true]:bg-echo data-[echo=true]:outline-2 data-[echo=true]:outline-echo-edge"
         data-sentence={sentence.key}
         data-active={activeSentence === sentence.key}
+        data-echo={echo?.has(sentence.key) || undefined}
         onMouseEnter={(e) => onSentence?.(sentence.key, e.currentTarget, "hover")}
         onMouseLeave={onSentenceLeave}
         onClick={(e) => onSentence?.(sentence.key, e.currentTarget, "tap")}

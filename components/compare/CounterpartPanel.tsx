@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Box, CounterpartState } from "./useCounterpart";
 import { useExplanation } from "./useExplanation";
@@ -20,11 +20,23 @@ const GENERIC = new Set(["Contradicting facts", "Different framing"]);
 const WINDOW = 700;
 /** Long enough on one sentence to count as having read it. */
 const READ_DWELL = 1500;
+const MARGIN = 10;
 
-function Passage({ lang, article, counterpart }: { lang: Lang; article: ArticleSnapshot; counterpart: Counterpart }) {
+function Passage({
+  lang,
+  article,
+  counterpart,
+  missing = false,
+}: {
+  lang: Lang;
+  article: ArticleSnapshot;
+  counterpart: Counterpart;
+  /** The passage is only the nearest one: what was hovered is not in it. */
+  missing?: boolean;
+}) {
   const text = article.sections[counterpart.paragraph.section]?.text ?? "";
   let { start, end } = counterpart.paragraph;
-  const s = counterpart.sentence;
+  const s = missing ? undefined : counterpart.sentence;
   if (end - start > WINDOW) {
     const middle = s ? (s.start + s.end) / 2 : start + WINDOW / 2;
     start = Math.max(start, Math.round(middle - WINDOW / 2));
@@ -39,7 +51,7 @@ function Passage({ lang, article, counterpart }: { lang: Lang; article: ArticleS
       {inside ? (
         <>
           {text.slice(start, s.start)}
-          <mark className="bg-wiki-page text-inherit rounded-[2px] box-decoration-clone shadow-[inset_0_-2px_0_var(--color-ink)]">
+          <mark className="bg-echo text-inherit rounded-[2px] box-decoration-clone shadow-[inset_0_-2px_0_var(--color-ink)]">
             {text.slice(s.start, s.end)}
           </mark>
           {text.slice(s.end, end)}
@@ -71,6 +83,7 @@ function Overlay({
   box,
   article,
   counterpart,
+  missing,
   pinned,
   onClose,
 }: {
@@ -78,31 +91,56 @@ function Overlay({
   box: Box;
   article: ArticleSnapshot;
   counterpart: Counterpart | null | undefined;
+  /** The hovered sentence is a gap in this language. */
+  missing: boolean;
   pinned: boolean;
   onClose: () => void;
 }) {
   const meta = LANG_META[lang];
+  // A paragraph low on the screen would push its passages off the bottom, so a
+  // passage that runs past it rises until it fits, or reaches the top.
+  const ref = useRef<HTMLDivElement>(null);
+  const [lift, setLift] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const top = box.top - window.scrollY;
+    const over = top + el.scrollHeight + 2 - (window.innerHeight - MARGIN);
+    setLift(over > 0 ? Math.max(0, Math.min(over, top - MARGIN)) : 0);
+  }, [box]);
   return (
     <div
-      className={`counterpart counterpart-passage absolute z-40 px-[10px] pt-[7px] pb-[9px] bg-wiki-overlay border border-wiki-border rounded-[2px] shadow-offset max-h-[70vh] overflow-y-auto animate-fade-in ${
-        pinned ? "pointer-events-auto" : "pointer-events-none"
-      }`}
-      style={box}
+      ref={ref}
+      className={`counterpart counterpart-passage absolute z-40 px-[10px] pt-[7px] pb-[9px] border rounded-[2px] shadow-offset overflow-y-auto animate-fade-in ${
+        missing ? "bg-missing border-unique" : "bg-wiki-overlay border-wiki-border"
+      } ${pinned ? "pointer-events-auto" : "pointer-events-none"}`}
+      style={{ ...box, top: box.top - lift, maxHeight: box.maxHeight + lift }}
       data-lang={lang}
+      data-missing={missing || undefined}
       dir={meta.dir}
       lang={lang}
     >
       <div className="flex items-baseline gap-2 mb-[4px] font-mono text-[10.5px] text-ink-soft" dir="ltr">
-        <span>{meta.label}</span>
+        {missing ? (
+          <span className="text-unique font-semibold tracking-[0.04em] uppercase">Missing from {meta.label}</span>
+        ) : (
+          <span>{meta.label}</span>
+        )}
         <span>
-          {counterpart
-            ? `${Math.round(counterpart.p * 100)}% match${counterpart.sentence ? "" : ", no single sentence"}`
-            : "no matching passage"}
+          {missing
+            ? counterpart
+              ? "nearest passage"
+              : ""
+            : counterpart
+              ? `${Math.round(counterpart.p * 100)}% match${counterpart.sentence ? "" : ", no single sentence"}`
+              : "no matching passage"}
         </span>
         {pinned && <Close onClose={onClose} />}
       </div>
       {counterpart ? (
-        <Passage lang={lang} article={article} counterpart={counterpart} />
+        <div className={missing ? "opacity-60" : undefined}>
+          <Passage lang={lang} article={article} counterpart={counterpart} missing={missing} />
+        </div>
       ) : (
         <p className="m-0 text-[13.5px] text-ink-soft" dir="ltr">
           Nothing in the {meta.label} article covers this.
@@ -179,6 +217,7 @@ export default function CounterpartPanel({
               box={place.overlays[other]}
               article={articles[other]}
               counterpart={row.to[other]}
+              missing={claim?.type === "unique" && !!claim.missingFrom?.includes(other)}
               pinned={pinned}
               onClose={onClose}
             />
@@ -198,10 +237,16 @@ export default function CounterpartPanel({
       )}
       {card && (claim || elsewhere.length > 0) && (
         <div
-          className={`counterpart counterpart-note absolute z-50 bg-paper-raised border border-ink rounded-[2px] shadow-offset [direction:ltr] text-start max-h-[60vh] overflow-y-auto animate-fade-in ${
+          className={`counterpart counterpart-note absolute z-50 bg-paper-raised border border-ink rounded-[2px] shadow-offset [direction:ltr] text-start overflow-y-auto animate-fade-in ${
             pinned ? "pointer-events-auto" : "pointer-events-none"
           }`}
-          style={{ left: card.left, width: card.width, top: card.top, transform: card.above ? "translateY(-100%)" : undefined }}
+          style={{
+            left: card.left,
+            width: card.width,
+            top: card.top,
+            maxHeight: card.maxHeight,
+            transform: card.above ? "translateY(-100%)" : undefined,
+          }}
           role={pinned ? "dialog" : "tooltip"}
           aria-label={claim ? "Why this is marked" : "The same passage in the other languages"}
         >
