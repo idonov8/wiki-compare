@@ -1217,6 +1217,60 @@ check(!(await page.$(".card")), "Escape dismisses the card");
   await phone.close();
 }
 
+// The counterpart panel needs a sentence alignment, which only the Jev engine
+// produces: the demo route runs it when the dev server has a TypeSafe key.
+{
+  console.log("\ncounterpart panel");
+  const jev = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await jev.goto(`${BASE}/?title=demo:jev:${FIXTURE}`, { waitUntil: "domcontentloaded" });
+  const aligned = await jev
+    .waitForSelector("span.sentence", { state: "attached", timeout: 60000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!aligned) {
+    console.log("  skip  no sentence alignment (start the dev server with TYPESAFE_API_KEY to check the panel)");
+  } else {
+    await jev.waitForTimeout(500);
+    const sentence = jev.locator('[data-edition="en"] span.sentence').nth(3);
+    await sentence.scrollIntoViewIfNeeded();
+    await sentence.hover();
+    await jev.waitForTimeout(500);
+    const panel = jev.locator(".counterpart");
+    check(await panel.isVisible(), "hovering a sentence opens the panel");
+    const box = await panel.boundingBox();
+    const column = await jev.locator('[data-edition="en"]').first().boundingBox();
+    check(
+      !!box && !!column && box.x >= column.x + column.width - 1,
+      "beside the hovered column rather than over it",
+      box && column ? `panel x ${Math.round(box.x)}, column right ${Math.round(column.x + column.width)}` : "",
+    );
+    check(/עברית|العربية/.test(await panel.innerText()), "and it shows the other languages");
+    await jev.mouse.move(2, 2);
+    await jev.waitForTimeout(500);
+    check(!(await panel.count()), "leaving the sentence closes it");
+
+    await sentence.click();
+    await jev.waitForTimeout(300);
+    await jev.mouse.move(2, 2);
+    await jev.waitForTimeout(500);
+    check(await panel.isVisible(), "a click keeps it open after the pointer leaves");
+    await jev.keyboard.press("Escape");
+    await jev.waitForTimeout(200);
+    check(!(await panel.count()), "and Escape closes it");
+
+    const toggle = jev.locator("button.show-all");
+    if (await toggle.count()) {
+      const before = await jev.locator("mark.claim").count();
+      await toggle.click();
+      await jev.waitForTimeout(400);
+      const after = await jev.locator("mark.claim").count();
+      check(after > before, "show all draws the differences the threshold hid", `${before} -> ${after}`);
+      await toggle.click();
+    }
+  }
+  await jev.close();
+}
+
 check(pageErrors.length === 0, "no uncaught page errors", pageErrors.join("; "));
 
 // A stub still mid-flight when the browser goes away throws from its callback,

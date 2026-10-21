@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ArticlesSkeleton from "./ArticlesSkeleton";
 import ArticleView from "./compare/ArticleView";
 import CachedBadge from "./compare/CachedBadge";
 import ClaimCard from "./compare/ClaimCard";
+import CounterpartPanel from "./compare/CounterpartPanel";
 import ControlStrip from "./compare/ControlStrip";
 import DiffNav from "./DiffNav";
 import ErrorState from "./compare/ErrorState";
@@ -19,12 +20,16 @@ import RunSummary from "./compare/RunSummary";
 import SearchResults from "./compare/SearchResults";
 import Sources from "./Sources";
 import { useClaimCard } from "./compare/useClaimCard";
+import { sentenceKey, useCounterpart } from "./compare/useCounterpart";
 import { useCompareSession } from "./compare/useCompareSession";
 import { useEditions } from "./compare/useEditions";
 import { useRecent } from "./compare/useRecent";
 import { initAnalytics, track } from "@/lib/analytics";
 import { relative } from "@/lib/relative";
-import { LANGS } from "@/lib/types";
+import { salientClaims } from "@/lib/salience";
+import { LANGS, type AlignedSentence, type Claim, type Lang } from "@/lib/types";
+
+const SHOW_ALL_KEY = "show-all-differences";
 
 export default function Compare() {
   const { card, show: showCard, hide: hideCard } = useClaimCard();
@@ -53,6 +58,56 @@ export default function Compare() {
   /** Set once the landing page's own search field has scrolled out of reach. */
   const [docked, setDocked] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+
+  useEffect(() => {
+    try {
+      setShowAll(window.localStorage.getItem(SHOW_ALL_KEY) === "1");
+    } catch {}
+  }, []);
+
+  const toggleShowAll = useCallback(() => {
+    setShowAll((was) => {
+      const now = !was;
+      try {
+        window.localStorage.setItem(SHOW_ALL_KEY, now ? "1" : "0");
+      } catch {}
+      void track("show_all_toggled", { on: now });
+      return now;
+    });
+  }, []);
+
+  /** The differences worth drawing by default; see lib/salience.ts. */
+  const salient = useMemo(() => (data ? salientClaims(claims, articles) : null), [data, claims, articles]);
+  const shown = useMemo(
+    () => (showAll || !salient ? claims : claims.filter((c) => salient.has(c.id))),
+    [showAll, salient, claims],
+  );
+
+  const alignment = data?.alignment;
+  const rows = useMemo(() => {
+    const out = new Map<string, { lang: Lang; row: AlignedSentence }>();
+    for (const [lang, list] of Object.entries(alignment ?? {}) as [Lang, AlignedSentence[]][]) {
+      for (const row of list) out.set(sentenceKey(lang, row.section, row.start), { lang, row });
+    }
+    return out;
+  }, [alignment]);
+  const claimBySentence = useMemo(() => {
+    const out = new Map<string, Claim>();
+    for (const claim of shown) {
+      for (const [lang, ref] of Object.entries(claim.refs ?? {})) {
+        out.set(sentenceKey(lang as Lang, ref.section, ref.start), claim);
+      }
+    }
+    return out;
+  }, [shown]);
+  const claimAt = useCallback((key: string) => claimBySentence.get(key), [claimBySentence]);
+  const { counterpart, show: showCounterpart, leave: leaveCounterpart, close: closeCounterpart } = useCounterpart(
+    rows,
+    claimAt,
+  );
+
+  useEffect(() => closeCounterpart(), [data?.qid, target?.title, closeCounterpart]);
 
   useEffect(() => {
     initAnalytics();
@@ -95,7 +150,19 @@ export default function Compare() {
           onboarding={onboarding}
           meta={
             <>
-              <RunSummary claims={claims} data={data} />
+              <RunSummary claims={shown} data={data} />
+              {salient && salient.size < claims.length && (
+                <button
+                  type="button"
+                  className="show-all shrink-0 underline decoration-dotted underline-offset-2 text-ink-soft hover:text-ink cursor-pointer"
+                  onClick={toggleShowAll}
+                  aria-pressed={showAll}
+                >
+                  {showAll
+                    ? `showing all ${claims.length} · fewer`
+                    : `${salient.size} of ${claims.length} shown · show all`}
+                </button>
+              )}
               {stale && data?.cache && <CachedBadge cache={data.cache} />}
             </>
           }
@@ -130,12 +197,18 @@ export default function Compare() {
           slide={slide}
           articles={articles}
           visible={visible}
-          claims={claims}
+          claims={shown}
           ghost={comparing && claims.length === 0}
-          activeId={card?.claim.id ?? null}
-          onEnter={showCard}
+          activeId={card?.claim.id ?? counterpart?.claim?.id ?? null}
+          alignment={alignment}
+          activeSentence={counterpart?.key ?? null}
+          // With an alignment the panel shows a mark's difference along with the
+          // passage it sits in, so the separate card would only cover it.
+          onEnter={alignment ? undefined : showCard}
           onLeave={hideCard}
           onLink={navigate}
+          onSentence={showCounterpart}
+          onSentenceLeave={leaveCounterpart}
         />
       )}
 
@@ -165,11 +238,11 @@ export default function Compare() {
 
       {/* Live during the read as well: differences stream in, and the ones that
           have arrived are already worth jumping between. */}
-      {claims.length > 0 && onArticle && (
+      {shown.length > 0 && onArticle && (
         <DiffNav
           // The claim count is in the signature because each one that lands
           // renders new marks, and the rail plots marks it has measured.
-          signature={`${data?.qid ?? target?.title ?? ""}:${visible.join("")}:${claims.length}`}
+          signature={`${data?.qid ?? target?.title ?? ""}:${visible.join("")}:${shown.length}`}
           busy={comparing}
           hint={onboarding.step === "sources"}
           onHintDone={onboarding.done}
@@ -185,6 +258,10 @@ export default function Compare() {
       {feedbackOpen && <FeedbackModal onDismiss={() => setFeedbackOpen(false)} />}
 
       {card && <ClaimCard card={card} />}
+
+      {counterpart && (
+        <CounterpartPanel state={counterpart} articles={articles} cacheKey={data?.cacheKey} onClose={closeCounterpart} />
+      )}
     </>
   );
 }

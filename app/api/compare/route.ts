@@ -196,14 +196,21 @@ export async function GET(request: Request) {
 
   const streaming = params.get("stream") === "1";
 
-  // Render a recorded fixture instead of calling anything. Development only —
-  // it exists so the rendering layer can be worked on without a database, an
-  // API key, or spending tokens, and it is dead code in production.
+  // Render a recorded fixture instead of fetching Wikipedia. Development only —
+  // it exists so the rendering layer can be worked on without a database or a
+  // network, and it is dead code in production. `demo:jev:<fixture>` has the
+  // real engine read it (with a TypeSafe key), stored when there is a database,
+  // so the hover panel and the explain route can be worked on too.
   if (process.env.NODE_ENV !== "production" && title.startsWith("demo:")) {
     let result: ComparisonResult;
     try {
-      const { demoComparison } = await import("@/fixtures/demo");
-      result = demoComparison(title.slice(5));
+      const { demoComparison, demoJevComparison } = await import("@/fixtures/demo");
+      const slug = title.slice(5);
+      result =
+        slug.startsWith("jev:") && process.env.TYPESAFE_API_KEY
+          ? await demoJevComparison(slug.slice(4))
+          : demoComparison(slug.replace(/^jev:/, ""));
+      if (result.cacheKey && process.env.DATABASE_URL) await putComparison(result.cacheKey, result, true);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // A fixture that does not exist is a 404 in both shapes: nothing has been

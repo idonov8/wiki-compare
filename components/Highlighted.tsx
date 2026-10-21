@@ -11,14 +11,23 @@ interface Range {
   seed?: number;
 }
 
-/** Locate each claim's verbatim snippet in this block of text. Overlapping hits
- *  are resolved in favour of the longer span so nested quotes don't nest marks. */
-function locate(text: string, lang: Lang, claims: Claim[]): Range[] {
+/** Locate each claim's snippet in this block of text: at its exact ref when the
+ *  claim carries one, since a sentence can appear in both the lead and the body,
+ *  and by search otherwise. Overlapping hits are resolved in favour of the
+ *  longer span so nested quotes don't nest marks. */
+function locate(text: string, lang: Lang, claims: Claim[], section?: number): Range[] {
   const found: Range[] = [];
 
   for (const claim of claims) {
     const snippet = claim.spans[lang];
     if (!snippet) continue;
+    const ref = claim.refs?.[lang];
+    if (ref && section !== undefined) {
+      if (ref.section === section && text.slice(ref.start, ref.end) === snippet) {
+        found.push({ start: ref.start, end: ref.end, claim });
+      }
+      continue;
+    }
     const start = text.indexOf(snippet);
     if (start === -1) continue;
     found.push({ start, end: start + snippet.length, claim });
@@ -52,6 +61,14 @@ function confidenceStyle(claim: Claim, active: boolean): React.CSSProperties | u
   };
 }
 
+/** A sentence the reader can point at to see where it sits in the other
+ *  languages, as a range of this block's text. */
+export interface SentenceTarget {
+  start: number;
+  end: number;
+  key: string;
+}
+
 export default function Highlighted({
   text,
   lang,
@@ -59,9 +76,14 @@ export default function Highlighted({
   links = [],
   ghost = false,
   activeId = null,
+  section,
+  sentences = [],
+  activeSentence = null,
   onEnter,
   onLeave,
   onLink,
+  onSentence,
+  onSentenceLeave,
 }: {
   text: string;
   lang: Lang;
@@ -69,12 +91,19 @@ export default function Highlighted({
   links?: LinkSpan[];
   ghost?: boolean;
   activeId?: string | null;
+  /** This block's index among the article's sections, for locating by ref. */
+  section?: number;
+  sentences?: SentenceTarget[];
+  activeSentence?: string | null;
   onEnter?: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
   onLeave?: () => void;
   onLink?: (title: string, lang: Lang) => void;
+  onSentence?: (key: string, element: HTMLElement, how: "hover" | "tap") => void;
+  onSentenceLeave?: () => void;
 }) {
-  const ranges: Range[] = ghost ? ghostRanges(text) : locate(text, lang, claims);
-  if (!ranges.length && !links.length)
+  const ranges: Range[] = ghost ? ghostRanges(text) : locate(text, lang, claims, section);
+  const targets = ghost ? [] : sentences;
+  if (!ranges.length && !links.length && !targets.length)
     return (
       <span className="body-text whitespace-pre-wrap font-wiki text-[14.5px] leading-[1.62] text-wiki-text">
         {text}
@@ -86,12 +115,14 @@ export default function Highlighted({
   const bounds = new Set<number>([0, text.length]);
   for (const r of ranges) bounds.add(r.start).add(r.end);
   for (const l of links) bounds.add(l.start).add(l.end);
+  for (const t of targets) bounds.add(t.start).add(t.end);
   const cuts = [...bounds].sort((a, b) => a - b);
 
   const markAt = (i: number) => ranges.find((r) => i >= r.start && i < r.end);
   const linkAt = (i: number) => links.find((l) => i >= l.start && i < l.end);
 
-  const nodes: React.ReactNode[] = [];
+  const sentenceAt = (i: number) => targets.find((t) => i >= t.start && i < t.end);
+  const nodes: { node: React.ReactNode; sentence?: SentenceTarget }[] = [];
   for (let k = 0; k < cuts.length - 1; k++) {
     const from = cuts[k];
     const to = cuts[k + 1];
@@ -172,12 +203,38 @@ export default function Highlighted({
         </mark>
       );
     }
-    nodes.push(<span key={from}>{node}</span>);
+    nodes.push({ node: <span key={from}>{node}</span>, sentence: sentenceAt(from) });
+  }
+
+  // Consecutive pieces of one sentence share a wrapper, which is what the pointer
+  // enters; the marks and links inside it keep their own behaviour.
+  const grouped: React.ReactNode[] = [];
+  for (let k = 0; k < nodes.length; ) {
+    const sentence = nodes[k].sentence;
+    if (!sentence) {
+      grouped.push(nodes[k].node);
+      k++;
+      continue;
+    }
+    const run: React.ReactNode[] = [];
+    while (k < nodes.length && nodes[k].sentence === sentence) run.push(nodes[k++].node);
+    grouped.push(
+      <span
+        key={`s${sentence.start}`}
+        className="sentence rounded-[2px] box-decoration-clone transition-[background-color] duration-[120ms] data-[active=true]:bg-wiki-shade"
+        data-active={activeSentence === sentence.key}
+        onMouseEnter={(e) => onSentence?.(sentence.key, e.currentTarget, "hover")}
+        onMouseLeave={onSentenceLeave}
+        onClick={(e) => onSentence?.(sentence.key, e.currentTarget, "tap")}
+      >
+        {run}
+      </span>,
+    );
   }
 
   return (
     <span className="body-text whitespace-pre-wrap font-wiki text-[14.5px] leading-[1.62] text-wiki-text">
-      {nodes}
+      {grouped}
     </span>
   );
 }
