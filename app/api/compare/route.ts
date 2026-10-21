@@ -19,6 +19,7 @@ import {
 } from "@/lib/db";
 import { coverageGaps } from "@/lib/deterministic";
 import { JEV_VERSION, runJevComparison } from "@/lib/jev/pipeline";
+import { allow, visitorKey } from "@/lib/rate-limit";
 import { capture } from "@/lib/analytics";
 
 export const runtime = "nodejs";
@@ -29,6 +30,12 @@ interface Target {
   titles: Partial<Record<Lang, string>>;
   revids: Record<string, number>;
   langs: Lang[];
+}
+
+class TooManyComparisons extends Error {
+  constructor() {
+    super("Too many new comparisons from here; try again in a few minutes.");
+  }
 }
 
 /** Read the article, price it, store it. */
@@ -247,6 +254,12 @@ export async function GET(request: Request) {
       return { ...cached.result, fromCache: true, cache };
     }
 
+    // Only a read that would spend anything is limited: a cached answer and a
+    // joined run cost nothing more.
+    if (!allow(`compare:${visitorKey(request.headers)}`, 10, 10 * 60_000)) {
+      throw new TooManyComparisons();
+    }
+
     const { result } = await computeAndStore(target, { overwrite: bypassCache, emit });
     void capture("comparison_served", { qid, fromCache: false, costUsd: result.usage.costUsd ?? 0 });
     emit({ event: "done", result, fromCache: false });
@@ -266,6 +279,6 @@ export async function GET(request: Request) {
     return NextResponse.json(await serve(() => {}));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Comparison failed.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: error instanceof TooManyComparisons ? 429 : 500 });
   }
 }
