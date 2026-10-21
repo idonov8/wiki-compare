@@ -208,13 +208,15 @@ export async function recentComparisons(): Promise<RecentArticle[]> {
         ))
         FROM jsonb_each(result->'articles') article
       ) AS words,
-      (
+      -- What the comparison draws by default, stored with it since the
+      -- threshold needs the articles' text; older rows fall back to every claim.
+      COALESCE(result->'tally', (
         SELECT jsonb_object_agg(kind, n) FROM (
-          SELECT claim->>'type' AS kind, count(*) AS n
+          SELECT claim->>'type' AS kind, count(DISTINCT COALESCE(claim->>'group', claim->>'id')) AS n
           FROM jsonb_array_elements(result->'claims') claim
           GROUP BY 1
         ) tally
-      ) AS claims
+      )) AS claims
     FROM (
       SELECT DISTINCT ON (qid)
         qid,

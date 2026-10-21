@@ -1235,28 +1235,47 @@ check(!(await page.$(".card")), "Escape dismisses the card");
     await sentence.scrollIntoViewIfNeeded();
     await sentence.hover();
     await jev.waitForTimeout(500);
-    const panel = jev.locator(".counterpart");
-    check(await panel.isVisible(), "hovering a sentence opens the panel");
-    const box = await panel.boundingBox();
-    const column = await jev.locator('[data-edition="en"]').first().boundingBox();
+    const passages = jev.locator(".counterpart-passage");
+    check((await passages.count()) === 2, "hovering a sentence lays a passage over each other column", `${await passages.count()}`);
+    const he = await jev.locator('.counterpart-passage[data-lang="he"]').boundingBox();
+    const heColumn = await jev.locator('[data-edition="he"]').first().boundingBox();
     check(
-      !!box && !!column && box.x >= column.x + column.width - 1,
-      "beside the hovered column rather than over it",
-      box && column ? `panel x ${Math.round(box.x)}, column right ${Math.round(column.x + column.width)}` : "",
+      !!he && !!heColumn && he.x >= heColumn.x - 1 && he.x + he.width <= heColumn.x + heColumn.width + 1,
+      "the Hebrew passage sits over the Hebrew column",
+      he && heColumn ? `passage ${Math.round(he.x)}..${Math.round(he.x + he.width)}, column ${Math.round(heColumn.x)}..${Math.round(heColumn.x + heColumn.width)}` : "",
     );
-    check(/עברית|العربية/.test(await panel.innerText()), "and it shows the other languages");
+    const top = await jev.evaluate((key) => {
+      const row = document.querySelector<HTMLElement>(`[data-sentence="${key}"]`);
+      return row?.getBoundingClientRect().top ?? 0;
+    }, await sentence.getAttribute("data-sentence"));
+    check(!!he && he.y <= Math.max(top, 10) + 1, "level with the hovered paragraph, not below it", `passage ${Math.round(he?.y ?? 0)}, sentence ${Math.round(top)}`);
     await jev.mouse.move(2, 2);
     await jev.waitForTimeout(500);
-    check(!(await panel.count()), "leaving the sentence closes it");
+    check(!(await passages.count()), "leaving the sentence closes them");
 
     await sentence.click();
     await jev.waitForTimeout(300);
     await jev.mouse.move(2, 2);
     await jev.waitForTimeout(500);
-    check(await panel.isVisible(), "a click keeps it open after the pointer leaves");
+    check((await passages.count()) === 2, "a click keeps them open after the pointer leaves");
     await jev.keyboard.press("Escape");
     await jev.waitForTimeout(200);
-    check(!(await panel.count()), "and Escape closes it");
+    check(!(await passages.count()), "and Escape closes them");
+
+    const marked = jev.locator('[data-edition="en"] span.sentence:has(mark.claim)').first();
+    await marked.scrollIntoViewIfNeeded();
+    await marked.hover();
+    await jev.waitForTimeout(500);
+    const note = jev.locator(".counterpart-note");
+    check(await note.isVisible(), "a marked sentence also gets a card explaining the difference");
+    const noteBox = await note.boundingBox();
+    const enColumn = await jev.locator('[data-edition="en"]').first().boundingBox();
+    check(
+      !!noteBox && !!enColumn && noteBox.x >= enColumn.x - 1 && noteBox.x + noteBox.width <= enColumn.x + enColumn.width + 1,
+      "in the hovered column",
+    );
+    await jev.mouse.move(2, 2);
+    await jev.waitForTimeout(500);
 
     const toggle = jev.locator("button.show-all");
     if (await toggle.count()) {
@@ -1267,6 +1286,25 @@ check(!(await page.$(".card")), "Escape dismisses the card");
       check(after > before, "show all draws the differences the threshold hid", `${before} -> ${after}`);
       await toggle.click();
     }
+
+    const narrow = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await narrow.goto(`${BASE}/?title=demo:jev:${FIXTURE}`, { waitUntil: "domcontentloaded" });
+    await narrow.waitForSelector("span.sentence", { state: "attached", timeout: 60000 });
+    await narrow.waitForTimeout(500);
+    const plainTap = narrow.locator("span.sentence:not(:has(mark.claim))").nth(3);
+    await plainTap.scrollIntoViewIfNeeded();
+    await plainTap.click();
+    await narrow.waitForTimeout(300);
+    check(!(await narrow.locator(".counterpart").count()), "on a phone, a sentence with no difference opens nothing");
+    const markedTap = narrow.locator("span.sentence:has(mark.claim)").first();
+    await markedTap.scrollIntoViewIfNeeded();
+    await markedTap.click();
+    await narrow.waitForTimeout(300);
+    check(
+      (await narrow.locator(".counterpart-note").isVisible()) && !(await narrow.locator(".counterpart-passage").count()),
+      "and a marked one opens the explanation alone",
+    );
+    await narrow.close();
   }
   await jev.close();
 }

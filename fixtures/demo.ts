@@ -1,6 +1,7 @@
 import type { ArticleSnapshot, Claim, ComparisonResult, Lang } from "../lib/types";
 import { coverageGaps } from "../lib/deterministic";
 import { JEV_VERSION, runJevComparison } from "../lib/jev/pipeline";
+import { tallyShown } from "../lib/salience";
 import { fixtureLabels, fixtureSnapshots, loadFixture } from "./loader";
 
 /**
@@ -140,5 +141,6 @@ export async function demoJevComparison(slug: string): Promise<ComparisonResult>
     scope: run.scope,
     promptVersion: JEV_VERSION,
     cacheKey: `demo:${slug}`,
+    tally: tallyShown(run.claims, base.articles),
   };
 }

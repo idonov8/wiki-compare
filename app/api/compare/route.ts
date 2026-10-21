@@ -19,7 +19,7 @@ import {
 } from "@/lib/db";
 import { coverageGaps } from "@/lib/deterministic";
 import { JEV_VERSION, runJevComparison } from "@/lib/jev/pipeline";
-import { salientClaims } from "@/lib/salience";
+import { salientClaims, tallyShown } from "@/lib/salience";
 import { allow, visitorKey } from "@/lib/rate-limit";
 import { capture } from "@/lib/analytics";
 
@@ -112,6 +112,7 @@ async function computeAndStore(
       },
       alignment: run.alignment,
       cacheKey,
+      tally: tallyShown(run.claims, Object.fromEntries(articles.map((a) => [a.lang, a]))),
     };
     // Stored while the run is still joinable, so the moment it stops being one
     // there is a cached row to serve instead.

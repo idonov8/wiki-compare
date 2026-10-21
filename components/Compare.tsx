@@ -154,13 +154,12 @@ export default function Compare() {
               {salient && salient.size < claims.length && (
                 <button
                   type="button"
-                  className="show-all shrink-0 underline decoration-dotted underline-offset-2 text-ink-soft hover:text-ink cursor-pointer"
+                  className="show-all shrink-0 text-[10.5px] text-ink-soft opacity-70 hover:opacity-100 hover:text-ink cursor-pointer"
                   onClick={toggleShowAll}
                   aria-pressed={showAll}
+                  title={`${salient.size} of ${claims.length} marks are the most important differences`}
                 >
-                  {showAll
-                    ? `showing all ${claims.length} · fewer`
-                    : `${salient.size} of ${claims.length} shown · show all`}
+                  {showAll ? "show fewer" : "show all"}
                 </button>
               )}
               {stale && data?.cache && <CachedBadge cache={data.cache} />}

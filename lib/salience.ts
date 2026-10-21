@@ -1,4 +1,4 @@
-import type { ArticleSnapshot, Claim, Lang } from "./types";
+import type { ArticleSnapshot, Claim, ClaimType, Lang } from "./types";
 import { KEY_FACTS_HEADING } from "./types";
 
 /**
@@ -67,4 +67,24 @@ export function salientClaims(claims: Claim[], articles: Record<string, ArticleS
     }
   }
   return shown;
+}
+
+/** Differences by kind, a paragraph missing as a whole counting once: it is one
+ *  finding, and counted by sentence it would outweigh everything else. */
+export function countClaims(claims: Claim[]): Record<ClaimType, number> {
+  const counts = { contradiction: 0, unique: 0, framing: 0 };
+  const seen = new Set<string>();
+  for (const claim of claims) {
+    const unit = claim.group ?? claim.id;
+    if (seen.has(unit)) continue;
+    seen.add(unit);
+    counts[claim.type] += 1;
+  }
+  return counts;
+}
+
+/** What the ledger shows for a comparison: the differences drawn by default. */
+export function tallyShown(claims: Claim[], articles: Record<string, ArticleSnapshot>): Record<ClaimType, number> {
+  const shown = salientClaims(claims, articles);
+  return countClaims(claims.filter((c) => shown.has(c.id)));
 }

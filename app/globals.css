@@ -52,6 +52,9 @@
   --color-wiki-page: #ffffff;
   --color-wiki-rule: color-mix(in srgb, #a2a9b1 55%, transparent);
   --color-wiki-shade: color-mix(in srgb, #a2a9b1 8%, #ffffff);
+  /* A passage laid over another column: a shade darker than the page it
+     covers, so it reads as lifted off it. */
+  --color-wiki-overlay: color-mix(in srgb, #a2a9b1 15%, #ffffff);
 
   /* Paper, thinned — the loading panel sits over the article text it lets
      through, and the reveal screen sets its type in paper on ink. */
@@ -104,6 +107,7 @@
   --animate-chip-breathe: chip-breathe 1.8s ease-in-out infinite;
   --animate-ellipsis-fade: ellipsis-fade 1.5s steps(1, end) infinite;
   --animate-reveal-in: reveal-in 0.5s ease both;
+  --animate-fade-in: fade-in 0.14s ease-out both;
   --animate-reveal-spin: reveal-spin 0.8s linear infinite;
   --animate-lang-in: lang-in 0.24s ease-out;
   --animate-bar-rise: bar-rise 0.42s cubic-bezier(0.2, 0.75, 0.2, 1) both;
@@ -248,6 +252,12 @@
     to {
       opacity: 1;
       transform: none;
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
     }
   }
 
