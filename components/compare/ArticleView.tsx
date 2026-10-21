@@ -17,6 +17,7 @@ export default function ArticleView({
   activeId,
   alignment,
   activeSentence,
+  echo,
   onEnter,
   onLeave,
   onLink,
@@ -31,6 +32,8 @@ export default function ArticleView({
   activeId: string | null;
   alignment?: Alignment;
   activeSentence: string | null;
+  /** Sentences matching the reader's selection in another language. */
+  echo?: Set<string>;
   /** Absent when the panel below takes over a mark's hover. */
   onEnter?: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
   onLeave: () => void;
@@ -52,6 +55,7 @@ export default function ArticleView({
         activeId={activeId}
         alignment={alignment}
         activeSentence={activeSentence}
+        echo={echo}
         onEnter={onEnter}
         onLeave={onLeave}
         onSentence={onSentence}

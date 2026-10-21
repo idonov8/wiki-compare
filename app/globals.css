@@ -55,6 +55,12 @@
   /* A passage laid over another column: a shade darker than the page it
      covers, so it reads as lifted off it. */
   --color-wiki-overlay: color-mix(in srgb, #a2a9b1 15%, #ffffff);
+  /* A sentence matching the reader's selection in another column. */
+  --color-echo: color-mix(in srgb, #e8c547 38%, #ffffff);
+  --color-echo-edge: #d4a72c;
+  /* A passage from the version a gap is missing from: the gap's own green,
+     faded, since what is shown is only the nearest thing it has. */
+  --color-missing: color-mix(in srgb, #2c6b58 14%, #ffffff);
 
   /* Paper, thinned — the loading panel sits over the article text it lets
      through, and the reveal screen sets its type in paper on ink. */

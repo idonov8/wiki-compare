@@ -52,6 +52,8 @@ export const EVENTS = [
   "counterpart_viewed",
   /** The reader switched between the differences that matter and all of them. */
   "show_all_toggled",
+  "selection_echoed",
+  "echo_pointer_followed",
 ] as const;
 
 export type AnalyticsEvent = (typeof EVENTS)[number];

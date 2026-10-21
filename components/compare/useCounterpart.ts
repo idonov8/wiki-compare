@@ -14,15 +14,19 @@ const MARGIN = 10;
 /** How far a passage spills past the text of the column it covers, so it hides
  *  the text under it with room to spare. */
 const BLEED = 10;
-/** A paragraph ending lower than this share of the screen gets its card above
- *  it, where there is room to read it. */
-const LOW = 0.62;
+/** Room the card needs before it will sit on one side of the paragraph rather
+ *  than beside the sentence itself. */
+const CARD_ROOM = 220;
+/** The least a passage is cut to when its paragraph starts low on the screen. */
+const MIN_PASSAGE = 160;
 
 /** In page coordinates, so a pinned passage scrolls with the text it sits by. */
 export interface Box {
   left: number;
   width: number;
   top: number;
+  /** As much of the screen as is left from `top`, so nothing runs off it. */
+  maxHeight: number;
 }
 
 export interface Placement {
@@ -55,9 +59,31 @@ function textBox(column: HTMLElement): { left: number; width: number } {
 }
 
 /**
+ * The card goes on whichever side of the paragraph has room for it, under it
+ * by preference; a paragraph taller than the screen leaves room on neither, and
+ * then the card goes on the roomier side of the sentence itself. Either way it
+ * is given exactly the screen left on that side.
+ */
+function cardSide(
+  paragraph: { top: number; bottom: number },
+  sentence: { top: number; bottom: number },
+  vh: number,
+): { above: boolean; edge: number; room: number } {
+  const under = vh - paragraph.bottom - MARGIN;
+  const over = paragraph.top - MARGIN;
+  if (under >= CARD_ROOM) return { above: false, edge: paragraph.bottom, room: under };
+  if (over >= CARD_ROOM) return { above: true, edge: paragraph.top, room: over };
+  const below = vh - sentence.bottom - MARGIN;
+  const above = sentence.top - MARGIN;
+  return below >= above
+    ? { above: false, edge: sentence.bottom, room: Math.max(below - MARGIN, 0) }
+    : { above: true, edge: sentence.top, room: Math.max(above - MARGIN, 0) };
+}
+
+/**
  * Each other language's passage over that language's column, starting level
  * with the paragraph's first line (or the top of the screen, for a paragraph
- * that starts above it), and the card in the paragraph's own column, under it.
+ * that starts above it), and the card in the paragraph's own column, beside it.
  * A language whose column is not beside this one has no box, and the card
  * carries its passage instead.
  */
@@ -74,22 +100,28 @@ function place(element: HTMLElement, paragraph: string[], others: Lang[]): Place
   const bottom = (spans[spans.length - 1] ?? element).getBoundingClientRect().bottom;
   const vh = window.innerHeight;
 
+  const start = Math.max(top, MARGIN);
   const overlays: Placement["overlays"] = {};
   for (const other of others) {
     const beside = band.querySelector<HTMLElement>(`[data-edition="${other}"]`);
     if (beside && beside !== column) {
-      overlays[other] = { ...textBox(beside), top: Math.max(top, MARGIN) + window.scrollY };
+      overlays[other] = {
+        ...textBox(beside),
+        top: start + window.scrollY,
+        maxHeight: Math.max(vh - start - MARGIN, MIN_PASSAGE),
+      };
     }
   }
 
-  const above = bottom > vh * LOW && top > vh * (1 - LOW);
+  const side = cardSide({ top, bottom }, element.getBoundingClientRect(), vh);
   return {
     mode: "inline",
     overlays,
     card: {
       ...textBox(column),
-      top: (above ? top - MARGIN : bottom + MARGIN) + window.scrollY,
-      above,
+      top: (side.above ? side.edge - MARGIN : side.edge + MARGIN) + window.scrollY,
+      maxHeight: side.room,
+      above: side.above,
     },
   };
 }
@@ -100,22 +132,12 @@ function place(element: HTMLElement, paragraph: string[], others: Lang[]): Place
  */
 export function useCounterpart(
   rows: Map<string, { lang: Lang; row: AlignedSentence }>,
+  paragraphs: Map<string, string[]>,
   claimAt: (key: string) => Claim | undefined,
 ) {
   const [state, setState] = useState<CounterpartState | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const pinned = useRef(false);
-
-  /** Every sentence's paragraph, as the keys of the sentences in it. */
-  const paragraphs = useRef(new Map<string, string[]>());
-  useEffect(() => {
-    const out = new Map<string, string[]>();
-    for (const [key, { lang, row }] of rows) {
-      const id = sentenceKey(lang, row.section, row.paragraph.start);
-      out.set(id, [...(out.get(id) ?? []), key]);
-    }
-    paragraphs.current = out;
-  }, [rows]);
 
   const close = useCallback(() => {
     clearTimeout(timer.current);
@@ -128,11 +150,18 @@ export function useCounterpart(
       const found = rows.get(key);
       if (!found) return;
       if (how === "hover" && pinned.current) return;
+      // A reader selecting text is reading the other columns' own highlights,
+      // which the passages would cover; and the click that ends a drag is not
+      // a tap.
+      if (!window.getSelection()?.isCollapsed) {
+        if (!pinned.current) close();
+        return;
+      }
       clearTimeout(timer.current);
       const open = () => {
         const { lang, row } = found;
         const claim = claimAt(key);
-        const paragraph = paragraphs.current.get(sentenceKey(lang, row.section, row.paragraph.start)) ?? [key];
+        const paragraph = paragraphs.get(sentenceKey(lang, row.section, row.paragraph.start)) ?? [key];
         const placement = place(element, paragraph, Object.keys(row.to) as Lang[]);
         // A narrow screen shows only the explanation, so a sentence without a
         // difference has nothing to open.
@@ -147,7 +176,7 @@ export function useCounterpart(
       if (how === "tap") open();
       else timer.current = setTimeout(open, SHOW_DELAY);
     },
-    [rows, claimAt],
+    [rows, paragraphs, claimAt, close],
   );
 
   const leave = useCallback(() => {

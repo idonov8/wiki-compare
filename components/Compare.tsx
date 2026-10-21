@@ -8,6 +8,7 @@ import ClaimCard from "./compare/ClaimCard";
 import CounterpartPanel from "./compare/CounterpartPanel";
 import ControlStrip from "./compare/ControlStrip";
 import DiffNav from "./DiffNav";
+import EchoPointers from "./compare/EchoPointers";
 import ErrorState from "./compare/ErrorState";
 import FeedbackModal from "./FeedbackModal";
 import Footer from "./Footer";
@@ -24,6 +25,7 @@ import { sentenceKey, useCounterpart } from "./compare/useCounterpart";
 import { useCompareSession } from "./compare/useCompareSession";
 import { useEditions } from "./compare/useEditions";
 import { useRecent } from "./compare/useRecent";
+import { useSelectionEcho } from "./compare/useSelectionEcho";
 import { initAnalytics, track } from "@/lib/analytics";
 import { relative } from "@/lib/relative";
 import { salientClaims } from "@/lib/salience";
@@ -92,6 +94,15 @@ export default function Compare() {
     }
     return out;
   }, [alignment]);
+  /** Every paragraph, keyed like its first sentence, as its sentences' keys. */
+  const paragraphs = useMemo(() => {
+    const out = new Map<string, string[]>();
+    for (const [key, { lang, row }] of rows) {
+      const id = sentenceKey(lang, row.section, row.paragraph.start);
+      out.set(id, [...(out.get(id) ?? []), key]);
+    }
+    return out;
+  }, [rows]);
   const claimBySentence = useMemo(() => {
     const out = new Map<string, Claim>();
     for (const claim of shown) {
@@ -104,8 +115,14 @@ export default function Compare() {
   const claimAt = useCallback((key: string) => claimBySentence.get(key), [claimBySentence]);
   const { counterpart, show: showCounterpart, leave: leaveCounterpart, close: closeCounterpart } = useCounterpart(
     rows,
+    paragraphs,
     claimAt,
   );
+  const echo = useSelectionEcho(rows, paragraphs);
+  const pinnedCounterpart = !!counterpart?.pinned;
+  useEffect(() => {
+    if (echo.size && !pinnedCounterpart) closeCounterpart();
+  }, [echo, pinnedCounterpart, closeCounterpart]);
 
   useEffect(() => closeCounterpart(), [data?.qid, target?.title, closeCounterpart]);
 
@@ -201,6 +218,7 @@ export default function Compare() {
           activeId={card?.claim.id ?? counterpart?.claim?.id ?? null}
           alignment={alignment}
           activeSentence={counterpart?.key ?? null}
+          echo={echo}
           // With an alignment the panel shows a mark's difference along with the
           // passage it sits in, so the separate card would only cover it.
           onEnter={alignment ? undefined : showCard}
@@ -257,6 +275,8 @@ export default function Compare() {
       {feedbackOpen && <FeedbackModal onDismiss={() => setFeedbackOpen(false)} />}
 
       {card && <ClaimCard card={card} />}
+
+      <EchoPointers echo={echo} />
 
       {counterpart && (
         <CounterpartPanel state={counterpart} articles={articles} cacheKey={data?.cacheKey} onClose={closeCounterpart} />
