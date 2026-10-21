@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS article_sources (
   PRIMARY KEY (lang, revid, sources_version)
 );
 
--- Comparison output, keyed by every participating revision id plus the prompt
+-- Comparison output, keyed by every participating revision id plus the engine
 -- version. A steady-state article costs zero tokens on every request after the
 -- first one.
 CREATE TABLE IF NOT EXISTS comparisons (
@@ -58,7 +58,7 @@ CREATE INDEX IF NOT EXISTS comparisons_qid_idx ON comparisons (qid);
 -- Serves both the "recently cached" list on the landing page and the newest-first
 -- tiebreak when several stored comparisons for one subject could answer: a row
 -- keeps serving after the revision ids move on, so an edit on Wikipedia doesn't
--- force a re-read. Only a paid refresh replaces it.
+-- force a re-read.
 CREATE INDEX IF NOT EXISTS comparisons_computed_at_idx ON comparisons (computed_at DESC);
 
 -- Wikidata labels for the coverage diff. Cheap to refill, safe to truncate.
@@ -67,6 +67,10 @@ CREATE TABLE IF NOT EXISTS labels (
   label TEXT NOT NULL
 );
 
+-- NO LONGER USED from here to served_count below: sign-in, credits, coupons,
+-- donations and email consent were removed from the app. Kept only so existing
+-- data is not lost; nothing reads or writes these tables.
+--
 -- Better Auth's own tables — user, session, account, verification.
 --
 -- These used to live only in Better Auth's migrator, on the reasoning that two
@@ -256,10 +260,8 @@ CREATE TABLE IF NOT EXISTS email_consents (
 -- The lookup is always "the newest decision for this account", never a scan.
 CREATE INDEX IF NOT EXISTS email_consents_user_idx ON email_consents (user_id, created_at DESC);
 
--- Who paid for a cached comparison, and how many people have read it since.
--- Together they are what a donor is shown in return: not "you spent $2" but
--- "ten articles, read ninety times". Defaulting served_count to 0 rather than 1
--- keeps the counter meaning reads served from cache, which is the number that
--- makes the donation worth more than the one article that prompted it.
+-- How many people have read a cached comparison. Defaulting to 0 rather than 1
+-- keeps the counter meaning reads served from cache.
 ALTER TABLE comparisons ADD COLUMN IF NOT EXISTS served_count INTEGER NOT NULL DEFAULT 0;
+-- Who paid for a cached comparison. No longer written.
 ALTER TABLE comparisons ADD COLUMN IF NOT EXISTS funded_by TEXT;
