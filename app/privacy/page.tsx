@@ -47,8 +47,8 @@ export default function Page() {
         <div className="mt-[36px] grid gap-[30px] text-[15px] leading-[1.7] text-ink">
           <Block heading="The short version">
             <p>
-              Reading this site leaves nothing on your device and creates no record of you. There is
-              no cookie banner because there are no cookies to ask about. If you send feedback, we
+              Reading this site sets no cookies and creates no record of you. There is no cookie
+              banner because there are no cookies to ask about. If you send feedback, we
               receive what you wrote and the email address you gave, and you can have it deleted by
               asking.
             </p>
@@ -74,7 +74,8 @@ export default function Page() {
               and browser, salted with a key that is thrown away daily, so the count cannot be
               turned back into a person or followed from one day to the next. We record which
               article was opened and whether it came from cache — never what you searched for, and
-              never the text you clicked.
+              never the text you clicked. Vercel, which hosts the site, also counts page views
+              without cookies, from a hash of the request that it discards daily.
             </p>
             <p>
               Two other parties see your IP address simply because your browser talks to them: the
@@ -99,7 +100,7 @@ export default function Page() {
 
           <Block heading="Who processes it for us">
             <ul className="m-0 grid list-disc gap-[6px] pl-[22px]">
-              <li>Vercel: hosting.</li>
+              <li>Vercel: hosting, and the page-view count.</li>
               <li>Neon: the database.</li>
               <li>PostHog: analytics, as described above.</li>
               <li>Resend: delivering feedback to our inbox.</li>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { LANGS, type Lang, type Source } from "@/lib/types";
 import { matchSources } from "@/lib/sources";
 import { sourcesFor } from "@/lib/articles";
+import { allow, visitorKey } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -32,6 +33,9 @@ export async function GET(request: Request) {
       { error: "Add a revision id per language, e.g. ?en=123&he=456." },
       { status: 400 },
     );
+  }
+  if (!allow(`sources:${visitorKey(request.headers)}`, 60, 10 * 60_000)) {
+    return NextResponse.json({ error: "Too many requests; try again in a few minutes." }, { status: 429 });
   }
 
   const read = await Promise.all(

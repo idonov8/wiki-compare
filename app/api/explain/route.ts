@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { checkBudget, OverBudget } from "@/lib/budget";
 import { getComparisonByKey, getExplanation, putExplanation } from "@/lib/db";
 import { streamExplanation } from "@/lib/explain";
 import { allow, visitorKey } from "@/lib/rate-limit";
@@ -43,6 +44,13 @@ export async function POST(request: Request) {
 
   if (!allow(`explain:${visitorKey(request.headers)}`, 30, 60_000)) {
     return NextResponse.json({ error: "Too many explanations at once; try again in a minute." }, { status: 429 });
+  }
+
+  try {
+    await checkBudget();
+  } catch (error) {
+    if (error instanceof OverBudget) return NextResponse.json({ error: error.message }, { status: 429 });
+    throw error;
   }
 
   const result = await getComparisonByKey(cacheKey);

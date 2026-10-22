@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { CONTACT_EMAIL } from "@/lib/contact";
 import { validateFeedback } from "@/lib/feedback";
 import { sendMail } from "@/lib/mail";
+import { allow, visitorKey } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -20,11 +21,13 @@ export async function POST(request: Request) {
   const result = validateFeedback(body);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
 
+  if (!allow(`feedback:${visitorKey(request.headers)}`, 5, 60 * 60_000)) {
+    return NextResponse.json({ error: "Thanks, that's plenty for now. Try again in an hour." }, { status: 429 });
+  }
+
   const { name, email, message } = result.value;
   const to = process.env.FEEDBACK_TO || CONTACT_EMAIL;
 
-  // ponytail: There is no rate limiting or spam control here yet; add an edge
-  // rate limit and abuse filter before this route is exposed to larger traffic.
   try {
     await sendMail({
       to,
