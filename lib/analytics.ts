@@ -27,6 +27,7 @@ export const EVENTS = [
   /** The footer's Donate button was pressed. A placeholder until donations can
    *  be taken, so this counts the demand for one. */
   "donate_clicked",
+  "source_clicked",
   /** A comparison was served, cached or freshly run. */
   "comparison_served",
   /** The language stamp on the search field was opened. Until it can offer a

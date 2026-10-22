@@ -1,81 +1,48 @@
 # wiki-compare
 
 Reads the English, Hebrew and Arabic Wikipedia articles on one subject side by side and marks
-where they disagree: contradicted facts, material one version omits, and the same fact framed
-differently. Hover a mark to see what the difference is.
+where they disagree: contradicted facts, material one version leaves out, and the same fact
+framed differently. Hover a mark to see the matching passages and why it was marked; select any
+text to see where it sits in the other languages.
 
-Live at [wikicompare.app](https://wikicompare.app).
+Live at [wikicompare.app](https://wikicompare.app). Free to use; if it helps you,
+[buy me a coffee](https://ko-fi.com/berlinsessions).
 
 ## How it works
 
-1. A subject is picked from search results (`/api/search`), resolved to a Wikidata QID so
-   "Coffee" the drink, the film and the town don't get confused.
-2. The articles are fetched and parsed (`lib/wikipedia.ts`), and a deterministic pass
-   (`lib/deterministic.ts`) computes the zero-token linked-concept coverage diff.
-3. TypeSafe's Jev matches every paragraph to the other article and classifies every sentence of
-   a matched pair as consistent, contradiction, framing or gap (`lib/jev/`), reading the whole
-   article. Design and gold set: [docs/jev-poc-design.md](docs/jev-poc-design.md).
-4. Results are cached by article revision so a stable article costs tokens only once
-   (`lib/db.ts`).
-5. Separately, and without a model, the reference lists are read and matched across the
-   languages by URL, DOI, ISBN and title (`lib/sources.ts`), which is what the sources panel
-   under the article draws its shared entries and blindspots from.
+1. A subject is resolved to its Wikidata item, and each language's article is fetched and split
+   into paragraphs and sentences (`lib/wikipedia.ts`, `lib/jev/segment.ts`).
+2. TypeSafe's Jev matches every paragraph to the other articles and
+   classifies every sentence as consistent, contradiction, framing or gap, then rates how much
+   each difference matters (`lib/jev/`). Design, measurements and the gold set:
+   [docs/jev-poc-design.md](docs/jev-poc-design.md).
+3. Only the most important differences are drawn by default (`lib/salience.ts`).
+4. Claude writes an explanation of a difference when a reader points at it, once per difference
+   (`app/api/explain/`).
+5. Results are cached by article revision (`lib/db.ts`). Reference lists are matched across
+   languages without a model (`lib/sources.ts`).
 
-Reading an already-compared article is free, and so is running a new comparison: each run is
-paid for once and then served from the cache to everyone after. New comparisons are rate limited
-per visitor (`lib/rate-limit.ts`).
+A comparison costs about 1 to 15 cents and is served from the cache to everyone after.
 
-## Architecture
-
-```
-app/
-  page.tsx, layout.tsx      landing page and shell
-  api/search/                candidate articles for a query or pasted URL
-  api/articles/               sitelinks + revisions, ahead of the comparison
-  api/compare/                the comparison itself (cache read or a fresh Jev run)
-  api/sources/                each version's footnotes, matched across languages
-  api/recent/                 recently cached comparisons, for the landing page
-  api/feedback/               the feedback form, mailed to the site inbox
-  privacy/                    supporting page
-
-components/                  UI: search/compare flow, side-by-side columns and highlighting,
-                              language switch
-
-lib/
-  wikipedia.ts                MediaWiki + Wikidata fetching, parsing, search
-  deterministic.ts            zero-token coverage diff and figure extraction
-  sources.ts                  reference-list parsing and cross-language source matching
-  jev/                        the comparison engine: segmentation, matching, classification
-  db.ts                       cache layer (Neon/Postgres)
-  pricing.ts                  what a run cost
-  rate-limit.ts               per-visitor limit on new comparisons
-
-db/schema.sql                 database schema (app tables, plus retired account tables)
-fixtures/, scripts/           recorded API fixtures and check/test scripts
-```
-
-## Setup
+## Running it
 
 ```bash
 npm install
-cp .env.example .env.local     # fill in DATABASE_URL and TYPESAFE_API_KEY
+cp .env.example .env.local     # DATABASE_URL, TYPESAFE_API_KEY, ANTHROPIC_API_KEY
 npm run db:init
 npm run dev
 ```
 
-See `.env.example` for the full list of environment variables.
-
-## Testing
+`/?title=demo:jev:palestinian-legislative-council` runs the engine on a recorded fixture, with no
+Wikipedia fetch.
 
 ```bash
-npm run check              # every offline check: no model, no database
-npm run check:ui           # rendering, needs `npm run dev` in another shell
-npm run fixtures:save "Article title"   # record a new fixture
-npm run jev:run -- <fixture>            # a real Jev run on a fixture, with an HTML review page
+npm run check                    # offline checks, no model or database
+npm run check:ui                 # rendering, against a running dev server
+npm run jev:run -- <fixture>     # a real Jev run, with an HTML review page
 ```
 
-## Caveats
+## Caveat
 
-Comparisons are generated by a language model and can be wrong or incomplete — treat a marked
-difference as a pointer to check the sources, not a finding. Every column links to the exact
-revision it rendered, so anything shown here can be checked against the article itself.
+Comparisons are machine-generated and can be wrong or incomplete. Treat a marked difference as a
+pointer to check the sources, not a finding. Every column links to the exact revision it shows.
