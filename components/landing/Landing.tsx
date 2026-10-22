@@ -52,22 +52,22 @@ export default function Landing({
    * Watching a one-pixel marker under the hero field, rather than the scroll
    * position: the hero's height depends on the viewport, the headline's
    * wrapping and whether the try-chips fell onto a second line, so any pixel
-   * threshold picked here would be wrong on some screen. The observer asks the
+   * threshold picked here would be wrong on some screen. This asks the
    * only question that matters — is the field still reachable.
    */
   useEffect(() => {
     const mark = sentinel.current;
     if (!mark) return;
-    if (typeof IntersectionObserver === "undefined") return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => onDocked(!entry.isIntersecting),
-      // The masthead covers the top of the viewport, so the sentinel is out of
-      // reach a little before it is out of the window.
-      { rootMargin: "-72px 0px 0px 0px" },
-    );
-    observer.observe(mark);
-    return () => observer.disconnect();
+    // Measured against the masthead's own bottom edge, not a fixed margin: it
+    // grows when it docks, pushing the sentinel down by the same amount, and a
+    // fixed line would undock it again, back and forth every frame.
+    const update = () => {
+      const head = document.querySelector("header.masthead");
+      onDocked(mark.getBoundingClientRect().top < (head?.getBoundingClientRect().bottom ?? 0));
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
   }, [onDocked]);
 
   return (
