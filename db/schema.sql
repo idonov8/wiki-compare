@@ -82,3 +82,13 @@ CREATE TABLE IF NOT EXISTS labels (
 -- How many people have read a cached comparison. Defaulting to 0 rather than 1
 -- keeps the counter meaning reads served from cache.
 ALTER TABLE comparisons ADD COLUMN IF NOT EXISTS served_count INTEGER NOT NULL DEFAULT 0;
+
+-- People who asked to hear about the project. Not a newsletter: an occasional
+-- update, each one carrying the token's unsubscribe link. Unsubscribing keeps
+-- the row (marked), so signing up again is the same row coming back.
+CREATE TABLE IF NOT EXISTS update_subscribers (
+  email TEXT PRIMARY KEY,
+  token TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  unsubscribed_at TIMESTAMPTZ
+);

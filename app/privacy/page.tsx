@@ -18,10 +18,6 @@ export const metadata = {
  * profileless, app/api/feedback/route.ts must keep mailing feedback rather than
  * storing it, and the third-party list is the set of hosts a reader's browser or
  * our server actually talks to.
- *
- * See docs/compliance-audit-israel.md for what is still outstanding — a lawyer
- * has not read this, and the retention periods below are intentions rather than
- * anything the code currently enforces.
  */
 
 const UPDATED = "October 2026";
@@ -90,9 +86,18 @@ export default function Page() {
             </p>
           </Block>
 
+          <Block heading="If you sign up for updates">
+            <p>
+              The address you give is kept in the site&apos;s database and used for one thing: an
+              occasional email when there is news about the project. Every update carries a link to
+              unsubscribe, and you can also ask to be removed by writing to the address above.
+            </p>
+          </Block>
+
           <Block heading="Why we hold it">
             <p>
-              To answer your feedback, and to know whether anybody is using this. Nothing here is
+              To answer your feedback, to send the updates you asked for, and to know whether anybody
+              is using this. Nothing here is
               sold, rented, or used to advertise to you, and none of it is used to build a profile of
               what you read.
             </p>

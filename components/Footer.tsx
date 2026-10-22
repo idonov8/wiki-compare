@@ -1,6 +1,7 @@
 "use client";
 
 import { MEASURE } from "./landing/Section";
+import UpdatesForm from "./UpdatesForm";
 import { track } from "@/lib/analytics";
 import { CONTACT_EMAIL } from "@/lib/contact";
 
@@ -9,7 +10,8 @@ const DONATE_URL = "https://ko-fi.com/berlinsessions";
 
 /**
  * The colophon, at the foot of every page: the standing caveat, a route to
- * complain, the licence the columns are under, the source, and a signature.
+ * complain, the licence the columns are under, the source, a way to hear about
+ * the project, and a signature.
  *
  * Everything here has to be on every page to do its job — the caveat is true of
  * every comparison, the mailto is the complaint route a defamation claim asks
@@ -41,6 +43,7 @@ export default function Footer({
             Report a problem
           </a>
         </p>
+        <UpdatesForm />
         <div className="flex items-baseline justify-between gap-[16px] max-tight:flex-col max-tight:items-start">
           <span className="min-w-0 flex-1">
             © {new Date().getFullYear()}{" "}

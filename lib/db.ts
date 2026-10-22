@@ -363,3 +363,36 @@ export async function spentSince(since: Date): Promise<number> {
   `;
   return Number(rows[0]?.usd ?? 0);
 }
+
+/** Adds an address to the updates list, or brings back one that left it. */
+export async function addSubscriber(email: string): Promise<void> {
+  await sql()`
+    INSERT INTO update_subscribers (email, token)
+    VALUES (${email.toLowerCase()}, ${crypto.randomUUID()})
+    ON CONFLICT (email) DO UPDATE SET unsubscribed_at = NULL
+  `;
+}
+
+/** Takes the address with this token off the list. False for an unknown token. */
+export async function removeSubscriber(token: string): Promise<boolean> {
+  const rows = await sql()`
+    UPDATE update_subscribers SET unsubscribed_at = COALESCE(unsubscribed_at, now())
+    WHERE token = ${token}
+    RETURNING email
+  `;
+  return rows.length > 0;
+}
+
+/** Everyone still on the list, with the token their unsubscribe link carries. */
+export async function listSubscribers(): Promise<{ email: string; token: string; createdAt: string }[]> {
+  const rows = await sql()`
+    SELECT email, token, created_at FROM update_subscribers
+    WHERE unsubscribed_at IS NULL
+    ORDER BY created_at
+  `;
+  return rows.map((row) => ({
+    email: row.email as string,
+    token: row.token as string,
+    createdAt: new Date(row.created_at as string).toISOString(),
+  }));
+}

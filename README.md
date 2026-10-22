@@ -22,8 +22,8 @@ Live at [wikicompare.app](https://wikicompare.app). Free to use; if it helps you
 5. Results are cached by article revision (`lib/db.ts`). Reference lists are matched across
    languages without a model (`lib/sources.ts`).
 
-A comparison costs about 1 to 15 cents and is served from the cache to everyone after. Spending
-on models is capped per day (`DAILY_BUDGET_USD`, `lib/budget.ts`).
+Each comparison is computed once and served from the cache to everyone after. Spending on models
+is capped per day (`DAILY_BUDGET_USD`, `lib/budget.ts`).
 
 ## Running it
 
@@ -42,6 +42,16 @@ npm run check                    # offline checks, no model or database
 npm run check:ui                 # rendering, against a running dev server
 npm run jev:run -- <fixture>     # a real Jev run, with an HTML review page
 ```
+
+`npm run subscribers` lists the people who signed up for project updates, each with their
+unsubscribe link.
+
+## License
+
+The code is under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): free to use, change and
+share for any noncommercial purpose. For commercial use, get in touch. Wikipedia text and images,
+including the recorded articles in `fixtures/`, are under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) from their authors.
 
 ## Caveat
 

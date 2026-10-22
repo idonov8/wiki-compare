@@ -8,7 +8,7 @@ import type { ArticleSnapshot, Lang } from "@/lib/types";
 
 /**
  * The strip above the columns: how long each edition is, what the marks mean,
- * and — in `meta` — what this comparison is and what it cost.
+ * and, in `meta`, what this comparison found.
  *
  * The length chart serves both layouts because "on screen" is one sentence in
  * both, but it is not the same question underneath: a wide screen is choosing

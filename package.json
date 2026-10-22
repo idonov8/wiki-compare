@@ -21,11 +21,12 @@
     "check:jev": "tsx scripts/check-jev.mts",
     "check": "npm run check:input && npm run check:parser && npm run check:sources && npm run check:deterministic && npm run check:live && npm run check:segment && npm run check:jev",
     "jev:run": "tsx --env-file-if-exists=.env.local scripts/jev-run.mts",
+    "subscribers": "tsx --env-file-if-exists=.env.local scripts/subscribers.mts",
     "check:ui": "tsx scripts/check-ui.mts"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
     "@neondatabase/serverless": "^1.1.0",
