@@ -41,7 +41,15 @@ async function api<T>(endpoint: string, params: Record<string, string>): Promise
   return (await res.json()) as T;
 }
 
-const wiki = (lang: string) => `https://${lang}.wikipedia.org/w/api.php`;
+/** A language code as Wikipedia spells its subdomains ("en", "zh-min-nan").
+ *  Checked here because every request to a wiki is built from it, and the code
+ *  often comes straight from a query string. */
+const WIKI_LANG = /^[a-z]{2,8}(-[a-z]{2,8})*$/;
+
+function wiki(lang: string): string {
+  if (!WIKI_LANG.test(lang)) throw new Error(`Not a Wikipedia language: ${lang.slice(0, 20)}`);
+  return `https://${lang}.wikipedia.org/w/api.php`;
+}
 const WIKIDATA = "https://www.wikidata.org/w/api.php";
 
 /** The language whose Wikipedia a query is most likely written for. Script is

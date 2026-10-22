@@ -83,7 +83,7 @@
 
   /* ---- the house signature ----
      An offset hard shadow marks the live thing on the page: the claim card,
-     the panels that open under the masthead, the checkout summary. */
+     the panels that open under the masthead, the passages laid over a column. */
   --shadow-offset: 3px 3px 0 rgb(22 24 28 / 0.14);
   --shadow-offset-soft: 3px 3px 0 rgb(22 24 28 / 0.12);
 

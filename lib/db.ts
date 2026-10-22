@@ -338,3 +338,28 @@ export async function putExplanation(
     ON CONFLICT (cache_key, claim_id) DO NOTHING
   `;
 }
+
+/**
+ * What the paid models have cost since `since`: every stored comparison's
+ * recorded price, and every explanation priced from its tokens at Sonnet's
+ * rates. A run that failed before it was stored is not counted, so this runs a
+ * little under the bill, never over it.
+ */
+export async function spentSince(since: Date): Promise<number> {
+  const rows = await sql()`
+    SELECT
+      COALESCE((
+        SELECT SUM((result->'usage'->>'costUsd')::numeric)
+        FROM comparisons WHERE computed_at >= ${since.toISOString()}
+      ), 0)
+      +
+      COALESCE((
+        SELECT SUM(
+          COALESCE((usage->>'input_tokens')::numeric, 0) * 2 / 1e6 +
+          COALESCE((usage->>'output_tokens')::numeric, 0) * 10 / 1e6
+        )
+        FROM explanations WHERE created_at >= ${since.toISOString()}
+      ), 0) AS usd
+  `;
+  return Number(rows[0]?.usd ?? 0);
+}

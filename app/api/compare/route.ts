@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { checkBudget, OverBudget } from "@/lib/budget";
 import {
   type CacheInfo,
   type Claim,
@@ -37,6 +38,19 @@ class TooManyComparisons extends Error {
   constructor() {
     super("Too many new comparisons from here; try again in a few minutes.");
   }
+}
+
+/**
+ * What a visitor is told when a comparison fails. Our own errors are written to
+ * be read; a provider's (TypeSafe, Neon, Anthropic) carries a status code and
+ * talks about billing or connections, so it is logged and replaced.
+ */
+function publicMessage(error: unknown): string {
+  if (!(error instanceof Error)) return "Comparison failed.";
+  const provider = typeof (error as { status?: unknown }).status === "number" || "code" in error;
+  if (!provider) return error.message;
+  console.error("comparison failed:", error);
+  return "The comparison service is unavailable right now. Please try again later.";
 }
 
 /** Read the article, price it, store it. */
@@ -166,7 +180,7 @@ function ndjson(run: (emit: (event: CompareEvent) => void) => Promise<void>): Re
       } catch (error) {
         emit({
           event: "error",
-          error: error instanceof Error ? error.message : "Comparison failed.",
+          error: publicMessage(error),
         });
       } finally {
         closed = true;
@@ -272,6 +286,7 @@ export async function GET(request: Request) {
     if (!allow(`compare:${visitorKey(request.headers)}`, 10, 10 * 60_000)) {
       throw new TooManyComparisons();
     }
+    await checkBudget();
 
     const { result } = await computeAndStore(target, { overwrite: bypassCache, emit });
     void capture("comparison_served", { qid, fromCache: false, costUsd: result.usage.costUsd ?? 0 });
@@ -291,7 +306,8 @@ export async function GET(request: Request) {
   try {
     return NextResponse.json(await serve(() => {}));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Comparison failed.";
-    return NextResponse.json({ error: message }, { status: error instanceof TooManyComparisons ? 429 : 500 });
+    const message = publicMessage(error);
+    const status = error instanceof TooManyComparisons || error instanceof OverBudget ? 429 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

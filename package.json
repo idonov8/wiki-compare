@@ -1,8 +1,9 @@
 {
   "name": "wiki-compare",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Compares the English, Hebrew and Arabic Wikipedia articles on one subject and marks where they disagree.",
+  "repository": "github:idonov8/wiki-compare",
+  "homepage": "https://wikicompare.app",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

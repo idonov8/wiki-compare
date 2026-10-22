@@ -24,9 +24,9 @@ const HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
 export const EVENTS = [
   /** A comparison was opened, from search, a link or the recent list. */
   "article_opened",
-  /** The footer's Donate button was pressed. A placeholder until donations can
-   *  be taken, so this counts the demand for one. */
+  /** The footer's Donate link, to Ko-fi, was followed. */
   "donate_clicked",
+  /** The footer's link to the source on GitHub was followed. */
   "source_clicked",
   /** A comparison was served, cached or freshly run. */
   "comparison_served",

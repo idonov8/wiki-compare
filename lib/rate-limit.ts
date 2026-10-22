@@ -1,10 +1,11 @@
 /**
- * A per-visitor allowance for the paths that spend money: a fresh comparison and
- * a generated explanation.
+ * A per-visitor allowance for the paths that spend money or reach out on a
+ * visitor's behalf: a fresh comparison, a generated explanation, the feedback
+ * mail, and fetches from Wikipedia.
  *
  * In memory, so each server instance counts on its own and a cold start forgets.
  * That is enough to stop one tab from looping on an endpoint, which is the abuse
- * this is for; it is not a quota anyone could be billed against.
+ * this is for; the bound on the bill is lib/budget.ts.
  */
 const windows = new Map<string, number[]>();
 

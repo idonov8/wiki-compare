@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { resolveTarget, snapshotsFor } from "@/lib/articles";
+import { allow, visitorKey } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -20,6 +21,9 @@ export async function GET(request: Request) {
     const { demoComparison } = await import("@/fixtures/demo");
     const demo = demoComparison(title.slice(5));
     return NextResponse.json({ qid: demo.qid, articles: demo.articles });
+  }
+  if (!allow(`articles:${visitorKey(request.headers)}`, 60, 10 * 60_000)) {
+    return NextResponse.json({ error: "Too many articles at once; try again in a few minutes." }, { status: 429 });
   }
 
   try {

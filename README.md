@@ -22,7 +22,8 @@ Live at [wikicompare.app](https://wikicompare.app). Free to use; if it helps you
 5. Results are cached by article revision (`lib/db.ts`). Reference lists are matched across
    languages without a model (`lib/sources.ts`).
 
-A comparison costs about 1 to 15 cents and is served from the cache to everyone after.
+A comparison costs about 1 to 15 cents and is served from the cache to everyone after. Spending
+on models is capped per day (`DAILY_BUDGET_USD`, `lib/budget.ts`).
 
 ## Running it
 
