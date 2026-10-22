@@ -4,9 +4,12 @@ import { MEASURE } from "./landing/Section";
 import { track } from "@/lib/analytics";
 import { CONTACT_EMAIL } from "@/lib/contact";
 
+const SOURCE_URL = "https://github.com/idonov8/wiki-compare";
+const DONATE_URL = "https://ko-fi.com/berlinsessions";
+
 /**
  * The colophon, at the foot of every page: the standing caveat, a route to
- * complain, the licence the columns are under, and a signature.
+ * complain, the licence the columns are under, the source, and a signature.
  *
  * Everything here has to be on every page to do its job — the caveat is true of
  * every comparison, the mailto is the complaint route a defamation claim asks
@@ -66,17 +69,26 @@ export default function Footer({
             <button type="button" className="text-ink hover:underline" onClick={onFeedback}>
               Feedback
             </button>
+            {" · "}
+            <a
+              href={SOURCE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-ink hover:underline"
+              onClick={() => track("source_clicked")}
+            >
+              Source on GitHub
+            </a>
           </span>
-          {/* A placeholder: there is nowhere to donate yet, so pressing it only
-              counts the people who would have. */}
-          <button
-            type="button"
-            className="shrink-0 border border-rule px-[10px] py-[4px] font-mono text-[11px] tracking-[0.04em] text-ink-soft transition-colors duration-[120ms] hover:border-ink hover:text-ink"
+          <a
+            href={DONATE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 border border-rule px-[10px] py-[4px] font-mono text-[11px] tracking-[0.04em] text-ink-soft no-underline transition-colors duration-[120ms] hover:border-ink hover:text-ink"
             onClick={() => track("donate_clicked")}
-            title="Donations are coming soon"
           >
             Donate
-          </button>
+          </a>
         </div>
       </div>
     </footer>
