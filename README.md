@@ -1,15 +1,9 @@
-# wiki-compare
-
-Reads the English, Hebrew and Arabic Wikipedia articles on one subject side by side and marks
-where they disagree: contradicted facts, material one version leaves out, and the same fact
-framed differently. Hover a mark to see the matching passages and why it was marked; select any
-text to see where it sits in the other languages.
-
-Live at [wikicompare.app](https://wikicompare.app). Free to use; if it helps you,
-[buy me a coffee](https://ko-fi.com/berlinsessions).
+# Semantic diffing across languages powered by Jev 
 
 https://github.com/user-attachments/assets/7c793d88-b3c4-4e9a-91fb-c60ed754191f
 
+Live at demo with Wikipedia articles on [wikicompare.app](https://wikicompare.app) **for free!!** (actually I pay for it :')))
+[buy my ai a coffee](https://ko-fi.com/berlinsessions) if you enjoy it. 
 
 
 
