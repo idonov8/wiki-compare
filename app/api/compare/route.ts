@@ -23,6 +23,7 @@ import { JEV_VERSION, runJevComparison } from "@/lib/jev/pipeline";
 import { salientClaims, tallyShown } from "@/lib/salience";
 import { allow, visitorKey } from "@/lib/rate-limit";
 import { capture } from "@/lib/analytics";
+import { OUT_OF_CREDIT } from "@/lib/contact";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -50,6 +51,7 @@ function publicMessage(error: unknown): string {
   const provider = typeof (error as { status?: unknown }).status === "number" || "code" in error;
   if (!provider) return error.message;
   console.error("comparison failed:", error);
+  if ((error as { status?: unknown }).status === 402) return OUT_OF_CREDIT;
   return "The comparison service is unavailable right now. Please try again later.";
 }
 
