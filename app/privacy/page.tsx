@@ -45,8 +45,8 @@ export default function Page() {
             <p>
               Reading this site sets no cookies and creates no record of you. There is no cookie
               banner because there are no cookies to ask about. If you send feedback, we
-              receive what you wrote and the email address you gave, and you can have it deleted by
-              asking.
+              receive what you wrote and the email address you gave. If you sign up for updates, we
+              keep your email address until you unsubscribe. Either can be deleted by asking.
             </p>
           </Block>
 
@@ -128,8 +128,9 @@ export default function Page() {
           <Block heading="Email">
             <p>
               Nothing is emailed to you automatically. We write only to answer feedback you sent,
-              we will not add you to a mailing list, and if we ever want to write to you about
-              anything else, we will ask first and take no for an answer.
+              or to send updates if you signed up for them. Sending feedback never puts you on the
+              updates list, and if we ever want to write to you about anything else, we will ask
+              first and take no for an answer.
             </p>
           </Block>
 
