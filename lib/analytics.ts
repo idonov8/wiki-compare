@@ -26,7 +26,8 @@ export const EVENTS = [
   "article_opened",
   /** The footer's Donate link, to Ko-fi, was followed. */
   "donate_clicked",
-  /** The footer's link to the source on GitHub was followed. */
+  /** A link to the source on GitHub was followed: from the footer, or from the
+   *  out-of-credit notice (`from: "out_of_credit"`). */
   "source_clicked",
   /** Someone joined, or left, the list for project updates. */
   "updates_subscribed",

@@ -1,7 +1,7 @@
 "use client";
 
 import { track } from "@/lib/analytics";
-import { CONTACT_EMAIL, DONATE_URL, OUT_OF_CREDIT } from "@/lib/contact";
+import { CONTACT_EMAIL, DONATE_URL, OUT_OF_CREDIT, SOURCE_URL } from "@/lib/contact";
 
 function OutOfCredit() {
   return (
@@ -20,7 +20,16 @@ function OutOfCredit() {
       <a href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Wiki Compare is out of credit")}`} className="text-ink underline">
         {CONTACT_EMAIL}
       </a>
-      , I&apos;m taking care of that ASAP!!
+      , I&apos;m taking care of that ASAP!! Or, run it yourself with your own accounts.{" "}
+      <a
+        href={SOURCE_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-ink underline"
+        onClick={() => track("source_clicked", { from: "out_of_credit" })}
+      >
+        The code is public on GitHub.
+      </a>
     </p>
   );
 }
