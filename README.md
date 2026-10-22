@@ -8,6 +8,11 @@ text to see where it sits in the other languages.
 Live at [wikicompare.app](https://wikicompare.app). Free to use; if it helps you,
 [buy me a coffee](https://ko-fi.com/berlinsessions).
 
+https://github.com/user-attachments/assets/7c793d88-b3c4-4e9a-91fb-c60ed754191f
+
+
+
+
 ## How it works
 
 1. A subject is resolved to its Wikidata item, and each language's article is fetched and split
