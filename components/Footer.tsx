@@ -3,9 +3,7 @@
 import { MEASURE } from "./landing/Section";
 import UpdatesForm from "./UpdatesForm";
 import { track } from "@/lib/analytics";
-import { CONTACT_EMAIL, DONATE_URL } from "@/lib/contact";
-
-const SOURCE_URL = "https://github.com/idonov8/wiki-compare";
+import { CONTACT_EMAIL, DONATE_URL, SOURCE_URL } from "@/lib/contact";
 
 /**
  * The colophon, at the foot of every page: the standing caveat, a route to
