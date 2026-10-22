@@ -23,7 +23,45 @@ export interface Claim {
   summary: string;
   explanation: string;
   spans: Partial<Record<Lang, string>>;
+  /** How sure the engine was, 0 to 1. Absent on the demo fixtures' hand-built claims. */
+  confidence?: number;
+  /** How much the difference matters to a reader, 0 (minor detail) to 3
+   *  (central or contested). Jev's expected score; see `isSalient`. */
+  importance?: number;
+  /** For a gap: the languages whose articles lack it. */
+  missingFrom?: Lang[];
+  /** Exactly where each span sits, where `spans` can only be searched for. */
+  refs?: Partial<Record<Lang, TextRef>>;
+  /** Gaps of one paragraph missing as a whole share this, and are shown or
+   *  hidden together. */
+  group?: string;
 }
+
+/** A run of one section's text, as character offsets into `Section.text`. */
+export interface TextRef {
+  section: number;
+  start: number;
+  end: number;
+}
+
+/** Where a sentence's content sits in another language's article: the paragraph
+ *  it was matched to and, when Jev could point at one, the sentence. */
+export interface Counterpart {
+  paragraph: TextRef;
+  sentence?: TextRef;
+  /** How sure the match was, 0 to 1. */
+  p: number;
+}
+
+/** One sentence of one article and its counterpart in each other language;
+ *  `null` where no paragraph of that language covers it. */
+export interface AlignedSentence extends TextRef {
+  /** The paragraph the sentence belongs to, for placing the hover panel. */
+  paragraph: TextRef;
+  to: Partial<Record<Lang, Counterpart | null>>;
+}
+
+export type Alignment = Partial<Record<Lang, AlignedSentence[]>>;
 
 /** A Wikipedia-internal link, as a character range into a section's `text`.
  *  `title` is the linked article's title in that section's own language.
@@ -152,42 +190,22 @@ export interface TokenCount {
 /**
  * What a run spent.
  *
- * The totals are what they always were. `byModel` is the addition that makes the
- * figure priceable: heading alignment runs on Haiku and the claim diff on
- * Sonnet, three times the price, so a summed total cannot be costed at either
- * rate without being wrong in one direction. `costUsd` is computed once, at the
- * end of the run that spent it, and stored — prices move, and a comparison from
- * three weeks ago should keep reporting its own bill rather than being re-priced
- * by today's table.
+ * `byModel` files the same tokens under the model that spent them, which is what
+ * makes the figure priceable when a run uses models at different rates.
+ * `costUsd` is computed once, at the end of the run that spent it, and stored —
+ * prices move, and a comparison from three weeks ago should keep reporting its
+ * own bill rather than being re-priced by today's table.
  */
 export interface Usage extends TokenCount {
   byModel?: Record<string, TokenCount>;
   costUsd?: number;
 }
 
-/** How much of the article a comparison actually read. */
-export type ScopeKind = "preview" | "full";
-
-/**
- * Where a preview stopped in one language.
- *
- * A preview reads a fixed number of characters off the top of every version, and
- * a character budget does not respect section boundaries — so the boundary is a
- * position, not an index: `section` counts body sections (the article's sections
- * with the key-facts block removed, as `Columns` renders them) and `chars` says
- * how far into that section the reading got. `chars: 0` means the budget ran out
- * on the boundary and `section` was not read at all; anything else means it was
- * read that far and the remainder belongs below the gate.
- */
-export interface PreviewCut {
-  section: number;
-  chars: number;
-}
+/** How much of the article a comparison actually read. Every run reads all of it. */
+export type ScopeKind = "full";
 
 export interface ComparisonScope {
   kind: ScopeKind;
-  /** Per language, where this comparison stopped reading. Absent on a full run. */
-  processedThrough?: Partial<Record<Lang, PreviewCut>>;
 }
 
 export interface ComparisonResult {
@@ -199,11 +217,17 @@ export interface ComparisonResult {
   parserVersion?: string;
   computedAt: string;
   usage: Usage;
-  /** Absent on rows written before previews existed; treat those as full. */
   scope?: ComparisonScope;
   /** How many verbatim spans the model offered and how many were located. A low
    *  match rate means the prompt needs tightening, not the matcher loosening. */
   spans?: { offered: number; matched: number; droppedClaims: number };
+  /** Sentence-by-sentence correspondence across the languages. Jev runs only. */
+  alignment?: Alignment;
+  /** The stored row's key, which is how a claim's explanation is asked for. */
+  cacheKey?: string;
+  /** How many differences of each kind are drawn by default, for the ledger,
+   *  which cannot work out the threshold without the articles' text. */
+  tally?: Record<ClaimType, number>;
 }
 
 /** Provenance of a comparison that came out of the cache. Present only then. */
@@ -234,118 +258,10 @@ export interface ComparePayload extends ComparisonResult {
  */
 export type CompareEvent =
   | { event: "articles"; qid: string; articles: Record<string, ArticleSnapshot> }
-  | { event: "scope"; scope: ComparisonScope }
   | { event: "coverage"; coverage: CoverageGap[] }
   | { event: "claim"; claim: Claim }
   | { event: "done"; result: ComparisonResult; fromCache: boolean; cache?: CacheInfo }
   | { event: "error"; error: string };
-
-/**
- * The site's own Anthropic balance is empty, so nothing can be read at all.
- *
- * It travels as the ordinary `error` string rather than as a field of its own,
- * so a client that knows nothing about it still shows a sentence that is true.
- * The one that does matches it exactly and offers the way out — donating and
- * telling me — which is the only thing a reader can do about it.
- */
-export const OUT_OF_CREDIT =
-  "Sorry, my account is literally empty and can't process anything at the moment.";
-
-/* ---- accounts and credits ---- */
-
-/**
- * Who is reading, and what they have left to spend.
- *
- * Identity comes from Better Auth; the two credit figures are our columns on its
- * user record. `articlesProcessed` and `readsOfThoseArticles` are the two numbers
- * the credit bar thanks somebody with — what they paid for, and how many people
- * have read it since, which is the part that makes the donation mean something.
- */
-export interface MeResponse {
-  email: string;
-  creditCents: number;
-  /** The most this account has ever held, so the meter has a denominator. */
-  peakCreditCents: number;
-  articlesProcessed: number;
-  readsOfThoseArticles: number;
-  /** Whether this account is still holding the sign-up credit, untouched and
-   *  unadded-to. What the masthead's welcome note keys off — see the route. */
-  newcomer: boolean;
-  /** Whether the onboarding tour has been finished on any browser. Overrides
-   *  this browser's own progress through it. */
-  onboardingDone: boolean;
-}
-
-/** What the mock payment page submits. Amounts are whole cents. */
-export interface DonateRequest {
-  amountCents: number;
-  maintenanceCents: number;
-  monthly: boolean;
-  /** Which surface sent them here, for the funnel. */
-  from?: string;
-}
-
-/**
- * The exact proposition somebody agrees to by pressing the button on the reveal.
- *
- * Lives here because both sides need the same string and neither may own it: the
- * button renders it in the browser, and `/api/email-consent` stores it as the
- * evidence of what was agreed to. s.30A consent is consent to a particular
- * wording, so a log holding different words from the ones on the screen attests
- * to something that never happened. Changing this sentence changes what future
- * rows mean — old rows keep the words they were given, which is the point of
- * storing them per row rather than looking them up.
- */
-export const EMAIL_CONSENT_WORDING = "Send me an email once payments are available";
-
-/** What the pay button submits to redeem. Case and spacing are the server's problem. */
-export interface CouponRequest {
-  code: string;
-}
-
-/** A code that checked out. No balance in it: nothing has moved yet. */
-export interface CouponCheck {
-  code: string;
-  cents: number;
-}
-
-/** A redeemed coupon. Separate from `DonateResponse`: a donation may not follow. */
-export interface CouponResponse {
-  code: string;
-  grantedCents: number;
-  /** The balance afterwards, so the page need not re-ask `/api/me`. */
-  creditCents: number;
-  message: string;
-}
-
-/**
- * The reveal.
- *
- * `granted` is false on every attempt after the first — the intent is still
- * recorded, because people trying to pay is the number worth knowing, but the
- * credit is not granted twice and the copy becomes a promise to come back to
- * them rather than a refusal.
- */
-export interface DonateReveal {
-  /** A mono eyebrow above the headline — sets the register (gift vs. promise). */
-  kicker: string;
-  /** The emotional anchor, set in the display face. */
-  headline: string;
-  /** The granted amount, formatted (e.g. "$5.00"), shown as a hero figure. */
-  gift: string | null;
-  /** The closing line — the thanks or the promise. */
-  body: string;
-}
-
-export interface DonateResponse {
-  granted: boolean;
-  grantedCents: number;
-  creditCents: number;
-  /** The full sentence, kept flat for logs / screen readers / any fallback. */
-  message: string;
-  /** The same copy, split so the reveal can be laid out with hierarchy. */
-  reveal: DonateReveal;
-}
 
 /** One row of the recently-cached list shown before any search. */
 export interface RecentArticle {
@@ -355,13 +271,9 @@ export interface RecentArticle {
   lang: Lang;
   langs: Lang[];
   computedAt: string;
-  /** Whether the cached run behind this row read the whole article or just the
-   *  free preview. Rows written before previews existed have no scope in the
-   *  database and are read as `"full"`, which is what they are. */
-  scope: ScopeKind;
   /** Words per edition, counted the way `articleWords` counts them. An edition
    *  the subject does not have is a missing key rather than a zero. */
   words: Partial<Record<Lang, number>>;
-  /** How many differences of each kind the cached run found. */
+  /** How many differences of each kind the cached run draws by default. */
   claims: Record<ClaimType, number>;
 }

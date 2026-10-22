@@ -10,7 +10,7 @@ import { SOURCES_VERSION, parseSources } from "./sources";
 import { getArticle, getSources, putArticle, putSources } from "./db";
 
 /**
- * Everything both the preview and the comparison need before any model runs:
+ * Everything the comparison needs before any model runs:
  * which Wikidata item the title is, what it is called in each language, and the
  * current revision of each. Revisions come first because they are three tiny
  * calls that decide every cache hit downstream.

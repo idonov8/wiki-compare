@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { BETA_GROUP_URL, CONTACT_EMAIL } from "@/lib/contact";
 
 /**
- * A deliberately small route into the inbox: the reader can send a note
- * without signing in, or choose the direct address and beta group below it.
+ * A deliberately small route into the inbox: the reader can send a note from
+ * here, or choose the direct address and beta group below it.
  */
 export default function FeedbackModal({ onDismiss }: { onDismiss: () => void }) {
   const nameRef = useRef<HTMLInputElement>(null);

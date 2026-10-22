@@ -1,0 +1,4 @@
+User-Agent: *
+Allow: /
+# Crawlers that run the page would otherwise start paid comparisons.
+Disallow: /api/

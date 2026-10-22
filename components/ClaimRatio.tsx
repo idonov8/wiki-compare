@@ -1,4 +1,5 @@
-import type { Claim, ClaimType } from "@/lib/types";
+import { countClaims } from "@/lib/salience";
+import type { ClaimType } from "@/lib/types";
 
 /** The three inks, in the order the legend prints them. `noun` is written after
  *  a count, so it is already the shape a plural takes. */
@@ -10,11 +11,7 @@ export const CLAIM_KINDS: { kind: ClaimType; fill: string; noun: string }[] = [
 
 export type ClaimCounts = Record<ClaimType, number>;
 
-export const countClaims = (claims: Claim[]): ClaimCounts =>
-  claims.reduce(
-    (counts, claim) => ({ ...counts, [claim.type]: counts[claim.type] + 1 }),
-    { contradiction: 0, unique: 0, framing: 0 } as ClaimCounts,
-  );
+export { countClaims };
 
 export const claimsSaid = (counts: ClaimCounts): string =>
   CLAIM_KINDS.filter(({ kind }) => counts[kind])

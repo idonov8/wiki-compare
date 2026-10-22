@@ -1,16 +1,17 @@
 "use client";
 
-import { Fragment, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
-import Highlighted from "./Highlighted";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import Highlighted, { type SentenceTarget } from "./Highlighted";
+import { sentenceKey } from "./compare/useCounterpart";
 import {
   KEY_FACTS_HEADING,
   LANG_META,
   LEAD_HEADING,
+  type Alignment,
   type ArticleSnapshot,
   type Claim,
   type Lang,
   type LinkSpan,
-  type PreviewCut,
   type Section,
 } from "@/lib/types";
 
@@ -210,24 +211,6 @@ function grow(root: HTMLElement | null, bands: Band[]): Band[] | null {
 }
 
 /**
- * A section reduced to a character range of its own text, links carried along.
- *
- * The preview's boundary is a character count and lands wherever it lands, so a
- * section can be cut in half and its two halves rendered on opposite sides of
- * the gate. Links whose span straddles the cut are dropped rather than clipped:
- * half an anchor is not a link to anything.
- */
-function sliceSection(section: Section, from: number, to = section.text.length): Section {
-  return {
-    ...section,
-    text: section.text.slice(from, to),
-    links: section.links
-      ?.filter((l) => l.start >= from && l.end <= to)
-      .map((l) => ({ ...l, start: l.start - from, end: l.end - from })),
-  };
-}
-
-/**
  * The articles, side by side. Rendered as soon as the text exists — before any
  * comparison — so the reader confirms they picked the right subject by reading
  * it, and so the wait is spent on the article rather than on a spinner.
@@ -242,39 +225,39 @@ export default function Columns({
   claims,
   ghost = false,
   activeId = null,
-  processedThrough,
-  part = "whole",
+  alignment,
+  activeSentence = null,
   onEnter,
   onLeave,
   onLink,
+  onSentence,
+  onSentenceLeave,
 }: {
   articles: Record<string, ArticleSnapshot>;
   visible: Lang[];
   claims: Claim[];
   ghost?: boolean;
   activeId?: string | null;
-  /**
-   * Per language, where this comparison stopped reading. Absent means the whole
-   * article was read and there is nothing to split.
-   *
-   * It is per language rather than one number because the editions are written
-   * at different lengths: the same character budget reaches the fourth section
-   * of one and stops half way through the second of another.
-   */
-  processedThrough?: Partial<Record<Lang, PreviewCut>>;
-  /**
-   * `whole` is the ordinary render. A funded comparison never needs anything
-   * else. A preview renders twice — `head`, then the gate, then `tail` — so the
-   * boundary can be a rule straight across all three columns rather than three
-   * ragged fades at three different heights. `tail` drops the column heading,
-   * title, image and key facts, because those belong to the top of the article
-   * and printing them twice would read as the page having started over.
-   */
-  part?: "whole" | "head" | "tail";
+  alignment?: Alignment;
+  activeSentence?: string | null;
   onEnter?: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
   onLeave?: () => void;
   onLink?: (title: string, lang: Lang) => void;
+  onSentence?: (key: string, element: HTMLElement, how: "hover" | "tap") => void;
+  onSentenceLeave?: () => void;
 }) {
+  /** Each section's sentences as hover targets, by language and section index. */
+  const targets = useMemo(() => {
+    const out = new Map<string, SentenceTarget[]>();
+    for (const [lang, rows] of Object.entries(alignment ?? {}) as [Lang, NonNullable<Alignment[Lang]>][]) {
+      for (const row of rows) {
+        const id = `${lang}:${row.section}`;
+        out.set(id, [...(out.get(id) ?? []), { start: row.start, end: row.end, key: sentenceKey(lang, row.section, row.start) }]);
+      }
+    }
+    return out;
+  }, [alignment]);
+
   // One state for every column's "Key facts" accordion, so opening it in any
   // language opens it in all of them — they're the same disclosure, just
   // shown three times.
@@ -314,11 +297,9 @@ export default function Columns({
     };
   }, []);
 
-  // A preview is already cut across all three columns at the gate, and its
-  // remainder is a fading 340px block: neither half has an ending to re-flow
-  // around. Below `cols` there is one column on screen, which cannot run out
-  // beside anything.
-  const banding = part === "whole" && visible.length > 1;
+  // Below `cols` there is one column on screen, which cannot run out beside
+  // anything.
+  const banding = visible.length > 1;
   const signature = `${visible.join(",")}|${visible
     .map((lang) => articles[lang]?.revid ?? 0)
     .join(",")}|${reflow}`;
@@ -351,31 +332,11 @@ export default function Columns({
   const bodyOf = (lang: Lang): Section[] => {
     const article = articles[lang];
     if (!article) return [];
-    const all = article.sections.filter((s) => s.heading !== KEY_FACTS_HEADING);
-    const cut = processedThrough?.[lang];
-    if (!cut || part === "whole") return all;
-
-    // `chars` is how far into `section` the preview got, so that section belongs
-    // to both halves: its opening above the gate and its remainder below.
-    const straddled = cut.chars > 0 ? all[cut.section] : undefined;
-    if (part === "head") {
-      const head = all.slice(0, cut.section);
-      if (straddled) head.push(sliceSection(straddled, 0, cut.chars));
-      return head;
-    }
-
-    const tail = all.slice(straddled ? cut.section + 1 : cut.section);
-    // The remainder keeps its text and loses its heading — LEAD_HEADING is how a
-    // block says it has none — because the heading was printed above the gate,
-    // and printing it again would read as the section having started over.
-    if (straddled) {
-      tail.unshift({ ...sliceSection(straddled, cut.chars), heading: LEAD_HEADING });
-    }
-    return tail;
+    return article.sections.filter((s) => s.heading !== KEY_FACTS_HEADING);
   };
 
   return (
-    <div ref={wrap} className="columns-flow" aria-hidden={part === "tail" ? true : undefined}>
+    <div ref={wrap} className="columns-flow">
       {bands.map((band, bandIndex) => {
         const following = bands[bandIndex + 1];
         const closing = bandIndex === bands.length - 1;
@@ -388,28 +349,7 @@ export default function Columns({
             {bandIndex > 0 && <Bend above={bands[bandIndex - 1]} below={band} inset={inset} />}
             <div
               data-band={bandIndex}
-              className={`${
-                part === "tail"
-                  ? // The unread remainder. It fades out rather than being cut off, because
-                    // the article does not end there — only our reading of it does.
-                    // No `user-select: none`: the text below the gate is Wikipedia's own,
-                    // free to anyone, and locking it would be charging for something we
-                    // neither wrote nor paid for. Only the comparison is unfunded.
-                    // `pointer-events` is off because there is nothing here to hover — no
-                    // marks were placed in this half — and a help cursor over plain text
-                    // would promise a card that never opens.
-                    // Both spellings of the mask: Safari still wants the prefix, and
-                    // dropping it would cut the remainder off flat rather than fading it.
-                    // The height is capped where the fade reaches transparent, so the
-                    // document ends with the fade and the footer follows it. Everything
-                    // past that point was invisible anyway, and scrolling through it —
-                    // or having a script hold the page back from it — made the article
-                    // feel broken rather than paywalled.
-                    "columns columns-faded [-webkit-mask-image:linear-gradient(to_bottom,black_0,transparent_340px)] [mask-image:linear-gradient(to_bottom,black_0,transparent_340px)] pointer-events-none max-h-[340px] overflow-hidden"
-                  : bandIndex === 0
-                    ? "columns"
-                    : "columns-more"
-              } grid max-cols:block items-stretch bg-wiki-page ${
+              className={`${bandIndex === 0 ? "columns" : "columns-more"} grid max-cols:block items-stretch bg-wiki-page ${
                 // A band this narrow is always the last one — nothing can run out
                 // beside a single column — so it is ruled on three sides and the
                 // sheet closes rather than running off the foot of the article.
@@ -432,12 +372,12 @@ export default function Columns({
                 const from = band.from[lang] ?? 0;
                 const to = following?.langs.includes(lang) ? following.from[lang]! : all.length;
                 const body = all.slice(from, to);
-                const chrome = bandIndex === 0 && part !== "tail";
+                const chrome = bandIndex === 0;
                 // This edition stops here while the page carries on without it. Said
                 // out loud, because a column that simply stopped next to one that
                 // did not would read as text we had dropped.
                 const closes = !closing && !following?.langs.includes(lang);
-                const highlight = (text: string, links?: LinkSpan[]) => (
+                const highlight = (text: string, links?: LinkSpan[], section?: number) => (
                   <Highlighted
                     text={text}
                     lang={lang}
@@ -445,9 +385,14 @@ export default function Columns({
                     links={links}
                     ghost={ghost}
                     activeId={activeId}
+                    section={section}
+                    sentences={section === undefined ? undefined : targets.get(`${lang}:${section}`)}
+                    activeSentence={activeSentence}
                     onEnter={onEnter}
                     onLeave={onLeave}
                     onLink={onLink}
+                    onSentence={onSentence}
+                    onSentenceLeave={onSentenceLeave}
                   />
                 );
                 // `data-block` is what the banding measures against: one rect per
@@ -459,7 +404,7 @@ export default function Columns({
                         {section.heading}
                       </h3>
                     )}
-                    {highlight(section.text, section.links)}
+                    {highlight(section.text, section.links, article.sections.indexOf(section))}
                   </div>
                 );
                 return (

@@ -1,12 +1,11 @@
 import { neon } from "@neondatabase/serverless";
-import { PROMPT_VERSION } from "./compare";
+import { JEV_VERSION } from "./jev/pipeline";
 import {
   LANGS,
   type ArticleSnapshot,
   type ComparisonResult,
   type Lang,
   type RecentArticle,
-  type ScopeKind,
   type Source,
 } from "./types";
 import { PARSER_VERSION } from "./wikipedia";
@@ -23,12 +22,11 @@ function sql() {
  * Wikipedia revision ids are immutable, so neither cache ever needs an
  * invalidation pass. Keying article text on revid alone means an edit to the
  * Hebrew page does not invalidate the English or Arabic fetch. Keying the
- * comparison on all three revids plus the prompt version means the model runs
- * again only when an article actually changed or the prompt did.
+ * comparison on all three revids plus the engine version means the model runs
+ * again only when an article actually changed or the engine did.
  *
  * Reads are looser than writes: a stored comparison keeps answering after the
- * revisions it was computed from have moved on, until somebody pays to have the
- * article read again. See `getCachedComparison`.
+ * revisions it was computed from have moved on. See `getCachedComparison`.
  */
 
 export async function getArticle(
@@ -58,7 +56,7 @@ export async function putArticle(snapshot: ArticleSnapshot, parserVersion: strin
  * A third cache of the same shape as the two above, and separate from them for
  * the same reason they are separate from each other: a sources list is read out
  * of the part of the page the article parser throws away, so nothing about it
- * changes when the parser or the prompt does. Folded into `articles`, every
+ * changes when the parser or the engine does. Folded into `articles`, every
  * change to either version would have thrown away a comparison to re-read a
  * reference list that had not changed a character.
  */
@@ -88,30 +86,17 @@ export async function putSources(
   `;
 }
 
-/**
- * The scope belongs in the key.
- *
- * A preview and a full run describe the same revisions of the same subject and
- * are not the same answer — one read the first few sections and the other read
- * the whole article. Sharing a key would mean whichever ran first wins forever:
- * a preview would satisfy the cache on every later request and the funded full
- * run would have nowhere to be stored, so somebody would pay for a comparison
- * nobody could ever be served. They are separate rows, and `getCachedComparison`
- * is what decides which of them a reader gets.
- */
 export function comparisonKey(
   qid: string,
   revids: Record<string, number>,
   promptVersion: string,
   parserVersion: string,
-  scope: ScopeKind = "full",
 ): string {
   const parts = Object.keys(revids)
     .sort()
     .map((l) => `${l}${revids[l]}`)
     .join(".");
-  const suffix = scope === "full" ? "" : `:${scope}`;
-  return `${qid}:${parts}:${promptVersion}:${parserVersion}${suffix}`;
+  return `${qid}:${parts}:${promptVersion}:${parserVersion}`;
 }
 
 export interface CachedComparison {
@@ -137,60 +122,33 @@ export interface CachedComparison {
  * would re-read the whole article — three fetches, a parse and the model —
  * because somebody moved a comma. Nothing is hidden by serving the older answer:
  * the key still records exactly which revisions it describes, so `edited` says
- * which editions have moved and the badge offers the re-read. Reprocessing is
- * something a reader asks for, never something that happens to them for opening
- * a page.
+ * which editions have moved and the badge says so.
  *
- * What is never reused is a row computed under a different prompt or parser
+ * What is never reused is a row computed under a different engine or parser
  * version, for revisions it was not keyed to: those two versions are the whole
  * way we say "our reading of this changed", and reusing across them would make
- * every prompt fix invisible on precisely the articles it was written for. The
+ * every engine fix invisible on precisely the articles it was written for. The
  * versions are read out of the stored result rather than parsed back off the
  * key, which keeps the key's shape an implementation detail of `comparisonKey`.
- *
- * Scope adds a second preference, and it sits above exactness rather than below
- * it: a full comparison wins over a preview even when the preview is the exact
- * one and the full run describes superseded revisions. A preview read four
- * sections and stopped; a full run read the article. Serving the preview because
- * its revision ids match more precisely would fade out most of the page in order
- * to be pedantic about revisions that have usually only moved by a citation.
- * Nothing is hidden by the choice — an answer older than live still carries the
- * `cached` badge, whatever its scope.
- *
- * So the ranking is: the exact full run, then the newest full run, then the
- * exact preview, then the newest preview. Rows written before previews existed
- * have no `scope` at all and COALESCE reads them as full, which is what they are.
- *
- * `exactOnly` drops everything but the two keys, and exists for the check the
- * funded path makes before it charges: there the question is "does this exact
- * comparison already exist", and an answer about neighbouring revisions would
- * hand somebody a different comparison than the one they pressed the button for.
  */
 export async function getCachedComparison(
   qid: string,
-  fullKey: string,
-  previewKey: string,
+  key: string,
   promptVersion: string,
   parserVersion: string,
-  exactOnly = false,
 ): Promise<CachedComparison | null> {
   const rows = await sql()`
     SELECT cache_key, result, computed_at
     FROM comparisons
     WHERE qid = ${qid}
       AND (
-        cache_key IN (${fullKey}, ${previewKey})
+        cache_key = ${key}
         OR (
-          NOT ${exactOnly}::boolean
-          AND result->>'promptVersion' = ${promptVersion}
+          result->>'promptVersion' = ${promptVersion}
           AND result->>'parserVersion' IS NOT DISTINCT FROM ${parserVersion}
         )
       )
-    ORDER BY
-      (cache_key = ${fullKey}) DESC,
-      (COALESCE(result->'scope'->>'kind', 'full') = 'full') DESC,
-      (cache_key = ${previewKey}) DESC,
-      computed_at DESC
+    ORDER BY (cache_key = ${key}) DESC, computed_at DESC
     LIMIT 1
   `;
   if (!rows.length) return null;
@@ -204,12 +162,10 @@ export async function getCachedComparison(
 /**
  * How many readers a stored comparison has served.
  *
- * The number exists to be said back to whoever funded it: a donation buys other
- * people's reading, and "112 people have read what you paid for" is the only
- * honest way to describe what the money did. Incremented on the serving path, so
- * it is deliberately fire-and-forget — a failure to count a read must never
- * delay or fail the read itself, which is the same rule `/api/recent` follows
- * when it answers with an empty list rather than an error.
+ * Incremented on the serving path, so it is deliberately fire-and-forget — a
+ * failure to count a read must never delay or fail the read itself, which is the
+ * same rule `/api/recent` follows when it answers with an empty list rather than
+ * an error.
  */
 export async function bumpServedCount(cacheKey: string): Promise<void> {
   try {
@@ -227,13 +183,11 @@ export async function bumpServedCount(cacheKey: string): Promise<void> {
  * older articles from it. One row per subject is the only reduction.
  *
  * "Valid" means the same thing it means in `getCachedComparison`: computed
- * under the current prompt and parser version. A row left behind by an older
+ * under the current engine and parser version. A row left behind by an older
  * version is not a comparison the site would still serve, so it has no
  * business in a ledger that reads as a promise every row can be opened —
- * clicking it would silently recompute (or charge, on a funded subject)
- * rather than show what the row claimed to be. Rows written before previews
- * existed have no `scope`, but they do carry a `promptVersion`, so this filter
- * still applies to them.
+ * clicking it would silently recompute rather than show what the row claimed
+ * to be.
  *
  * Titles, language lists, word counts and claim tallies are all projected out
  * in SQL rather than in TypeScript: `result` holds every article's full section
@@ -243,7 +197,7 @@ export async function bumpServedCount(cacheKey: string): Promise<void> {
 export async function recentComparisons(): Promise<RecentArticle[]> {
   const rows = await sql()`
     SELECT
-      qid, title, lang, langs, scope, computed_at,
+      qid, title, lang, langs, computed_at,
       -- The same count articleWords() does in the client: whitespace-separated
       -- words per section, summed over the edition.
       (
@@ -254,13 +208,15 @@ export async function recentComparisons(): Promise<RecentArticle[]> {
         ))
         FROM jsonb_each(result->'articles') article
       ) AS words,
-      (
+      -- What the comparison draws by default, stored with it since the
+      -- threshold needs the articles' text; older rows fall back to every claim.
+      COALESCE(result->'tally', (
         SELECT jsonb_object_agg(kind, n) FROM (
-          SELECT claim->>'type' AS kind, count(*) AS n
+          SELECT claim->>'type' AS kind, count(DISTINCT COALESCE(claim->>'group', claim->>'id')) AS n
           FROM jsonb_array_elements(result->'claims') claim
           GROUP BY 1
         ) tally
-      ) AS claims
+      )) AS claims
     FROM (
       SELECT DISTINCT ON (qid)
         qid,
@@ -276,15 +232,12 @@ export async function recentComparisons(): Promise<RecentArticle[]> {
           ELSE 'ar'
         END AS lang,
         ARRAY(SELECT jsonb_object_keys(result->'articles')) AS langs,
-        -- Rows written before previews existed carry no scope at all;
-        -- COALESCE reads those as full, which is what they are.
-        COALESCE(result->'scope'->>'kind', 'full') AS scope,
         computed_at
       FROM comparisons
       -- Same validity test as getCachedComparison's fallback match: a row
-      -- computed under a since-retired prompt or parser version is not one
+      -- computed under a since-retired engine or parser version is not one
       -- the site would still serve, so it does not belong in the ledger.
-      WHERE result->>'promptVersion' = ${PROMPT_VERSION}
+      WHERE result->>'promptVersion' = ${JEV_VERSION}
         AND result->>'parserVersion' IS NOT DISTINCT FROM ${PARSER_VERSION}
       ORDER BY qid, computed_at DESC
     ) latest
@@ -297,7 +250,6 @@ export async function recentComparisons(): Promise<RecentArticle[]> {
     lang: row.lang as Lang,
     // jsonb orders its own keys; restore the reading order the columns use.
     langs: LANGS.filter((l) => (row.langs as string[]).includes(l)),
-    scope: row.scope as ScopeKind,
     computedAt: new Date(row.computed_at as string).toISOString(),
     words: (row.words ?? {}) as Partial<Record<Lang, number>>,
     claims: { contradiction: 0, unique: 0, framing: 0, ...((row.claims ?? {}) as object) },
@@ -305,40 +257,31 @@ export async function recentComparisons(): Promise<RecentArticle[]> {
 }
 
 /**
- * `fundedBy` is who paid for this row, when anybody did.
- *
- * Nothing reads it to decide access — the whole point is that a funded
- * comparison belongs to everyone the moment it exists. It is here so the credit
- * bar can tell a donor how many people have since read what they paid for, which
- * needs to know which rows were theirs. An overwriting refresh reassigns it to
- * whoever paid for the refresh, and `served_count` restarts with the answer it
- * describes: the new row is a different comparison, and carrying the old one's
- * readership onto it would credit the new donor with somebody else's readers.
+ * An overwrite restarts `served_count` with the answer it describes: the new row
+ * is a different comparison, and the old one's readers did not read it.
  */
 export async function putComparison(
   key: string,
   result: ComparisonResult,
   overwrite = false,
-  fundedBy: string | null = null,
 ): Promise<void> {
   const payload = JSON.stringify(result);
   // A ?fresh=1 run recomputed on purpose, so it should replace what is stored
   // rather than compute a new answer and silently discard it.
   if (overwrite) {
     await sql()`
-      INSERT INTO comparisons (cache_key, qid, result, funded_by)
-      VALUES (${key}, ${result.qid}, ${payload}, ${fundedBy})
+      INSERT INTO comparisons (cache_key, qid, result)
+      VALUES (${key}, ${result.qid}, ${payload})
       ON CONFLICT (cache_key) DO UPDATE
         SET result = EXCLUDED.result,
             computed_at = now(),
-            funded_by = EXCLUDED.funded_by,
             served_count = 0
     `;
     return;
   }
   await sql()`
-    INSERT INTO comparisons (cache_key, qid, result, funded_by)
-    VALUES (${key}, ${result.qid}, ${payload}, ${fundedBy})
+    INSERT INTO comparisons (cache_key, qid, result)
+    VALUES (${key}, ${result.qid}, ${payload})
     ON CONFLICT (cache_key) DO NOTHING
   `;
 }
@@ -361,4 +304,95 @@ export async function putLabels(entries: Map<string, string>): Promise<void> {
     SELECT * FROM UNNEST(${qids}::text[], ${labels}::text[])
     ON CONFLICT (qid) DO NOTHING
   `;
+}
+
+/** A stored comparison by its key, for the paths that start from one: an
+ *  explanation is asked for by the comparison it explains. */
+export async function getComparisonByKey(cacheKey: string): Promise<ComparisonResult | null> {
+  const rows = await sql()`SELECT result FROM comparisons WHERE cache_key = ${cacheKey}`;
+  return rows.length ? (rows[0].result as ComparisonResult) : null;
+}
+
+/**
+ * A claim's generated explanation, written once and served to every later
+ * reader, so a claim costs one model call however many people hover it. Keyed by
+ * the comparison as well as the claim, since claim ids repeat across comparisons.
+ */
+export async function getExplanation(cacheKey: string, claimId: string): Promise<string | null> {
+  const rows = await sql()`
+    SELECT text FROM explanations WHERE cache_key = ${cacheKey} AND claim_id = ${claimId}
+  `;
+  return rows.length ? (rows[0].text as string) : null;
+}
+
+export async function putExplanation(
+  cacheKey: string,
+  claimId: string,
+  text: string,
+  model: string,
+  usage: unknown,
+): Promise<void> {
+  await sql()`
+    INSERT INTO explanations (cache_key, claim_id, text, model, usage)
+    VALUES (${cacheKey}, ${claimId}, ${text}, ${model}, ${JSON.stringify(usage)})
+    ON CONFLICT (cache_key, claim_id) DO NOTHING
+  `;
+}
+
+/**
+ * What the paid models have cost since `since`: every stored comparison's
+ * recorded price, and every explanation priced from its tokens at Sonnet's
+ * rates. A run that failed before it was stored is not counted, so this runs a
+ * little under the bill, never over it.
+ */
+export async function spentSince(since: Date): Promise<number> {
+  const rows = await sql()`
+    SELECT
+      COALESCE((
+        SELECT SUM((result->'usage'->>'costUsd')::numeric)
+        FROM comparisons WHERE computed_at >= ${since.toISOString()}
+      ), 0)
+      +
+      COALESCE((
+        SELECT SUM(
+          COALESCE((usage->>'input_tokens')::numeric, 0) * 2 / 1e6 +
+          COALESCE((usage->>'output_tokens')::numeric, 0) * 10 / 1e6
+        )
+        FROM explanations WHERE created_at >= ${since.toISOString()}
+      ), 0) AS usd
+  `;
+  return Number(rows[0]?.usd ?? 0);
+}
+
+/** Adds an address to the updates list, or brings back one that left it. */
+export async function addSubscriber(email: string): Promise<void> {
+  await sql()`
+    INSERT INTO update_subscribers (email, token)
+    VALUES (${email.toLowerCase()}, ${crypto.randomUUID()})
+    ON CONFLICT (email) DO UPDATE SET unsubscribed_at = NULL
+  `;
+}
+
+/** Takes the address with this token off the list. False for an unknown token. */
+export async function removeSubscriber(token: string): Promise<boolean> {
+  const rows = await sql()`
+    UPDATE update_subscribers SET unsubscribed_at = COALESCE(unsubscribed_at, now())
+    WHERE token = ${token}
+    RETURNING email
+  `;
+  return rows.length > 0;
+}
+
+/** Everyone still on the list, with the token their unsubscribe link carries. */
+export async function listSubscribers(): Promise<{ email: string; token: string; createdAt: string }[]> {
+  const rows = await sql()`
+    SELECT email, token, created_at FROM update_subscribers
+    WHERE unsubscribed_at IS NULL
+    ORDER BY created_at
+  `;
+  return rows.map((row) => ({
+    email: row.email as string,
+    token: row.token as string,
+    createdAt: new Date(row.created_at as string).toISOString(),
+  }));
 }

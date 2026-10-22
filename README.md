@@ -1,81 +1,59 @@
 # wiki-compare
 
 Reads the English, Hebrew and Arabic Wikipedia articles on one subject side by side and marks
-where they disagree: contradicted facts, material one version omits, and the same fact framed
-differently. Hover a mark to see what the difference is.
+where they disagree: contradicted facts, material one version leaves out, and the same fact
+framed differently. Hover a mark to see the matching passages and why it was marked; select any
+text to see where it sits in the other languages.
 
-Live at [wikicompare.app](https://wikicompare.app).
+Live at [wikicompare.app](https://wikicompare.app). Free to use; if it helps you,
+[buy me a coffee](https://ko-fi.com/berlinsessions).
 
 ## How it works
 
-1. A subject is picked from search results (`/api/search`), resolved to a Wikidata QID so
-   "Coffee" the drink, the film and the town don't get confused.
-2. The three articles are fetched and parsed (`lib/wikipedia.ts`), and a deterministic pass
-   (`lib/deterministic.ts`) computes zero-token signals — linked-concept coverage, numeric
-   divergence — to decide which sections are worth sending to a model.
-3. A language model aligns headings across languages and diffs the claims within matched
-   sections (`lib/compare.ts`), returning verbatim spans that are located in the article text
-   rather than trusted as offsets.
-4. Results are cached by article revision so a stable article costs tokens only once
-   (`lib/db.ts`).
-5. Separately, and without a model, the reference lists are read and matched across the
-   languages by URL, DOI, ISBN and title (`lib/sources.ts`), which is what the sources panel
-   under the article draws its shared entries and blindspots from.
+1. A subject is resolved to its Wikidata item, and each language's article is fetched and split
+   into paragraphs and sentences (`lib/wikipedia.ts`, `lib/jev/segment.ts`).
+2. TypeSafe's Jev matches every paragraph to the other articles and
+   classifies every sentence as consistent, contradiction, framing or gap, then rates how much
+   each difference matters (`lib/jev/`). Design, measurements and the gold set:
+   [docs/jev-poc-design.md](docs/jev-poc-design.md).
+3. Only the most important differences are drawn by default (`lib/salience.ts`).
+4. Claude writes an explanation of a difference when a reader points at it, once per difference
+   (`app/api/explain/`).
+5. Results are cached by article revision (`lib/db.ts`). Reference lists are matched across
+   languages without a model (`lib/sources.ts`).
 
-Reading an already-compared article is always free. Running a new comparison costs a small
-amount of credit, funded either by a signup grant or a donation, so the run is paid for once and
-then free for everyone after.
+Each comparison is computed once and served from the cache to everyone after. Spending on models
+is capped per day (`DAILY_BUDGET_USD`, `lib/budget.ts`).
 
-## Architecture
-
-```
-app/
-  page.tsx, layout.tsx      landing page and shell
-  api/search/                candidate articles for a query or pasted URL
-  api/articles/               sitelinks + revisions, ahead of the comparison
-  api/compare/                the comparison itself (cache read, preview, or paid full run)
-  api/sources/                each version's footnotes, matched across languages
-  api/recent/                 recently cached comparisons, for the landing page
-  api/auth/[...all]/          Better Auth: sign-in, callback, session
-  api/me/, api/donate/, api/coupon/   balance, mock payment, coupon redemption
-  donate/, login/, privacy/   supporting pages
-
-components/                  UI: search/compare flow, side-by-side columns and highlighting,
-                              language switch, donation and credit UI
-
-lib/
-  wikipedia.ts                MediaWiki + Wikidata fetching, parsing, search
-  deterministic.ts            zero-token coverage diff and section screening
-  sources.ts                  reference-list parsing and cross-language source matching
-  compare.ts                  the model calls: heading alignment + claim diff
-  db.ts                       cache layer (Neon/Postgres)
-  auth.ts, credits.ts, coupons.ts, pricing.ts   accounts, balance, coupons, cost calculation
-
-db/schema.sql                 database schema (app tables + Better Auth's)
-fixtures/, scripts/           recorded API fixtures and check/test scripts
-```
-
-## Setup
+## Running it
 
 ```bash
 npm install
-cp .env.example .env.local     # fill in DATABASE_URL and ANTHROPIC_API_KEY
+cp .env.example .env.local     # DATABASE_URL, TYPESAFE_API_KEY, ANTHROPIC_API_KEY
 npm run db:init
 npm run dev
 ```
 
-See `.env.example` for the full list of environment variables.
-
-## Testing
+`/?title=demo:jev:palestinian-legislative-council` runs the engine on a recorded fixture, with no
+Wikipedia fetch.
 
 ```bash
-npm run check              # input + parser + sources + deterministic, no model, no database
-npm run check:ui           # rendering, needs `npm run dev` in another shell
-npm run fixtures:save "Article title"   # record a new fixture
+npm run check                    # offline checks, no model or database
+npm run check:ui                 # rendering, against a running dev server
+npm run jev:run -- <fixture>     # a real Jev run, with an HTML review page
 ```
 
-## Caveats
+`npm run subscribers` lists the people who signed up for project updates, each with their
+unsubscribe link.
 
-Comparisons are generated by a language model and can be wrong or incomplete — treat a marked
-difference as a pointer to check the sources, not a finding. Every column links to the exact
-revision it rendered, so anything shown here can be checked against the article itself.
+## License
+
+The code is under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): free to use, change and
+share for any noncommercial purpose. For commercial use, get in touch. Wikipedia text and images,
+including the recorded articles in `fixtures/`, are under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) from their authors.
+
+## Caveat
+
+Comparisons are machine-generated and can be wrong or incomplete. Treat a marked difference as a
+pointer to check the sources, not a finding. Every column links to the exact revision it shows.

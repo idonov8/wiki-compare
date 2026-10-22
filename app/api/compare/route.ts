@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
+import { checkBudget, OverBudget } from "@/lib/budget";
 import {
   type CacheInfo,
+  type Claim,
   type CompareEvent,
   type ComparisonResult,
   type Lang,
-  type ScopeKind,
 } from "@/lib/types";
 import { PARSER_VERSION, fetchLabels } from "@/lib/wikipedia";
 import { followRun, liveRun, trackRun } from "@/lib/live";
@@ -17,33 +18,14 @@ import {
   putComparison,
   putLabels,
 } from "@/lib/db";
-import { coverageGaps, previewOf } from "@/lib/deterministic";
-import { PROMPT_VERSION, runComparison } from "@/lib/compare";
-import { getSessionUser } from "@/lib/auth";
-import { debit, grant, recordSpend } from "@/lib/credits";
-import { PRICE_PER_ARTICLE_CENTS } from "@/lib/pricing";
+import { coverageGaps } from "@/lib/deterministic";
+import { JEV_VERSION, runJevComparison } from "@/lib/jev/pipeline";
+import { salientClaims, tallyShown } from "@/lib/salience";
+import { allow, visitorKey } from "@/lib/rate-limit";
 import { capture } from "@/lib/analytics";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
-
-/**
- * Two verbs, one comparison.
- *
- * GET is the free path and is the one every reader lands on. It serves whatever
- * is cached, and when nothing is, it reads the first few sections and stops —
- * a preview, which costs a fraction of a full run and is what the fade-out in
- * the columns is describing. It never charges anybody and never needs an account.
- *
- * POST is the funded path: it debits a credit and reads the whole article, or
- * re-reads one whose revisions have moved on. Splitting them this way keeps the
- * anonymous path exactly as it was, and means the paid one cannot be reached by
- * guessing at a query string.
- *
- * What both share: whatever anyone pays for is stored, and the next reader gets
- * it for nothing. That is the entire model and it is why the free path is
- * allowed to be generous.
- */
 
 interface Target {
   qid: string;
@@ -52,17 +34,33 @@ interface Target {
   langs: Lang[];
 }
 
-/** Read the article, price it, store it. Shared by both verbs. */
+class TooManyComparisons extends Error {
+  constructor() {
+    super("Too many new comparisons from here; try again in a few minutes.");
+  }
+}
+
+/**
+ * What a visitor is told when a comparison fails. Our own errors are written to
+ * be read; a provider's (TypeSafe, Neon, Anthropic) carries a status code and
+ * talks about billing or connections, so it is logged and replaced.
+ */
+function publicMessage(error: unknown): string {
+  if (!(error instanceof Error)) return "Comparison failed.";
+  const provider = typeof (error as { status?: unknown }).status === "number" || "code" in error;
+  if (!provider) return error.message;
+  console.error("comparison failed:", error);
+  return "The comparison service is unavailable right now. Please try again later.";
+}
+
+/** Read the article, price it, store it. */
 async function computeAndStore(
   target: Target,
-  scope: ScopeKind,
   {
     overwrite = false,
-    fundedBy = null,
     emit = () => {},
   }: {
     overwrite?: boolean;
-    fundedBy?: string | null;
     /** Called as each stage becomes available, for the streaming path. The
      *  articles land in about a second and the coverage diff costs no tokens, so
      *  both are worth sending long before the model has finished. */
@@ -70,7 +68,7 @@ async function computeAndStore(
   } = {},
 ): Promise<{ result: ComparisonResult; cacheKey: string }> {
   const { qid, titles, revids, langs } = target;
-  const cacheKey = comparisonKey(qid, revids, PROMPT_VERSION, PARSER_VERSION, scope);
+  const cacheKey = comparisonKey(qid, revids, JEV_VERSION, PARSER_VERSION);
 
   // Registered before any work starts, so a tab reopened mid-run joins this one
   // rather than starting a second read of the same article.
@@ -82,25 +80,7 @@ async function computeAndStore(
       articles: Object.fromEntries(articles.map((a) => [a.lang, a])),
     });
 
-    // The cut itself is a character count, not a model finding, so it is known
-    // the instant the articles are — no need to wait for `runComparison` to
-    // recompute the same thing on its way to the model. Sent now rather than
-    // folded into `done` so the gate can appear while the run is still reading,
-    // not only once it has finished.
-    send({
-      event: "scope",
-      scope:
-        scope === "preview"
-          ? {
-              kind: "preview",
-              processedThrough: Object.fromEntries(articles.map((a) => [a.lang, previewOf(a).cut])),
-            }
-          : { kind: "full" },
-    });
-
     // Coverage diff: no tokens involved, only set arithmetic over Wikidata ids.
-    // It runs on a preview too — it is free, and it describes the whole article
-    // rather than the part that was read, so withholding it would buy nothing.
     const allQids = [...new Set(articles.flatMap((a) => a.linkQids))];
     const known = await getLabels(allQids);
     const missing = allQids.filter((q) => !known.has(q));
@@ -112,14 +92,29 @@ async function computeAndStore(
     const coverage = coverageGaps(articles, known);
     send({ event: "coverage", coverage });
 
-    const run = await runComparison(articles, scope, (claim) => send({ event: "claim", claim }));
+    const started = Date.now();
+    const onClaim = (claim: Claim) => send({ event: "claim", claim });
+    const run = await runJevComparison(articles, onClaim);
+    void capture("jev_comparison_run", {
+      qid,
+      langs: langs.join(","),
+      claims: run.claims.length,
+      salient: salientClaims(run.claims, Object.fromEntries(articles.map((a) => [a.lang, a]))).size,
+      contradiction: run.claims.filter((c) => c.type === "contradiction").length,
+      unique: run.claims.filter((c) => c.type === "unique").length,
+      framing: run.claims.filter((c) => c.type === "framing").length,
+      requests: run.requests,
+      inputTokens: run.usage.inputTokens,
+      costUsd: run.usage.costUsd ?? 0,
+      ms: Date.now() - started,
+    });
 
     const result: ComparisonResult = {
       qid,
       articles: Object.fromEntries(articles.map((a) => [a.lang, a])),
       claims: run.claims,
       coverage,
-      promptVersion: PROMPT_VERSION,
+      promptVersion: JEV_VERSION,
       parserVersion: PARSER_VERSION,
       computedAt: new Date().toISOString(),
       usage: run.usage,
@@ -129,10 +124,13 @@ async function computeAndStore(
         matched: run.spans.matched,
         droppedClaims: run.spans.droppedClaims,
       },
+      alignment: run.alignment,
+      cacheKey,
+      tally: tallyShown(run.claims, Object.fromEntries(articles.map((a) => [a.lang, a]))),
     };
     // Stored while the run is still joinable, so the moment it stops being one
     // there is a cached row to serve instead.
-    await putComparison(cacheKey, result, overwrite, fundedBy);
+    await putComparison(cacheKey, result, overwrite);
     return result;
   });
 
@@ -182,7 +180,7 @@ function ndjson(run: (emit: (event: CompareEvent) => void) => Promise<void>): Re
       } catch (error) {
         emit({
           event: "error",
-          error: error instanceof Error ? error.message : "Comparison failed.",
+          error: publicMessage(error),
         });
       } finally {
         closed = true;
@@ -213,14 +211,22 @@ export async function GET(request: Request) {
 
   const streaming = params.get("stream") === "1";
 
-  // Render a recorded fixture instead of calling anything. Development only —
-  // it exists so the rendering layer can be worked on without a database, an
-  // API key, or spending tokens, and it is dead code in production.
+  // Render a recorded fixture instead of fetching Wikipedia. Development only —
+  // it exists so the rendering layer can be worked on without a database or a
+  // network, and it is dead code in production. `demo:jev:<fixture>` has the
+  // real engine read it (with a TypeSafe key). Stored only with STORE_DEMOS=1,
+  // for working on the explain route: a development server can be pointed at
+  // the production database, and a demo row there would join the landing list.
   if (process.env.NODE_ENV !== "production" && title.startsWith("demo:")) {
     let result: ComparisonResult;
     try {
-      const { demoComparison } = await import("@/fixtures/demo");
-      result = demoComparison(title.slice(5));
+      const { demoComparison, demoJevComparison } = await import("@/fixtures/demo");
+      const slug = title.slice(5);
+      result =
+        slug.startsWith("jev:") && process.env.TYPESAFE_API_KEY
+          ? await demoJevComparison(slug.slice(4))
+          : demoComparison(slug.replace(/^jev:/, ""));
+      if (result.cacheKey && process.env.STORE_DEMOS === "1") await putComparison(result.cacheKey, result, true);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // A fixture that does not exist is a 404 in both shapes: nothing has been
@@ -239,8 +245,7 @@ export async function GET(request: Request) {
   // cache. An explicit, narrow bypass for iterating on the prompt — it leaves
   // the caching logic and the article cache intact, so debugging never means
   // deleting rows or commenting out the check and forgetting to restore it.
-  // It stays a development affordance: in production a re-read is bought
-  // through POST, not asked for in a query string.
+  // It stays a development affordance.
   const bypassCache = params.get("fresh") === "1" && process.env.NODE_ENV !== "production";
 
   /**
@@ -253,22 +258,15 @@ export async function GET(request: Request) {
   const serve = async (emit: (event: CompareEvent) => void) => {
     const target = await resolveTarget(title, sourceLang);
     const { qid, revids } = target;
-    const fullKey = comparisonKey(qid, revids, PROMPT_VERSION, PARSER_VERSION, "full");
-    const previewKey = comparisonKey(qid, revids, PROMPT_VERSION, PARSER_VERSION, "preview");
+    const key = comparisonKey(qid, revids, JEV_VERSION, PARSER_VERSION);
 
-    const cached = bypassCache
-      ? null
-      : await getCachedComparison(qid, fullKey, previewKey, PROMPT_VERSION, PARSER_VERSION);
+    const cached = bypassCache ? null : await getCachedComparison(qid, key, JEV_VERSION, PARSER_VERSION);
 
     // Somebody is already reading this article — a reload of this same tab, most
     // likely. Join that run: its progress replays at once and the rest arrives
     // as it is found, which is the reload picking the stream back up rather than
     // paying for a second read of the same article.
-    //
-    // A funded run outranks anything stored, because what is stored in the
-    // middle of one is the preview it was bought to replace. A preview run only
-    // wins when there is nothing at all.
-    const live = liveRun(fullKey) ?? (cached ? undefined : liveRun(previewKey));
+    const live = liveRun(key);
     if (live) {
       const joined = await followRun(live, emit);
       emit({ event: "done", result: joined, fromCache: false });
@@ -278,29 +276,21 @@ export async function GET(request: Request) {
     if (cached) {
       // Counting the read must not be able to delay or fail serving it.
       void bumpServedCount(cached.cacheKey);
-      void capture("comparison_served", {
-        qid,
-        fromCache: true,
-        scope: cached.result.scope?.kind ?? "full",
-        costUsd: 0,
-      });
+      void capture("comparison_served", { qid, fromCache: true, costUsd: 0 });
       const cache = cacheInfo(cached.result, cached.computedAt, target);
       emit({ event: "done", result: cached.result, fromCache: true, cache });
       return { ...cached.result, fromCache: true, cache };
     }
 
-    // Nothing stored: read the top of the article and stop. The columns fade out
-    // below what this covered, and funding it through POST reads the rest.
-    const { result } = await computeAndStore(target, bypassCache ? "full" : "preview", {
-      overwrite: bypassCache,
-      emit,
-    });
-    void capture("comparison_served", {
-      qid,
-      fromCache: false,
-      scope: result.scope?.kind ?? "full",
-      costUsd: result.usage.costUsd ?? 0,
-    });
+    // Only a read that would spend anything is limited: a cached answer and a
+    // joined run cost nothing more.
+    if (!allow(`compare:${visitorKey(request.headers)}`, 10, 10 * 60_000)) {
+      throw new TooManyComparisons();
+    }
+    await checkBudget();
+
+    const { result } = await computeAndStore(target, { overwrite: bypassCache, emit });
+    void capture("comparison_served", { qid, fromCache: false, costUsd: result.usage.costUsd ?? 0 });
     emit({ event: "done", result, fromCache: false });
     return { ...result, fromCache: false };
   };
@@ -317,152 +307,8 @@ export async function GET(request: Request) {
   try {
     return NextResponse.json(await serve(() => {}));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Comparison failed.";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
-}
-
-/**
- * Buy the rest of the article, or a re-read of one that has moved on.
- *
- * The debit happens before the model runs and is refunded if it throws: nobody
- * pays for a comparison they did not get. The refund is deliberately not wrapped
- * in a transaction with the run — the model call takes about a minute, and
- * holding a row lock across it would serialise every donor in the system behind
- * whoever is currently reading the longest article.
- *
- * `?stream=1` answers in the same NDJSON as GET, and for the same reason: a
- * funded run is a minute of work whose articles are ready in a second and whose
- * differences arrive one at a time. The reader who just paid for it is the last
- * person who should be made to watch a spinner until the end.
- *
- * The split between the two shapes is the debit. Everything up to and including
- * it answers with a status code, because not a byte has been written yet — "not
- * enough credit" is a 402, not a 200 carrying bad news. Everything after it is a
- * line in the stream, because by then the status is long spent.
- */
-export async function POST(request: Request) {
-  const user = await getSessionUser(request.headers);
-  if (!user) {
-    return NextResponse.json({ error: "Sign in to process an article." }, { status: 401 });
-  }
-
-  let body: { title?: string; lang?: string; kind?: "full" | "refresh" };
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Expected a JSON body." }, { status: 400 });
-  }
-
-  const title = body.title?.trim();
-  const sourceLang = body.lang?.trim() || "en";
-  const kind = body.kind === "refresh" ? "refresh" : "full";
-  if (!title) {
-    return NextResponse.json({ error: "Add a title." }, { status: 400 });
-  }
-
-  const streaming = new URL(request.url).searchParams.get("stream") === "1";
-  const failed = (error: unknown) =>
-    NextResponse.json(
-      { error: error instanceof Error ? error.message : "Comparison failed." },
-      { status: 500 },
-    );
-
-  let target: Target;
-  let remaining: number;
-  try {
-    target = await resolveTarget(title, sourceLang);
-    const { qid, revids } = target;
-    const fullKey = comparisonKey(qid, revids, PROMPT_VERSION, PARSER_VERSION, "full");
-
-    // Somebody else may have funded this article between the reader seeing the
-    // gate and pressing the button. Charging them for a comparison that already
-    // exists would be taking money for nothing, so check first and hand it over.
-    if (kind === "full") {
-      const existing = await getCachedComparison(
-        qid,
-        fullKey,
-        fullKey,
-        PROMPT_VERSION,
-        PARSER_VERSION,
-        true,
-      );
-      if (existing && existing.result.scope?.kind !== "preview") {
-        void bumpServedCount(existing.cacheKey);
-        const cache = cacheInfo(existing.result, existing.computedAt, target);
-        // A finished comparison is one `done` line. It still has to be a stream:
-        // the client asked for one, and answering in another shape would put an
-        // otherwise-unexercised branch on the paid path.
-        return streaming
-          ? ndjson(async (emit) =>
-              emit({ event: "done", result: existing.result, fromCache: true, cache }),
-            )
-          : NextResponse.json({ ...existing.result, fromCache: true, charged: false, cache });
-      }
-    }
-
-    const debited = await debit(user.id, PRICE_PER_ARTICLE_CENTS);
-    if (debited === null) {
-      return NextResponse.json(
-        { error: "Not enough credit for this article.", creditCents: user.creditCents },
-        { status: 402 },
-      );
-    }
-    remaining = debited;
-  } catch (error) {
-    // Nothing has been charged on this path, so there is nothing to refund.
-    return failed(error);
-  }
-
-  /** The read the credit just bought, handing it back if it does not arrive. */
-  const read = async (emit: (event: CompareEvent) => void) => {
-    try {
-      const { result, cacheKey } = await computeAndStore(target, "full", {
-        overwrite: kind === "refresh",
-        fundedBy: user.id,
-        emit,
-      });
-      await recordSpend({
-        userId: user.id,
-        qid: target.qid,
-        cacheKey,
-        kind,
-        chargedCents: PRICE_PER_ARTICLE_CENTS,
-        actualCostCents: Math.round((result.usage.costUsd ?? 0) * 100),
-      });
-      void capture(
-        "credits_spent",
-        {
-          qid: target.qid,
-          kind,
-          chargedCents: PRICE_PER_ARTICLE_CENTS,
-          costUsd: result.usage.costUsd ?? 0,
-        },
-        user.id,
-      );
-      return result;
-    } catch (error) {
-      await grant(user.id, PRICE_PER_ARTICLE_CENTS);
-      throw error;
-    }
-  };
-
-  if (streaming) {
-    // A failure here travels as a final `error` line on a 200 — `ndjson` writes
-    // it for anything `read` throws, after the refund above has gone through.
-    return ndjson(async (emit) => {
-      emit({ event: "done", result: await read(emit), fromCache: false });
-    });
-  }
-
-  try {
-    return NextResponse.json({
-      ...(await read(() => {})),
-      fromCache: false,
-      charged: true,
-      creditCents: remaining,
-    });
-  } catch (error) {
-    return failed(error);
+    const message = publicMessage(error);
+    const status = error instanceof TooManyComparisons || error instanceof OverBudget ? 429 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

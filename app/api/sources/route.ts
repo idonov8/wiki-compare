@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { LANGS, type Lang, type Source } from "@/lib/types";
 import { matchSources } from "@/lib/sources";
 import { sourcesFor } from "@/lib/articles";
+import { allow, visitorKey } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -10,10 +11,9 @@ export const maxDuration = 60;
  * What each version cites, and which of those citations the others share.
  *
  * Its own route rather than part of the comparison, because it is not part of
- * the comparison: nothing here goes near a model, so it costs no tokens and is
- * as available on a free preview as on a funded read. Asked for by revision id —
- * the ones the columns are actually showing, which on a cached comparison are
- * not necessarily the live ones.
+ * the comparison: nothing here goes near a model, so it costs no tokens. Asked
+ * for by revision id — the ones the columns are actually showing, which on a
+ * cached comparison are not necessarily the live ones.
  *
  * A language that cannot be read is left out rather than failing the request.
  * Two lists still say something true about each other; one missing list only
@@ -33,6 +33,9 @@ export async function GET(request: Request) {
       { error: "Add a revision id per language, e.g. ?en=123&he=456." },
       { status: 400 },
     );
+  }
+  if (!allow(`sources:${visitorKey(request.headers)}`, 60, 10 * 60_000)) {
+    return NextResponse.json({ error: "Too many requests; try again in a few minutes." }, { status: 429 });
   }
 
   const read = await Promise.all(

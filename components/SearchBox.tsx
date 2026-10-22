@@ -56,7 +56,7 @@ const STAMP = {
 
 /**
  * The hero field wears the house signature — an offset hard shadow, the same
- * one the claim card and the checkout summary wear. It marks the live thing on
+ * one the claim card and the laid-over passages wear. It marks the live thing on
  * the page, and on the landing page the live thing is this.
  */
 const SHELL = {

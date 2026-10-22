@@ -1,14 +1,12 @@
 "use client";
 
-import CreditBar from "../CreditBar";
 import SearchBox from "../SearchBox";
 import Wordmark from "../Wordmark";
-import type { MeResponse } from "@/lib/types";
 
 /**
  * Sticky on the landing page only. That page scrolls far enough that a masthead
  * pinned to the top of the document would be gone by the second section, taking
- * the search and the credit meter with it — but a comparison must not have one.
+ * the search with it — but a comparison must not have one.
  * Everything that scrolls a mark into view there (DiffNav, the internal links, a
  * jump from the URL) lands it at the top of the viewport, and a sticky header
  * sits on exactly that spot: the mark arrives already covered, and the hover
@@ -24,9 +22,6 @@ export default function Masthead({
   onQueryChange,
   onSearch,
   busy,
-  me,
-  onDonate,
-  onLogIn,
   onFeedback,
 }: {
   sticky: boolean;
@@ -35,9 +30,6 @@ export default function Masthead({
   onQueryChange: (value: string) => void;
   onSearch: () => void;
   busy: boolean;
-  me: MeResponse | null;
-  onDonate: () => void;
-  onLogIn: () => void;
   onFeedback: () => void;
 }) {
   return (
@@ -51,9 +43,9 @@ export default function Masthead({
         <SearchBox
           variant="bar"
           // Last and full width once the three columns no longer fit side by
-          // side, so the masthead is the wordmark and the credit meter on one
+          // side, so the masthead is the wordmark and the feedback link on one
           // line with the field under them, rather than the field taking a line
-          // and leaving the meter alone on a third.
+          // and leaving the link alone on a third.
           className="animate-reveal-in flex-[1_1_320px] max-cols:order-last max-cols:basis-full"
           value={query}
           onChange={onQueryChange}
@@ -69,7 +61,6 @@ export default function Masthead({
         >
           <span className="max-[410px]:hidden">send </span>feedback
         </button>
-        <CreditBar me={me} onDonate={onDonate} onLogIn={onLogIn} />
       </div>
     </header>
   );

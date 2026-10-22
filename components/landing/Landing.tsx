@@ -20,7 +20,6 @@ interface Props {
   /** True until the first `/api/recent` response lands — see RecentList. */
   recentLoading: boolean;
   relative: (iso: string) => string;
-  onDonate: () => void;
   onFeedback: () => void;
   /** Told when the hero's search field has scrolled out of reach, so the
    *  masthead can grow one of its own. */
@@ -28,7 +27,7 @@ interface Props {
 }
 
 /**
- * The landing page: hero, one real example, the argument, the ledger, the ask.
+ * The landing page: hero, one real example, the argument, the ledger.
  *
  * It owns no state of the comparison — `Compare` still holds the query, runs
  * the search and owns the URL. Everything here is presentation over callbacks,
@@ -44,7 +43,6 @@ export default function Landing({
   recent,
   recentLoading,
   relative,
-  onDonate,
   onFeedback,
   onDocked,
 }: Props) {
@@ -149,7 +147,7 @@ export default function Landing({
         </Section>
 
         <RecentList recent={recent} onOpen={onOpen} relative={relative} loading={recentLoading} />
-        <Footer onDonate={onDonate} onFeedback={onFeedback} />
+        <Footer onFeedback={onFeedback} />
       </div>
     </main>
   );

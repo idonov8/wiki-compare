@@ -1,11 +1,17 @@
 "use client";
 
 import { MEASURE } from "./landing/Section";
+import UpdatesForm from "./UpdatesForm";
+import { track } from "@/lib/analytics";
 import { CONTACT_EMAIL } from "@/lib/contact";
+
+const SOURCE_URL = "https://github.com/idonov8/wiki-compare";
+const DONATE_URL = "https://ko-fi.com/berlinsessions";
 
 /**
  * The colophon, at the foot of every page: the standing caveat, a route to
- * complain, the licence the columns are under, and a signature.
+ * complain, the licence the columns are under, the source, a way to hear about
+ * the project, and a signature.
  *
  * Everything here has to be on every page to do its job — the caveat is true of
  * every comparison, the mailto is the complaint route a defamation claim asks
@@ -14,11 +20,9 @@ import { CONTACT_EMAIL } from "@/lib/contact";
  * a complaint arrives — lives in /privacy instead, so this stays two lines.
  */
 export default function Footer({
-  onDonate,
   onFeedback,
   className = "",
 }: {
-  onDonate: () => void;
   onFeedback: () => void;
   className?: string;
 }) {
@@ -39,6 +43,7 @@ export default function Footer({
             Report a problem
           </a>
         </p>
+        <UpdatesForm />
         <div className="flex items-baseline justify-between gap-[16px] max-tight:flex-col max-tight:items-start">
           <span className="min-w-0 flex-1">
             © {new Date().getFullYear()}{" "}
@@ -67,14 +72,26 @@ export default function Footer({
             <button type="button" className="text-ink hover:underline" onClick={onFeedback}>
               Feedback
             </button>
+            {" · "}
+            <a
+              href={SOURCE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-ink hover:underline"
+              onClick={() => track("source_clicked")}
+            >
+              Source on GitHub
+            </a>
           </span>
-          <button
-            type="button"
-            className="shrink-0 border border-rule px-[10px] py-[4px] font-mono text-[11px] tracking-[0.04em] text-ink-soft transition-colors duration-[120ms] hover:border-ink hover:text-ink"
-            onClick={onDonate}
+          <a
+            href={DONATE_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 border border-rule px-[10px] py-[4px] font-mono text-[11px] tracking-[0.04em] text-ink-soft no-underline transition-colors duration-[120ms] hover:border-ink hover:text-ink"
+            onClick={() => track("donate_clicked")}
           >
             Donate
-          </button>
+          </a>
         </div>
       </div>
     </footer>

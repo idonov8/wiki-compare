@@ -1,75 +1,62 @@
 "use client";
 
-import type { ReactNode } from "react";
 import Columns from "../Columns";
 import LangSlide, { type LangSlideState } from "./LangSlide";
-import type { Claim, Lang, ArticleSnapshot, ComparisonScope } from "@/lib/types";
+import type { Alignment, Claim, Lang, ArticleSnapshot } from "@/lib/types";
 
 /**
- * The article itself.
- *
- * A funded comparison is one grid. A preview is three pieces — what was read,
- * the seam, and what wasn't — so the boundary lands as a single rule across all
- * three columns instead of three fades at three heights.
- *
- * Both are held in `LangSlide`, which is the surface a swipe is made over on a
- * screen showing one column at a time.
+ * The article itself, held in `LangSlide`, which is the surface a swipe is made
+ * over on a screen showing one column at a time.
  */
 export default function ArticleView({
   slide,
   articles,
   visible,
   claims,
-  scope,
-  /** The seam and its offer, rendered between the two halves of a preview. */
-  gate,
   ghost,
   activeId,
+  alignment,
+  activeSentence,
   onEnter,
   onLeave,
   onLink,
+  onSentence,
+  onSentenceLeave,
 }: {
   slide: LangSlideState;
   articles: Record<string, ArticleSnapshot>;
   visible: Lang[];
   claims: Claim[];
-  scope: ComparisonScope | null;
-  gate: ReactNode;
   ghost: boolean;
   activeId: string | null;
-  onEnter: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
+  alignment?: Alignment;
+  activeSentence: string | null;
+  /** Absent when the panel below takes over a mark's hover. */
+  onEnter?: (claim: Claim, event: React.MouseEvent | React.FocusEvent) => void;
   onLeave: () => void;
   onLink: (title: string, lang: string) => void;
+  onSentence: (key: string, element: HTMLElement, how: "hover" | "tap") => void;
+  onSentenceLeave: () => void;
 }) {
-  const shared = { articles, visible, claims, onLink };
-
   return (
     <LangSlide {...slide}>
-      {scope?.kind === "preview" ? (
-        <>
-          <Columns
-            {...shared}
-            activeId={activeId}
-            processedThrough={scope.processedThrough}
-            part="head"
-            onEnter={onEnter}
-            onLeave={onLeave}
-          />
-          {gate}
-          <Columns {...shared} processedThrough={scope.processedThrough} part="tail" />
-        </>
-      ) : (
-        <Columns
-          {...shared}
-          // Ghosts stand in for marks nobody has yet. The first real difference
-          // retires them: drifting placeholders beside located claims read as
-          // though the located ones were still moving.
-          ghost={ghost}
-          activeId={activeId}
-          onEnter={onEnter}
-          onLeave={onLeave}
-        />
-      )}
+      <Columns
+        articles={articles}
+        visible={visible}
+        claims={claims}
+        onLink={onLink}
+        // Ghosts stand in for marks nobody has yet. The first real difference
+        // retires them: drifting placeholders beside located claims read as
+        // though the located ones were still moving.
+        ghost={ghost}
+        activeId={activeId}
+        alignment={alignment}
+        activeSentence={activeSentence}
+        onEnter={onEnter}
+        onLeave={onLeave}
+        onSentence={onSentence}
+        onSentenceLeave={onSentenceLeave}
+      />
     </LangSlide>
   );
 }
