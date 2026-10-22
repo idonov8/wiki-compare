@@ -8,6 +8,10 @@ export type FeedbackValidation =
   | { ok: true; value: FeedbackInput }
   | { ok: false; error: string };
 
+export function isEmail(email: string): boolean {
+  return email.length <= 200 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 export function validateFeedback(input: unknown): FeedbackValidation {
   if (typeof input !== "object" || input === null) {
     return { ok: false, error: "Expected a feedback form." };
@@ -19,7 +23,7 @@ export function validateFeedback(input: unknown): FeedbackValidation {
   const message = typeof raw.message === "string" ? raw.message.trim() : "";
 
   if (name.length > 120) return { ok: false, error: "Name is too long." };
-  if (email.length > 200 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  if (!isEmail(email)) {
     return { ok: false, error: "Enter a valid email." };
   }
   if (!message) return { ok: false, error: "Message is required." };

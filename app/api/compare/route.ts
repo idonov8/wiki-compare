@@ -214,8 +214,9 @@ export async function GET(request: Request) {
   // Render a recorded fixture instead of fetching Wikipedia. Development only —
   // it exists so the rendering layer can be worked on without a database or a
   // network, and it is dead code in production. `demo:jev:<fixture>` has the
-  // real engine read it (with a TypeSafe key), stored when there is a database,
-  // so the hover panel and the explain route can be worked on too.
+  // real engine read it (with a TypeSafe key). Stored only with STORE_DEMOS=1,
+  // for working on the explain route: a development server can be pointed at
+  // the production database, and a demo row there would join the landing list.
   if (process.env.NODE_ENV !== "production" && title.startsWith("demo:")) {
     let result: ComparisonResult;
     try {
@@ -225,7 +226,7 @@ export async function GET(request: Request) {
         slug.startsWith("jev:") && process.env.TYPESAFE_API_KEY
           ? await demoJevComparison(slug.slice(4))
           : demoComparison(slug.replace(/^jev:/, ""));
-      if (result.cacheKey && process.env.DATABASE_URL) await putComparison(result.cacheKey, result, true);
+      if (result.cacheKey && process.env.STORE_DEMOS === "1") await putComparison(result.cacheKey, result, true);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // A fixture that does not exist is a 404 in both shapes: nothing has been

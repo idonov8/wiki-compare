@@ -162,8 +162,8 @@ behind "show all" by the threshold.
   gold score; writes `reports/jev/<fixture>.html` with every column, each
   paragraph's match and a "show all" toggle. `--from-json` re-renders the last run.
 - In development, `/?title=demo:jev:<fixture>` runs the engine on a recorded
-  fixture without Wikipedia, and stores the result when `DATABASE_URL` is set so
-  the explain route can find it.
+  fixture without Wikipedia. With `STORE_DEMOS=1` it also stores the result, so
+  the explain route can find it; keep that to a development database.
 
 ## Open questions
 

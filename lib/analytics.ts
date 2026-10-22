@@ -28,6 +28,9 @@ export const EVENTS = [
   "donate_clicked",
   /** The footer's link to the source on GitHub was followed. */
   "source_clicked",
+  /** Someone joined, or left, the list for project updates. */
+  "updates_subscribed",
+  "updates_unsubscribed",
   /** A comparison was served, cached or freshly run. */
   "comparison_served",
   /** The language stamp on the search field was opened. Until it can offer a
@@ -136,7 +139,7 @@ export function initAnalytics(): void {
          * Everything below this line is what lets the site run without a cookie
          * banner, and none of it is a default — posthog-js out of the box sets a
          * year-long cookie, autocaptures every click, and leaves replay to a
-         * server-side switch. See docs/compliance-audit-israel.md.
+         * server-side switch.
          *
          * Cookieless mode stores nothing on the device at all: no cookie, no
          * localStorage, no sessionStorage. PostHog counts visitors with a hash

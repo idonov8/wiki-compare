@@ -85,24 +85,7 @@ await page.route("**/api/recent", (route) =>
 // requests: the internal-link check below follows a link to a real article, and
 // re-serving that one would put a live fetch behind a route callback that is
 // still in flight when the browser closes.
-//
-// The usage is injected here because the fixture spends nothing, and what a
-// cached comparison cost is the thing the meta strip reports. The three shapes
-// are the three a stored row can actually have:
-//
-//   priced  — a run priced when it ran. Reported exactly.
-//   legacy  — token totals and no `costUsd`, which is 13 of the 14 rows in the
-//             real database. Priced from the totals and marked an estimate.
-//   silent  — nothing usable. Says nothing about cost at all.
-type Stored = "priced" | "legacy" | "silent";
-let stored: Stored = "priced";
-const USAGE: Record<Stored, Record<string, number>> = {
-  // 14,203 in and 5,110 out at the diff model's $3/$15 per Mtok is $0.119259,
-  // so `legacy` must land on "about $0.12" and never on the exact figure below.
-  priced: { inputTokens: 14203, outputTokens: 5110, cachedInputTokens: 0, costUsd: 0.1932 },
-  legacy: { inputTokens: 14203, outputTokens: 5110, cachedInputTokens: 0 },
-  silent: { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 },
-};
+
 /** The interception, kept addressable: the phone contexts further down mount it
  *  too, since the strip they check is the one a cached answer draws. */
 const isFixtureCompare = (url: URL) =>
@@ -111,15 +94,13 @@ const isFixtureCompare = (url: URL) =>
 const serveCached = async (route: Route) => {
   const response = await route.fetch();
   const body = await response.text();
-  const usage = USAGE[stored];
   const cache = {
     computedAt: new Date(Date.now() - 2 * 86400_000).toISOString(),
     edited: ["he", "ar"],
   };
 
   // The client asks for a stream, so the fixture answers as one: a `done`
-  // line carrying the result. Re-wrapped rather than passed through, because
-  // what this interception exists to do is substitute the usage figures.
+  // line carrying the result, re-wrapped as a cache hit.
   const streamed = new URL(route.request().url()).searchParams.get("stream") === "1";
   if (streamed) {
     const done = body
@@ -132,7 +113,7 @@ const serveCached = async (route: Route) => {
       body:
         JSON.stringify({
           event: "done",
-          result: { ...done.result, usage },
+          result: done.result,
           fromCache: true,
           cache,
         }) + "\n",
@@ -143,7 +124,7 @@ const serveCached = async (route: Route) => {
   const json = JSON.parse(body);
   route.fulfill({
     contentType: "application/json",
-    body: JSON.stringify({ ...json, usage, fromCache: true, cache }),
+    body: JSON.stringify({ ...json, fromCache: true, cache }),
   });
 };
 await page.route(isFixtureCompare, serveCached);
@@ -234,35 +215,10 @@ check(/[?&]title=/.test(page.url()), "clicking a recent article opens it", page.
 
 // ---- meta strip -------------------------------------------------------------
 
-// A cache hit is not free and must never say so: processing this article cost
-// real money once, and everyone since has read it for nothing. The figure is the
-// one stored with the answer.
-const metaSpan = () => page.$eval(".meta-cost", (el) => el.textContent ?? "");
-
-const reopen = async (as: Stored) => {
-  stored = as;
-  await page.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
-  await page.waitForSelector("mark.claim", { timeout: 30000 });
-};
-
+// The strip says what the comparison found, not what it cost.
 {
-  const meta = await metaSpan();
-  check(
-    /\$0\.19 was paid to process this article/.test(meta),
-    "a cached comparison reports what was paid to process it",
-    meta,
-  );
-  check(!/free/i.test(meta), "nothing in the strip calls a cached comparison free", meta);
-  check(
-    (await page.$eval(".meta-cost", (el) => el.getAttribute("title"))) === null,
-    "the processing cost carries no title attribute",
-  );
-  check(
-    (await page.$$eval(".controls [title]", (els) =>
-      els.some((el) => /tokens/i.test(el.getAttribute("title") ?? "")),
-    )) === false,
-    "the strip carries no token breakdown title",
-  );
+  const strip = (await page.textContent(".controls")) ?? "";
+  check(!/\$|free|tokens/i.test(strip), "the strip names no price", strip);
   check(
     /contradiction/i.test(
       (await page.$eval(".controls .recent-ratio", (el) => el.getAttribute("title") ?? "")),
@@ -280,47 +236,13 @@ const reopen = async (as: Stored) => {
     processedRatio.join(", "),
   );
   check(
-    !!(await page.$(".controls .recent-ratio")) && !/marked/i.test((await page.textContent(".controls")) ?? ""),
+    !/marked/i.test(strip),
     "the processed strip shows the ratio rather than a marked count",
-    (await page.textContent(".controls")) ?? "",
+    strip,
   );
 }
 
-// The common case, and the one that decides whether any of this was worth
-// saying: a row from before costs were recorded still has true token totals, so
-// it reports an estimate priced off them. It has to read as an estimate on
-// sight — a reader must be able to tell it from the exact figure above without
-// a legend.
-{
-  await reopen("legacy");
-  const meta = await metaSpan();
-  check(
-    /about \$0\.12 was paid to process this article/.test(meta),
-    "a comparison priced from its tokens says so as an estimate",
-    meta,
-  );
-  check(
-    !/\$0\.19/.test(meta) && !/free/i.test(meta),
-    "and does not pass the estimate off as the exact figure",
-    meta,
-  );
-}
 
-// The floor: a run with no usable totals knows what it found and not what it
-// cost. It says the first without claiming the second — "$0.00" would be the
-// same lie the word "free" was, and so would a figure derived from nothing.
-{
-  await reopen("silent");
-  const meta = (await page.textContent(".controls")) ?? "";
-  check(
-    (await page.$(".meta-cost")) === null && !!(await page.$(".controls .recent-ratio")),
-    "a comparison with no usable totals still draws its ratio without a cost line",
-    meta,
-  );
-  check(!/\$|free|about/i.test(meta), "and offers no cost, free, or estimate text", meta);
-}
-
-await reopen("priced");
 
 // ---- how long each edition is ----------------------------------------------
 
@@ -395,7 +317,8 @@ const laidOut = () =>
     (await laidOut()).join(", "),
   );
 
-  await reopen("priced");
+  await page.goto(`${BASE}/?title=demo:${FIXTURE}`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("mark.claim", { timeout: 30000 });
 }
 
 // ---- cached badge -----------------------------------------------------------
@@ -1144,7 +1067,6 @@ check(!(await page.$(".card")), "Escape dismisses the card");
         ".legend-key",
         ".controls .recent-ratio",
         ".cached-badge",
-        ".meta-cost",
       ];
       for (const selector of wanted) {
         const el = document.querySelector(selector);
@@ -1194,12 +1116,6 @@ check(!(await page.$(".card")), "Escape dismisses the card");
       line ? `${Math.round(line.width)} of ${Math.round(box[".controls"].width)}` : "no line",
     );
     const badge = box[".cached-badge"];
-    const cost = box[".meta-cost"];
-    check(
-      badge.top < cost.bottom && cost.top < badge.bottom,
-      "the badge shares the cost line's row rather than wrapping under it",
-      `badge ${Math.round(badge.top)}-${Math.round(badge.bottom)} vs cost ${Math.round(cost.top)}-${Math.round(cost.bottom)}`,
-    );
     check(
       Math.abs(badge.right - (box[".controls"].right - 18)) <= 1,
       "and ends that row against the page's margin",
