@@ -21,6 +21,7 @@
     "check:jev": "tsx scripts/check-jev.mts",
     "check": "npm run check:input && npm run check:parser && npm run check:sources && npm run check:deterministic && npm run check:live && npm run check:segment && npm run check:jev",
     "jev:run": "tsx --env-file-if-exists=.env.local scripts/jev-run.mts",
+    "jev:order": "tsx --env-file-if-exists=.env.local scripts/jev-order-experiment.mts",
     "subscribers": "tsx --env-file-if-exists=.env.local scripts/subscribers.mts",
     "check:ui": "tsx scripts/check-ui.mts"
   },
